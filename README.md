@@ -1,4 +1,10 @@
-# Rouvr: a reliable autonomous colleague
+# Rouvr
+
+**A reliable autonomous colleague.** Delegate work, trust it to follow through, and supervise less over time while staying in control.
+
+[![CI](https://github.com/Anxy/rouvr/actions/workflows/ci.yml/badge.svg)](https://github.com/Anxy/rouvr/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+![Python 3.12+](https://img.shields.io/badge/python-3.12%2B-blue.svg)
 
 Delegate work, trust it to follow through, and progressively supervise less while remaining in control.
 
@@ -95,11 +101,28 @@ from backend.rouvr_models import get_provider
 print(get_provider().chat([{"role": "user", "content": "Compile this instruction into a contract: ..."}]))
 ```
 
+## Ecosystem
+
+Rouvr is built by [eBizneeds](https://www.ebizneeds.com) (bootstrapped; India and Australia) on its **Hyeve** platform. In production Rouvr relies on these Hyeve services:
+
+| Service | Role for Rouvr | In this repo |
+|---|---|---|
+| **WorkHub** | Task, contract, lease, review and evidence ledger | `ledger/` WorkHub-lite (no auth/leases) + `ledger/stub_workhub/` |
+| **Hyeve Agent SDK** | Worker runtime that bots use to claim and report work | `workers/` (Node SDK worker, Meta worker) |
+| **Comm / Notification service** | Email and notification delivery with message ids for readback | local file outbox in `demo/` |
+| **Auth service** | Identity, principals, tenancy (`Hyeve-Tenant`) | not shipped; tests needing it are excluded |
+| **OpsBus** | Ops event bus for wakes and lane events | not shipped |
+| **Integration service** | Model and tool integrations | pluggable provider in `core/backend/rouvr_models/` |
+| **CodeIntel** | Code understanding for software tasks | not shipped |
+| **Hyeve Core** | Shared framework library | vendored in `core/libs/hyeve_core/` (MIT) |
+
+This repo ships **WorkHub-lite and stubs so it runs standalone**. See [docs/ecosystem.md](docs/ecosystem.md).
+
 ## Status and limitations (honest)
 
 What's demonstrated (in the private development deployment):
 - Autonomous task sequences in the governed dev lane, with separate build, review and closeout roles, ownership fencing, idempotent and version-checked updates, and approval bound to the exact revision.
-- Example: VMG Hawks PR #163 (borrower self-service case lifecycle) went through 3 rounds of independent review and passed 1,348 operations tests and 142 gateway tests. It merged at `ce30cdb`, and the closeout evidence is recorded in WorkHub.
+- Example: a private lending-platform PR (borrower self-service case lifecycle) went through 3 rounds of independent review and passed 1,348 operations tests and 142 gateway tests. It merged at `ce30cdb`, and the closeout evidence is recorded in WorkHub.
 - Recovery across the full build, review and closeout cycle is **still being qualified**.
 
 What's in this repo, as published:
@@ -118,6 +141,18 @@ Other limitations:
 - `ledger/` is a first-pass WorkHub-lite. It has no auth, principals, leases or multi-tenancy, and the core backend's WorkHub client doesn't speak its API yet. `ledger/stub_workhub/` is kept as a generic in-memory stand-in.
 - `lane/` contains only the generic parts of the private lane. Two of its tests need the private canary controller and are skipped.
 - This is dev software. The compose stack isn't hardened.
+
+## Roadmap
+
+Planned, not yet done: see [docs/roadmap.md](docs/roadmap.md). Highlights: full stack verified under `docker compose`, the demo against the live Meta Model API, Temporal-backed demo with real worker kill, real mail readback, auth and leases in WorkHub-lite.
+
+## Documentation
+
+[Architecture](docs/architecture.md) · [Concepts](docs/concepts.md) · [Ecosystem](docs/ecosystem.md) · [Configuration](docs/configuration.md) · [Demo](docs/demo.md) · [Models](docs/models.md) · [Roadmap](docs/roadmap.md) · [Changelog](CHANGELOG.md)
+
+## Contributing
+
+Issues and PRs are welcome; see [CONTRIBUTING.md](CONTRIBUTING.md), [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md) and [SECURITY.md](SECURITY.md).
 
 ## License
 

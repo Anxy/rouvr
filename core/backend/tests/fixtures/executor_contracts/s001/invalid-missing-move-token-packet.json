@@ -1,0 +1,4 @@
+{
+  "case": "patch_only packet with null security.move_token_id must reject",
+  "expected_failure_class": "FAIL_MISSING_MOVE_TOKEN"
+}

@@ -1,0 +1,11 @@
+{
+  "schema_version": "command_allowlist.current",
+  "profile_id": "ACP-OBJECTIVE-CYCLE-EXECUTOR-CODER-V1",
+  "rules": [
+    {"mode": "exact", "argv": ["git", "status", "--porcelain"]},
+    {"mode": "prefix", "argv": ["git", "diff"]},
+    {"mode": "prefix", "argv": ["rg"]},
+    {"mode": "prefix", "argv": ["python", "-m", "pytest"]},
+    {"mode": "prefix", "argv": ["pytest"]}
+  ]
+}

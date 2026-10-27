@@ -1,0 +1,148 @@
+{
+  "contract_id": "aix_cloudevents_protocol_current",
+  "version": "1.0.0",
+  "status": "canonical_target_authority",
+  "authority_scope": "AIX inter-system in-flight communication",
+  "canonical_protocol": {
+    "name": "CloudEvents",
+    "specversion": "1.0",
+    "dataschema": "aix_data_current",
+    "owned_data_block": "aix_data_current"
+  },
+  "migration_posture": {
+    "migration_source": "ayrpack_current",
+    "migration_source_status": "transitional_internal_packet_authority",
+    "target_protocol": "cloudevents_current",
+    "backward_integration": "forbidden",
+    "compatibility_shim": "forbidden",
+    "dual_read": "forbidden",
+    "boundary_policy": "old format is hard-rejected at boundary"
+  },
+  "envelope": {
+    "required_fields": [
+      "specversion",
+      "id",
+      "type",
+      "source",
+      "time",
+      "datacontenttype",
+      "data"
+    ],
+    "optional_fields": [
+      "subject",
+      "dataschema",
+      "trace_id"
+    ],
+    "field_rules": {
+      "specversion": {
+        "required_value": "1.0"
+      },
+      "datacontenttype": {
+        "required_value": "application/json"
+      },
+      "dataschema": {
+        "required_value": "aix_data_current",
+        "required_for_projection_events": true,
+        "recommended_for_all_aix_events": true
+      },
+      "trace_id": {
+        "description": "Cross-system correlation identifier carried by AIX emitters when available."
+      }
+    }
+  },
+  "data_contract": {
+    "description": "AIX-owned slim data block carried inside the CloudEvents Current envelope.",
+    "required_fields": [
+      "packet",
+      "execution"
+    ],
+    "packet": {
+      "type": "dict",
+      "current_authority_ref": "projects/AIX/src/aix/contracts/ayrpack_current.py::AyrpackCurrent",
+      "role": "migration_source_internal_packet",
+      "notes": [
+        "ayrpack_current remains the current internal packet shape during transition.",
+        "ayrpack_current is not the canonical target transport protocol authority.",
+        "active_frame.status is the current lifecycle authority inside packet state until spine retirement is completed."
+      ]
+    },
+    "execution": {
+      "type": "dict",
+      "role": "runtime_execution_intent",
+      "minimum_required_by_boundary": [
+        "task_id"
+      ],
+      "observed_fields": [
+        "task_id",
+        "task_number",
+        "project_id",
+        "tenant_id",
+        "workspace_root",
+        "repo_root",
+        "command_runtime",
+        "mutation_runtime",
+        "preflight",
+        "max_runtime_seconds",
+        "max_patch_attempts"
+      ]
+    }
+  },
+  "type_taxonomy": {
+    "state_prefix": "com.aix.task.state.",
+    "state_pattern": "com.aix.task.state.{state}",
+    "state_examples": [
+      "com.aix.task.state.created",
+      "com.aix.task.state.review",
+      "com.aix.task.state.review_enriched",
+      "com.aix.task.state.ready",
+      "com.aix.task.state.running",
+      "com.aix.task.state.completed",
+      "com.aix.task.state.done",
+      "com.aix.task.state.failed",
+      "com.aix.task.state.blocked"
+    ],
+    "audit_prefix": "com.aix.task.audit.",
+    "audit_pattern": "com.aix.task.audit.{entry_kind}",
+    "audit_examples": [
+      "com.aix.task.audit.event",
+      "com.aix.task.audit.decision",
+      "com.aix.task.audit.artifact",
+      "com.aix.task.audit.diff",
+      "com.aix.task.audit.handoff",
+      "com.aix.task.audit.attestation",
+      "com.aix.task.audit.spine_retired"
+    ],
+    "boundary_prefix": "com.aix.task.boundary.",
+    "boundary_pattern": "com.aix.task.boundary.{event}",
+    "boundary_examples": [
+      "com.aix.task.boundary.rejected"
+    ]
+  },
+  "boundary_rejection_contract": {
+    "event_type": "com.aix.task.boundary.rejected",
+    "error_code": "ENVELOPE_FORMAT_INVALID",
+    "expected_format": "cloudevents_current",
+    "minimum_data_fields": [
+      "rejection_code",
+      "expected_format",
+      "received_format",
+      "task_id",
+      "trace_id",
+      "rejected_at_utc"
+    ],
+    "notes": [
+      "Legacy direct packet/execution payloads are classified as received_format=ayrpack_current.",
+      "Boundary rejection is immediate and typed.",
+      "Rejections are emitted as CloudEvents."
+    ]
+  },
+  "authority_statement": {
+    "canonical_target_authority": "This contract is the sole target protocol authority for AIX in-flight inter-system communication.",
+    "derived_docs_rule": "Active docs and operator maps must reference this contract and must not redefine the protocol independently.",
+    "projection_rule": "Temporal history is authoritative for in-flight audit during execution; OpsBus events are projection for external consumers."
+  },
+  "implementation_evidence": {
+    "runtime_ingress": "projects/AIX/hyeve-aix-service/backend/services/aix_enveloped_run_service.py",
+    "runtime_projection_emitter": "projects/AIX/hyeve-aix-service/backend/aix_orchestrator_v2/temporal_workflows.py"
+  }
+}

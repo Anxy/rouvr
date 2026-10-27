@@ -1,0 +1,15 @@
+{
+  "manifest_id": "OC-EXECUTOR-V1",
+  "version": "v1",
+  "role": "executor",
+  "purpose": "Bounded step execution only under Move Token",
+  "autonomy_cap": "bounded",
+  "allowed_gateway": "hyeve_integration",
+  "forbidden": [
+    "direct_provider_route",
+    "auto_accept",
+    "workhub_lifecycle_mutation",
+    "recursive_spawn"
+  ],
+  "programme": "AIX-E2E-CYCLE-001"
+}

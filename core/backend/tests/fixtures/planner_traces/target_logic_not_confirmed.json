@@ -1,0 +1,28 @@
+{
+  "packet_id": "f2eec60f-97bc-5ff1-bf44-136437008cf5",
+  "provider": "openrouter",
+  "model": "openrouter/z-ai/glm-5",
+  "attempts_used": 1,
+  "raw_output_text": "{\"steps\":[{\"tool\":\"read_range\",\"args\":{\"relative_path\":\"services/hyeve-codeintel-service/backend/services/codeintel_query_service.py\",\"start_line\":1,\"end_line\":2}},{\"tool\":\"search\",\"args\":{\"query\":\"entity resolution path\",\"relative_path\":\"services/hyeve-codeintel-service/backend/services/codeintel_query_service.py\"}}]}",
+  "parse_error": null,
+  "normalized_steps": [
+    {
+      "tool": "read_range",
+      "args": {
+        "relative_path": "services/hyeve-codeintel-service/backend/services/codeintel_query_service.py",
+        "start_line": 1,
+        "end_line": 2
+      }
+    },
+    {
+      "tool": "search",
+      "args": {
+        "query": "entity resolution path",
+        "relative_path": "services/hyeve-codeintel-service/backend/services/codeintel_query_service.py"
+      }
+    }
+  ],
+  "upstream_payload": {
+    "output_text": "{\"steps\":[{\"tool\":\"read_range\",\"args\":{\"relative_path\":\"services/hyeve-codeintel-service/backend/services/codeintel_query_service.py\",\"start_line\":1,\"end_line\":2}},{\"tool\":\"search\",\"args\":{\"query\":\"entity resolution path\",\"relative_path\":\"services/hyeve-codeintel-service/backend/services/codeintel_query_service.py\"}}]}"
+  }
+}

@@ -1,0 +1,141 @@
+{
+  "name": "aix-chat",
+  "publisher": "aix",
+  "displayName": "Rouvr Discuss",
+  "description": "Chat with Rouvr to scope and run Objectives with real execution (explore → approve → mutate/verify).",
+  "version": "0.2.17",
+  "license": "MIT",
+  "engines": {
+    "vscode": "^1.104.0"
+  },
+  "categories": [
+    "AI",
+    "Chat"
+  ],
+  "capabilities": {
+    "virtualWorkspaces": true,
+    "untrustedWorkspaces": {
+      "supported": true
+    }
+  },
+  "activationEvents": [
+    "onStartupFinished"
+  ],
+  "main": "./out/extension.js",
+  "scripts": {
+    "compile": "node compile.mjs",
+    "watch": "node compile.mjs --watch",
+    "package": "npm run compile && npx --yes @vscode/vsce package --no-dependencies -o ../../aix-chat.vsix"
+  },
+  "contributes": {
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "aixSidebar",
+          "title": "AIX",
+          "icon": "media/aix-activitybar-icon.svg"
+        }
+      ]
+    },
+    "views": {
+      "aixSidebar": [
+        {
+          "id": "aix.chatView",
+          "name": "AIX",
+          "type": "webview"
+        }
+      ]
+    },
+    "chatParticipants": [
+      {
+        "id": "aix.discuss",
+        "name": "aix",
+        "fullName": "AIX",
+        "description": "Discuss and scope a new Objective with AIX",
+        "isSticky": true
+      }
+    ],
+    "languageModelChatProviders": [
+      {
+        "vendor": "aix",
+        "displayName": "AIX"
+      }
+    ],
+    "commands": [
+      {
+        "command": "aix.signIn",
+        "title": "Sign In",
+        "category": "AIX"
+      },
+      {
+        "command": "aix.signOut",
+        "title": "Sign Out",
+        "category": "AIX"
+      },
+      {
+        "command": "aix.showChanges",
+        "title": "Show Pending Changes",
+        "category": "AIX"
+      },
+      {
+        "command": "aix.keepEdit",
+        "title": "Keep Edit",
+        "category": "AIX"
+      },
+      {
+        "command": "aix.undoEdit",
+        "title": "Undo Edit",
+        "category": "AIX"
+      },
+      {
+        "command": "aix.openDiff",
+        "title": "Open Diff for Edit",
+        "category": "AIX"
+      }
+    ],
+    "configuration": {
+      "title": "AIX Discuss",
+      "properties": {
+        "aix.orchestratorUrl": {
+          "type": "string",
+          "default": "http://localhost:3000",
+          "markdownDescription": "Base URL of AIX-Frontend / AIX Orchestrator. Defaults to `http://localhost:3000` (the BFF that signs gateway assertions for the backend)."
+        },
+        "aix.authUrl": {
+          "type": "string",
+          "default": "http://localhost:8222",
+          "markdownDescription": "Base URL of `hyeve-auth-service` (used for login and token refresh). Defaults to `http://localhost:8222`."
+        },
+        "aix.tenantId": {
+          "type": "string",
+          "default": "",
+          "description": "Default tenant ID to sign in with (prefilled, editable at sign-in time). Also sent as X-Hyeve-Tenant-Id on API calls."
+        },
+        "aix.repositoryId": {
+          "type": "string",
+          "default": "",
+          "markdownDescription": "Which approved repository (a key in the backend's `OBJECTIVE_CYCLE_REPOSITORY_ROOTS`) admitted objectives target. Leave blank to use the open workspace folder's name."
+        },
+        "aix.integrationUrl": {
+          "type": "string",
+          "default": "",
+          "markdownDescription": "Base URL of `hyeve-integration-service` (its OpenAI-compatible route `/api/integrations/llm/openai/v1/chat/completions` is used). Required for the AIX model to appear in Agent Mode's model picker — without it, no AIX model is offered rather than one that fails on every request."
+        },
+        "aix.model": {
+          "type": "string",
+          "default": "",
+          "description": "Model name to pass through to hyeve-integration-service (e.g. an openrouter/... id it recognizes). Leave blank to use the service's own default."
+        }
+      }
+    }
+  },
+  "devDependencies": {
+    "@types/node": "24.x",
+    "@types/vscode": "^1.104.0",
+    "esbuild": "^0.25.8"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/microsoft/vscode.git"
+  }
+}

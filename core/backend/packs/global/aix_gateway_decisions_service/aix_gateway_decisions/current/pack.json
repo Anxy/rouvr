@@ -1,0 +1,633 @@
+{
+  "http_hints": {},
+  "messages": {},
+  "metadata": {
+    "schema_key": "edprime.aix_gateway_decisions.current",
+    "style_layers": [
+      {
+        "id": "core/base",
+        "priority": 0
+      }
+    ],
+    "style_pack": {
+      "id": "core/aix_gateway_decisions",
+      "layer": "base",
+      "tailwind": {
+        "theme": {
+          "colors": {
+            "accent": {
+              "500": "#f97316"
+            },
+            "primary": {
+              "500": "#2563eb",
+              "700": "#1d4ed8"
+            }
+          }
+        }
+      }
+    },
+    "table_name": "aix_gateway_decisions",
+    "ui_metadata": {
+      "dataSources": [
+        {
+          "id": "default",
+          "schemaKey": "edprime.aix_gateway_decisions.current",
+          "type": "pack"
+        },
+        {
+          "id": "auditTrail",
+          "path": "/api/aix-gateway-decisions/audit",
+          "type": "rest"
+        }
+      ],
+      "entity": {
+        "icon": "Squares2X2",
+        "primaryKey": [
+          "id"
+        ],
+        "table": "aix_gateway_decisions",
+        "title": "Aix Gateway Decisions"
+      },
+      "navigation": {
+        "breadcrumbs": [
+          "home",
+          "aix-gateway-decisions"
+        ],
+        "icon": "Squares2X2",
+        "primaryRoute": "/aix-gateway-decisions"
+      },
+      "overrides": {
+        "hooks": [
+          "useAixGatewayDecisionsFilters"
+        ],
+        "provider": "AixGatewayDecisionsProvider"
+      },
+      "version": "1.0.0",
+      "views": [
+        {
+          "actions": [
+            {
+              "id": "create",
+              "intent": "primary",
+              "workflow": "aix_gateway_decisions.create.current"
+            }
+          ],
+          "dataSource": "default",
+          "id": "aix_gateway_decisions.list",
+          "label": "Aix Gateway Decisions",
+          "layout": {
+            "columns": [
+              {
+                "component": "Field",
+                "field": "project_id",
+                "label": "Project Id",
+                "sortable": true,
+                "width": "1fr"
+              },
+              {
+                "component": "Field",
+                "field": "workhub_task_id",
+                "label": "Workhub Task Id",
+                "sortable": true,
+                "width": "1fr"
+              },
+              {
+                "component": "Field",
+                "field": "workhub_task_number",
+                "label": "Workhub Task Number",
+                "sortable": true,
+                "width": "1fr"
+              },
+              {
+                "component": "Field",
+                "field": "opsbus_run_id",
+                "label": "Opsbus Run Id",
+                "sortable": true,
+                "width": "1fr"
+              }
+            ],
+            "type": "table"
+          },
+          "navigation": {
+            "icon": "Squares2X2",
+            "label": "Aix Gateway Decisions",
+            "primaryRoute": "/aix-gateway-decisions"
+          },
+          "type": "list"
+        },
+        {
+          "actions": [
+            {
+              "id": "edit",
+              "route": "/aix-gateway-decisions/{id}/edit",
+              "type": "link"
+            },
+            {
+              "id": "delete",
+              "intent": "danger",
+              "workflow": "aix_gateway_decisions.delete.current"
+            }
+          ],
+          "dataSource": "default",
+          "id": "aix_gateway_decisions.detail",
+          "layout": {
+            "regions": [
+              {
+                "id": "summary",
+                "widgets": [
+                  {
+                    "component": "Field",
+                    "field": "project_id",
+                    "label": "Project Id"
+                  },
+                  {
+                    "component": "Field",
+                    "field": "workhub_task_id",
+                    "label": "Workhub Task Id"
+                  },
+                  {
+                    "component": "Field",
+                    "field": "workhub_task_number",
+                    "label": "Workhub Task Number"
+                  }
+                ]
+              },
+              {
+                "id": "details",
+                "widgets": [
+                  {
+                    "component": "Field",
+                    "field": "opsbus_run_id",
+                    "label": "Opsbus Run Id"
+                  },
+                  {
+                    "component": "Field",
+                    "field": "task_type",
+                    "label": "Task Type"
+                  },
+                  {
+                    "component": "Field",
+                    "field": "risk_level",
+                    "label": "Risk Level"
+                  },
+                  {
+                    "component": "Field",
+                    "field": "model_policy",
+                    "label": "Model Policy"
+                  },
+                  {
+                    "component": "Field",
+                    "field": "selected_provider",
+                    "label": "Selected Provider"
+                  },
+                  {
+                    "component": "Field",
+                    "field": "selected_model_id",
+                    "label": "Selected Model Id"
+                  },
+                  {
+                    "component": "Field",
+                    "field": "selected_model_name",
+                    "label": "Selected Model Name"
+                  },
+                  {
+                    "component": "Field",
+                    "field": "decision_status",
+                    "label": "Decision Status"
+                  },
+                  {
+                    "component": "Field",
+                    "field": "decision_reason",
+                    "label": "Decision Reason"
+                  },
+                  {
+                    "component": "Field",
+                    "field": "retry_count",
+                    "label": "Retry Count"
+                  },
+                  {
+                    "component": "Field",
+                    "field": "escalation_attempted",
+                    "label": "Escalation Attempted"
+                  },
+                  {
+                    "component": "Field",
+                    "field": "latency_ms",
+                    "label": "Latency Ms"
+                  },
+                  {
+                    "component": "Field",
+                    "field": "tokens_used",
+                    "label": "Tokens Used"
+                  },
+                  {
+                    "component": "Field",
+                    "field": "estimated_cost",
+                    "label": "Estimated Cost"
+                  },
+                  {
+                    "component": "Field",
+                    "field": "decision_payload_json",
+                    "label": "Decision Payload Json"
+                  },
+                  {
+                    "component": "Field",
+                    "field": "deleted_at",
+                    "label": "Deleted At"
+                  }
+                ]
+              }
+            ],
+            "type": "split"
+          },
+          "type": "detail"
+        },
+        {
+          "actions": [
+            {
+              "id": "save",
+              "intent": "primary",
+              "type": "submit",
+              "workflow": "aix_gateway_decisions.update.current"
+            },
+            {
+              "id": "cancel",
+              "route": "/aix-gateway-decisions",
+              "type": "link"
+            }
+          ],
+          "dataSource": "default",
+          "id": "aix_gateway_decisions.form",
+          "layout": {
+            "columns": 2,
+            "sections": [
+              {
+                "title": "Primary Information",
+                "widgets": [
+                  {
+                    "component": "Input",
+                    "field": "project_id",
+                    "label": "Project Id"
+                  },
+                  {
+                    "component": "Input",
+                    "field": "workhub_task_id",
+                    "label": "Workhub Task Id"
+                  },
+                  {
+                    "component": "Input",
+                    "field": "workhub_task_number",
+                    "label": "Workhub Task Number"
+                  },
+                  {
+                    "component": "Input",
+                    "field": "opsbus_run_id",
+                    "label": "Opsbus Run Id"
+                  },
+                  {
+                    "component": "Input",
+                    "field": "task_type",
+                    "label": "Task Type",
+                    "props": {
+                      "required": true
+                    }
+                  },
+                  {
+                    "component": "Input",
+                    "field": "risk_level",
+                    "label": "Risk Level",
+                    "props": {
+                      "required": true
+                    }
+                  },
+                  {
+                    "component": "Input",
+                    "field": "model_policy",
+                    "label": "Model Policy",
+                    "props": {
+                      "required": true
+                    }
+                  },
+                  {
+                    "component": "Input",
+                    "field": "selected_provider",
+                    "label": "Selected Provider"
+                  },
+                  {
+                    "component": "Input",
+                    "field": "selected_model_id",
+                    "label": "Selected Model Id"
+                  },
+                  {
+                    "component": "Input",
+                    "field": "selected_model_name",
+                    "label": "Selected Model Name"
+                  }
+                ]
+              },
+              {
+                "title": "Additional Details",
+                "widgets": [
+                  {
+                    "component": "Input",
+                    "field": "decision_status",
+                    "label": "Decision Status",
+                    "props": {
+                      "required": true
+                    }
+                  },
+                  {
+                    "component": "Input",
+                    "field": "decision_reason",
+                    "label": "Decision Reason"
+                  },
+                  {
+                    "component": "Input",
+                    "field": "retry_count",
+                    "label": "Retry Count",
+                    "props": {
+                      "required": true
+                    }
+                  },
+                  {
+                    "component": "Checkbox",
+                    "field": "escalation_attempted",
+                    "label": "Escalation Attempted",
+                    "props": {
+                      "required": true
+                    }
+                  },
+                  {
+                    "component": "Input",
+                    "field": "latency_ms",
+                    "label": "Latency Ms"
+                  },
+                  {
+                    "component": "Input",
+                    "field": "tokens_used",
+                    "label": "Tokens Used"
+                  },
+                  {
+                    "component": "Input",
+                    "field": "estimated_cost",
+                    "label": "Estimated Cost"
+                  },
+                  {
+                    "component": "Input",
+                    "field": "decision_payload_json",
+                    "label": "Decision Payload Json",
+                    "props": {
+                      "required": true
+                    }
+                  },
+                  {
+                    "component": "DateTimePicker",
+                    "field": "deleted_at",
+                    "label": "Deleted At",
+                    "props": {
+                      "type": "datetime-local"
+                    }
+                  }
+                ]
+              }
+            ],
+            "type": "grid"
+          },
+          "type": "form"
+        }
+      ],
+      "workflows": [
+        {
+          "failure": {
+            "toast": "Failed to create aix gateway decisions"
+          },
+          "id": "aix_gateway_decisions.create.current",
+          "method": "POST",
+          "path": "/api/aix-gateway-decisions",
+          "success": {
+            "toast": "Aix Gateway Decisions created"
+          },
+          "type": "api"
+        },
+        {
+          "id": "aix_gateway_decisions.update.current",
+          "method": "PUT",
+          "path": "/api/aix-gateway-decisions/{id}",
+          "success": {
+            "toast": "Aix Gateway Decisions updated"
+          },
+          "type": "api"
+        },
+        {
+          "id": "aix_gateway_decisions.delete.current",
+          "method": "DELETE",
+          "path": "/api/aix-gateway-decisions/{id}",
+          "success": {
+            "toast": "Aix Gateway Decisions deleted"
+          },
+          "type": "api"
+        }
+      ]
+    }
+  },
+  "schema": {
+    "additionalProperties": false,
+    "properties": {
+      "decision_payload_json": {
+        "title": "Decision Payload Json",
+        "type": "object"
+      },
+      "decision_reason": {
+        "title": "Decision Reason",
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "decision_status": {
+        "title": "Decision Status",
+        "type": "string"
+      },
+      "deleted_at": {
+        "format": "date-time",
+        "title": "Deleted At",
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "escalation_attempted": {
+        "title": "Escalation Attempted",
+        "type": "boolean"
+      },
+      "estimated_cost": {
+        "title": "Estimated Cost",
+        "type": [
+          "number",
+          "null"
+        ]
+      },
+      "latency_ms": {
+        "title": "Latency Ms",
+        "type": [
+          "integer",
+          "null"
+        ]
+      },
+      "model_policy": {
+        "title": "Model Policy",
+        "type": "string"
+      },
+      "opsbus_run_id": {
+        "title": "Opsbus Run Id",
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "project_id": {
+        "title": "Project Id",
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "retry_count": {
+        "title": "Retry Count",
+        "type": "integer"
+      },
+      "risk_level": {
+        "title": "Risk Level",
+        "type": "string"
+      },
+      "selected_model_id": {
+        "title": "Selected Model Id",
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "selected_model_name": {
+        "title": "Selected Model Name",
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "selected_provider": {
+        "title": "Selected Provider",
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "task_type": {
+        "title": "Task Type",
+        "type": "string"
+      },
+      "tokens_used": {
+        "title": "Tokens Used",
+        "type": [
+          "integer",
+          "null"
+        ]
+      },
+      "workhub_task_id": {
+        "title": "Workhub Task Id",
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "workhub_task_number": {
+        "title": "Workhub Task Number",
+        "type": [
+          "integer",
+          "null"
+        ]
+      }
+    },
+    "type": "object"
+  },
+  "validation_rules": {
+    "_shared": {
+      "decision_status": {
+        "customMessages": {
+          "minLength": "Decision Status must be at least 1 characters.",
+          "required": "Decision Status is required."
+        },
+        "message_keys": {
+          "minLength": "aix_gateway_decisions.decision_status.min_length",
+          "required": "aix_gateway_decisions.decision_status.required"
+        },
+        "minLength": 1,
+        "required": true
+      },
+      "deleted_at": {
+        "customMessages": {
+          "format": "Enter a valid deleted at."
+        },
+        "format": "date-time",
+        "message_keys": {
+          "format": "aix_gateway_decisions.deleted_at.format_date_time"
+        }
+      },
+      "model_policy": {
+        "customMessages": {
+          "minLength": "Model Policy must be at least 1 characters.",
+          "required": "Model Policy is required."
+        },
+        "message_keys": {
+          "minLength": "aix_gateway_decisions.model_policy.min_length",
+          "required": "aix_gateway_decisions.model_policy.required"
+        },
+        "minLength": 1,
+        "required": true
+      },
+      "risk_level": {
+        "customMessages": {
+          "minLength": "Risk Level must be at least 1 characters.",
+          "required": "Risk Level is required."
+        },
+        "message_keys": {
+          "minLength": "aix_gateway_decisions.risk_level.min_length",
+          "required": "aix_gateway_decisions.risk_level.required"
+        },
+        "minLength": 1,
+        "required": true
+      },
+      "task_type": {
+        "customMessages": {
+          "minLength": "Task Type must be at least 1 characters.",
+          "required": "Task Type is required."
+        },
+        "message_keys": {
+          "minLength": "aix_gateway_decisions.task_type.min_length",
+          "required": "aix_gateway_decisions.task_type.required"
+        },
+        "minLength": 1,
+        "required": true
+      }
+    },
+    "create": {
+      "required_fields": [
+        "task_type",
+        "risk_level",
+        "model_policy",
+        "decision_status",
+        "retry_count",
+        "escalation_attempted",
+        "decision_payload_json"
+      ]
+    },
+    "update": {
+      "required_fields": []
+    }
+  },
+  "version": "v1",
+  "workflows": {
+    "create": "aix_gateway_decisions.create.current",
+    "delete": "aix_gateway_decisions.delete.current",
+    "update": "aix_gateway_decisions.update.current"
+  }
+}

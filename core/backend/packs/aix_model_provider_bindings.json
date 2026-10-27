@@ -1,0 +1,469 @@
+{
+  "context": {
+    "entity": "aix_model_provider_bindings",
+    "service": "aix_model_provider_bindings_service",
+    "version": "v1"
+  },
+  "json_schema": {
+    "additionalProperties": false,
+    "properties": {
+      "binding_key": {
+        "title": "Binding Key",
+        "type": "string"
+      },
+      "deleted_at": {
+        "format": "date-time",
+        "title": "Deleted At",
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "is_enabled": {
+        "title": "Is Enabled",
+        "type": "boolean"
+      },
+      "metadata_json": {
+        "title": "Metadata Json",
+        "type": "object"
+      },
+      "model_id": {
+        "title": "Model Id",
+        "type": "string"
+      },
+      "model_name": {
+        "title": "Model Name",
+        "type": "string"
+      },
+      "project_id": {
+        "title": "Project Id",
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "provider": {
+        "title": "Provider",
+        "type": "string"
+      },
+      "route_class": {
+        "title": "Route Class",
+        "type": "string"
+      }
+    },
+    "required": [
+      "binding_key",
+      "provider",
+      "model_id",
+      "model_name",
+      "route_class",
+      "is_enabled",
+      "metadata_json"
+    ],
+    "type": "object"
+  },
+  "pii_fields": [],
+  "schema_key": "edprime.aix_model_provider_bindings.current",
+  "style_layers": [
+    {
+      "id": "core/base",
+      "priority": 0
+    }
+  ],
+  "style_pack": {
+    "id": "core/aix_model_provider_bindings",
+    "layer": "base",
+    "tailwind": {
+      "theme": {
+        "colors": {
+          "accent": {
+            "500": "#f97316"
+          },
+          "primary": {
+            "500": "#2563eb",
+            "700": "#1d4ed8"
+          }
+        }
+      }
+    }
+  },
+  "table_name": "aix_model_provider_bindings",
+  "ui_metadata": {
+    "dataSources": [
+      {
+        "id": "default",
+        "schemaKey": "edprime.aix_model_provider_bindings.current",
+        "type": "pack"
+      },
+      {
+        "id": "auditTrail",
+        "path": "/api/aix-model-provider-bindings/audit",
+        "type": "rest"
+      }
+    ],
+    "entity": {
+      "icon": "Squares2X2",
+      "primaryKey": [
+        "id"
+      ],
+      "table": "aix_model_provider_bindings",
+      "title": "Aix Model Provider Bindings"
+    },
+    "navigation": {
+      "breadcrumbs": [
+        "home",
+        "aix-model-provider-bindings"
+      ],
+      "icon": "Squares2X2",
+      "primaryRoute": "/aix-model-provider-bindings"
+    },
+    "overrides": {
+      "hooks": [
+        "useAixModelProviderBindingsFilters"
+      ],
+      "provider": "AixModelProviderBindingsProvider"
+    },
+    "version": "1.0.0",
+    "views": [
+      {
+        "actions": [
+          {
+            "id": "create",
+            "intent": "primary",
+            "workflow": "aix_model_provider_bindings.create.current"
+          }
+        ],
+        "dataSource": "default",
+        "id": "aix_model_provider_bindings.list",
+        "label": "Aix Model Provider Bindings",
+        "layout": {
+          "columns": [
+            {
+              "component": "Field",
+              "field": "project_id",
+              "label": "Project Id",
+              "sortable": true,
+              "width": "1fr"
+            },
+            {
+              "component": "Field",
+              "field": "binding_key",
+              "label": "Binding Key",
+              "sortable": true,
+              "width": "1fr"
+            },
+            {
+              "component": "Field",
+              "field": "provider",
+              "label": "Provider",
+              "sortable": true,
+              "width": "1fr"
+            },
+            {
+              "component": "Field",
+              "field": "model_id",
+              "label": "Model Id",
+              "sortable": true,
+              "width": "1fr"
+            }
+          ],
+          "type": "table"
+        },
+        "navigation": {
+          "icon": "Squares2X2",
+          "label": "Aix Model Provider Bindings",
+          "primaryRoute": "/aix-model-provider-bindings"
+        },
+        "type": "list"
+      },
+      {
+        "actions": [
+          {
+            "id": "edit",
+            "route": "/aix-model-provider-bindings/{id}/edit",
+            "type": "link"
+          },
+          {
+            "id": "delete",
+            "intent": "danger",
+            "workflow": "aix_model_provider_bindings.delete.current"
+          }
+        ],
+        "dataSource": "default",
+        "id": "aix_model_provider_bindings.detail",
+        "layout": {
+          "regions": [
+            {
+              "id": "summary",
+              "widgets": [
+                {
+                  "component": "Field",
+                  "field": "project_id",
+                  "label": "Project Id"
+                },
+                {
+                  "component": "Field",
+                  "field": "binding_key",
+                  "label": "Binding Key"
+                },
+                {
+                  "component": "Field",
+                  "field": "provider",
+                  "label": "Provider"
+                }
+              ]
+            },
+            {
+              "id": "details",
+              "widgets": [
+                {
+                  "component": "Field",
+                  "field": "model_id",
+                  "label": "Model Id"
+                },
+                {
+                  "component": "Field",
+                  "field": "model_name",
+                  "label": "Model Name"
+                },
+                {
+                  "component": "Field",
+                  "field": "route_class",
+                  "label": "Route Class"
+                },
+                {
+                  "component": "Field",
+                  "field": "is_enabled",
+                  "label": "Is Enabled"
+                },
+                {
+                  "component": "Field",
+                  "field": "metadata_json",
+                  "label": "Metadata Json"
+                },
+                {
+                  "component": "Field",
+                  "field": "deleted_at",
+                  "label": "Deleted At"
+                }
+              ]
+            }
+          ],
+          "type": "split"
+        },
+        "type": "detail"
+      },
+      {
+        "actions": [
+          {
+            "id": "save",
+            "intent": "primary",
+            "type": "submit",
+            "workflow": "aix_model_provider_bindings.update.current"
+          },
+          {
+            "id": "cancel",
+            "route": "/aix-model-provider-bindings",
+            "type": "link"
+          }
+        ],
+        "dataSource": "default",
+        "id": "aix_model_provider_bindings.form",
+        "layout": {
+          "columns": 2,
+          "sections": [
+            {
+              "title": "Primary Information",
+              "widgets": [
+                {
+                  "component": "Input",
+                  "field": "project_id",
+                  "label": "Project Id"
+                },
+                {
+                  "component": "Input",
+                  "field": "binding_key",
+                  "label": "Binding Key",
+                  "props": {
+                    "required": true
+                  }
+                },
+                {
+                  "component": "Input",
+                  "field": "provider",
+                  "label": "Provider",
+                  "props": {
+                    "required": true
+                  }
+                },
+                {
+                  "component": "Input",
+                  "field": "model_id",
+                  "label": "Model Id",
+                  "props": {
+                    "required": true
+                  }
+                }
+              ]
+            },
+            {
+              "title": "Additional Details",
+              "widgets": [
+                {
+                  "component": "Input",
+                  "field": "model_name",
+                  "label": "Model Name",
+                  "props": {
+                    "required": true
+                  }
+                },
+                {
+                  "component": "Input",
+                  "field": "route_class",
+                  "label": "Route Class",
+                  "props": {
+                    "required": true
+                  }
+                },
+                {
+                  "component": "Checkbox",
+                  "field": "is_enabled",
+                  "label": "Is Enabled",
+                  "props": {
+                    "required": true
+                  }
+                },
+                {
+                  "component": "Input",
+                  "field": "metadata_json",
+                  "label": "Metadata Json",
+                  "props": {
+                    "required": true
+                  }
+                },
+                {
+                  "component": "DateTimePicker",
+                  "field": "deleted_at",
+                  "label": "Deleted At",
+                  "props": {
+                    "type": "datetime-local"
+                  }
+                }
+              ]
+            }
+          ],
+          "type": "grid"
+        },
+        "type": "form"
+      }
+    ],
+    "workflows": [
+      {
+        "failure": {
+          "toast": "Failed to create aix model provider bindings"
+        },
+        "id": "aix_model_provider_bindings.create.current",
+        "method": "POST",
+        "path": "/api/aix-model-provider-bindings",
+        "success": {
+          "toast": "Aix Model Provider Bindings created"
+        },
+        "type": "api"
+      },
+      {
+        "id": "aix_model_provider_bindings.update.current",
+        "method": "PUT",
+        "path": "/api/aix-model-provider-bindings/{id}",
+        "success": {
+          "toast": "Aix Model Provider Bindings updated"
+        },
+        "type": "api"
+      },
+      {
+        "id": "aix_model_provider_bindings.delete.current",
+        "method": "DELETE",
+        "path": "/api/aix-model-provider-bindings/{id}",
+        "success": {
+          "toast": "Aix Model Provider Bindings deleted"
+        },
+        "type": "api"
+      }
+    ]
+  },
+  "validation_rules": {
+    "binding_key": {
+      "customMessages": {
+        "minLength": "Binding Key must be at least 1 characters.",
+        "required": "Binding Key is required."
+      },
+      "message_keys": {
+        "minLength": "aix_model_provider_bindings.binding_key.min_length",
+        "required": "aix_model_provider_bindings.binding_key.required"
+      },
+      "minLength": 1,
+      "required": true
+    },
+    "deleted_at": {
+      "customMessages": {
+        "format": "Enter a valid deleted at."
+      },
+      "format": "date-time",
+      "message_keys": {
+        "format": "aix_model_provider_bindings.deleted_at.format_date_time"
+      }
+    },
+    "model_id": {
+      "customMessages": {
+        "minLength": "Model Id must be at least 1 characters.",
+        "required": "Model Id is required."
+      },
+      "message_keys": {
+        "minLength": "aix_model_provider_bindings.model_id.min_length",
+        "required": "aix_model_provider_bindings.model_id.required"
+      },
+      "minLength": 1,
+      "required": true
+    },
+    "model_name": {
+      "customMessages": {
+        "minLength": "Model Name must be at least 1 characters.",
+        "required": "Model Name is required."
+      },
+      "message_keys": {
+        "minLength": "aix_model_provider_bindings.model_name.min_length",
+        "required": "aix_model_provider_bindings.model_name.required"
+      },
+      "minLength": 1,
+      "required": true
+    },
+    "provider": {
+      "customMessages": {
+        "minLength": "Provider must be at least 1 characters.",
+        "required": "Provider is required."
+      },
+      "message_keys": {
+        "minLength": "aix_model_provider_bindings.provider.min_length",
+        "required": "aix_model_provider_bindings.provider.required"
+      },
+      "minLength": 1,
+      "required": true
+    },
+    "route_class": {
+      "customMessages": {
+        "minLength": "Route Class must be at least 1 characters.",
+        "required": "Route Class is required."
+      },
+      "message_keys": {
+        "minLength": "aix_model_provider_bindings.route_class.min_length",
+        "required": "aix_model_provider_bindings.route_class.required"
+      },
+      "minLength": 1,
+      "required": true
+    }
+  },
+  "workflows": {
+    "create": "aix_model_provider_bindings.create.current",
+    "delete": "aix_model_provider_bindings.delete.current",
+    "update": "aix_model_provider_bindings.update.current"
+  }
+}

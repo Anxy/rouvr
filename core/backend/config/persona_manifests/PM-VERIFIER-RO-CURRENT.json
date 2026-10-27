@@ -1,0 +1,32 @@
+{
+  "schema_version": "persona_manifest.current",
+  "persona_id": "verifier.current",
+  "persona_name": "Verifier Persona v1",
+  "persona_version": "v1",
+  "autonomy_cap": "L1",
+  "policy_engine_profile": "PE-VERIFIER-L1-CURRENT",
+  "tool_policy": {
+    "allowed_commands_profile": "ACP-VERIFIER-RO-CURRENT",
+    "repo_profile": "RP-HYEVE-READONLY-CURRENT",
+    "allowed_tools": [
+      "list_dir",
+      "read_file",
+      "search",
+      "get_status",
+      "evidence.attach"
+    ]
+  },
+  "evidence_policy": {
+    "evidence_pack_schema": "evidence_pack.current",
+    "require_acceptance_mapping": true
+  },
+  "constraints": [
+    "read_only_tools_only",
+    "line_reference_required",
+    "verdict_required"
+  ],
+  "metadata": {
+    "role": "verifier",
+    "acceptance_contract": "CL-C1-verifier-read-only-v1"
+  }
+}

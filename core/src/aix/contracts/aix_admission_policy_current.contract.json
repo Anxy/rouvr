@@ -1,0 +1,40 @@
+{
+  "schema_version": "hyeve.aix.admission_policy.current",
+  "purpose": "Define the machine-readable boundaries for executing tasks so the planner can generate green-admissible slices.",
+  "decomposition_triggers": {
+    "max_file_count_standard": 2,
+    "max_file_count_new_abstraction": 1,
+    "max_symbol_count_standard": 3,
+    "multi_file_bounds": [
+      {
+        "condition": "file_count >= 3",
+        "exception_scopes": ["multi_file_bounded", "bounded_impl_slice"],
+        "reason": "multiple_target_files"
+      },
+      {
+        "condition": "file_count >= 2 AND new_abstraction == true",
+        "exception_scopes": [],
+        "reason": "new_abstraction_scope"
+      }
+    ]
+  },
+  "allowed_scopes": [
+    "single_symbol_single_file",
+    "multi_symbol_single_file",
+    "multi_file_bounded",
+    "bounded_impl_slice",
+    "multi_file_new_abstraction",
+    "multi_file_broad"
+  ],
+  "budget_advice": {
+    "recommended_max_tokens_per_slice": 10000,
+    "advice": "If a slice exceeds optimal complexity, the planner must continue decomposing it into smaller children. A single child task must strictly target 1 to 2 files unless it is a bounded_impl_slice."
+  },
+  "required_fields_for_admission": [
+    "title",
+    "execution_phase",
+    "target_files",
+    "acceptance_criteria",
+    "executor_model"
+  ]
+}

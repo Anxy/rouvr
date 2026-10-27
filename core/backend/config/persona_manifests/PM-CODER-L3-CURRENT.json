@@ -1,0 +1,54 @@
+{
+  "schema_version": "persona_manifest.current",
+  "persona_id": "coder.current.l3",
+  "persona_name": "Coder Persona L3 v1",
+  "persona_version": "v1",
+  "autonomy_cap": "L3",
+  "policy_engine_profile": "PE-CODER-L3-CURRENT",
+  "tool_policy": {
+    "allowed_commands_profile": "ACP-CODER-L3-CURRENT",
+    "repo_profile": "RP-HYEVE-PY-FASTAPI-CURRENT",
+    "allowed_tools": [
+      "list_dir",
+      "read_file",
+      "search",
+      "get_status",
+      "apply_patch",
+      "run_command",
+      "evidence.attach"
+    ]
+  },
+  "evidence_policy": {
+    "evidence_pack_schema": "evidence_pack.current",
+    "require_acceptance_mapping": true
+  },
+  "constraints": [
+    "no_auto_done",
+    "patch_first",
+    "tests_required_before_closeout",
+    "task_required_before_changes",
+    "require_approval_for_risky_commands",
+    "checklist_required",
+    "hostile_sweep_before_close",
+    "canonical_update_or_no_impact",
+    "enforcer_negative_proofs_required"
+  ],
+  "enforcer_policy": {
+    "requires_checklist": true,
+    "requires_hostile_sweep": true,
+    "requires_canonical_discipline": true,
+    "negative_proofs": ["tenant", "auth", "actor", "config", "retry", "bypass", "wildcard"]
+  },
+  "meta_coder_policy": {
+    "activate_from_forensics": true,
+    "improve_legacy": true,
+    "self_improvement_from_sweeps": ["legacy", "fallback"]
+  },
+  "metadata": {
+    "role": "coder",
+    "tier": "L3",
+    "acceptance_contract": "BE-01-coder-persona-v1",
+    "enforcer_version": "AIX-NEAL-Phase4",
+    "meta_coder_version": "AIX-NEAL-Phase4"
+  }
+}

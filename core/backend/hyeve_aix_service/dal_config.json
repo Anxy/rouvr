@@ -1,0 +1,58 @@
+{
+  "database": {
+    "primary": {
+      "type": "sqlalchemy",
+      "connection_string": "postgresql+asyncpg://hyeve_user:hyeve_password@postgres:5432/aix_model_gateway_policies_service",
+      "pool_size": 10,
+      "pool_min_size": 5,
+      "pool_max_size": 20,
+      "timeout": 30,
+      "retry_attempts": 3
+    }
+  },
+  "cache": {
+    "enabled": true,
+    "redis_url": "redis://redis:6379",
+    "default_ttl": 3600,
+    "key_prefix": "aix_model_gateway_policies_service:dal",
+    "max_connections": 10,
+    "retry_on_timeout": true,
+    "socket_timeout": 5
+  },
+  "tenant": {
+    "isolation_mode": "row_level_security",
+    "tenant_id_column": "tenant_id",
+    "soft_delete_column": "deleted_at",
+    "enforce_isolation": true,
+    "default_tenant_id": "default"
+  },
+  "validation": {
+    "strict_mode": true,
+    "validate_on_read": false,
+    "validate_on_write": true,
+    "allow_extra_fields": false,
+    "validate_tenant_isolation": true,
+    "ulid_validation": true
+  },
+  "ayrpack": {
+    "enabled": false,
+    "packet_table": "workflow_packets",
+    "rules_table": "workflow_rules",
+    "hash_algorithm": "sha256",
+    "max_packet_size": 1048576
+  },
+  "logging": {
+    "level": "INFO",
+    "format": "json",
+    "enable_sql_logging": false,
+    "enable_cache_logging": false,
+    "log_sensitive_data": false
+  },
+  "performance": {
+    "enable_metrics": true,
+    "slow_query_threshold": 1.0,
+    "connection_pool_monitoring": true,
+    "cache_hit_rate_monitoring": true,
+    "enable_query_analysis": false
+  }
+}

@@ -1,0 +1,28 @@
+{
+  "packet_id": "clean-success-trace",
+  "provider": "openrouter",
+  "model": "openrouter/mistralai/codestral-2508",
+  "attempts_used": 1,
+  "raw_output_text": "{\"steps\":[{\"tool\":\"read_range\",\"args\":{\"relative_path\":\"services/hyeve-codeintel-service/backend/services/codeintel_query_service.py\",\"start_line\":1,\"end_line\":40}},{\"tool\":\"edit_file\",\"args\":{\"relative_path\":\"services/hyeve-codeintel-service/backend/services/codeintel_query_service.py\",\"search_replace_blocks\":\"<<<<<<< SEARCH\\ndef entity_names():\\n    return ['legacy']\\n=======\\ndef entity_names():\\n    return ['normalized']\\n>>>>>>> REPLACE\"}}]}",
+  "parse_error": null,
+  "normalized_steps": [
+    {
+      "tool": "read_range",
+      "args": {
+        "relative_path": "services/hyeve-codeintel-service/backend/services/codeintel_query_service.py",
+        "start_line": 1,
+        "end_line": 40
+      }
+    },
+    {
+      "tool": "edit_file",
+      "args": {
+        "relative_path": "services/hyeve-codeintel-service/backend/services/codeintel_query_service.py",
+        "search_replace_blocks": "<<<<<<< SEARCH\ndef entity_names():\n    return ['legacy']\n=======\ndef entity_names():\n    return ['normalized']\n>>>>>>> REPLACE"
+      }
+    }
+  ],
+  "upstream_payload": {
+    "output_text": "{\"steps\":[{\"tool\":\"read_range\",\"args\":{\"relative_path\":\"services/hyeve-codeintel-service/backend/services/codeintel_query_service.py\",\"start_line\":1,\"end_line\":40}},{\"tool\":\"edit_file\",\"args\":{\"relative_path\":\"services/hyeve-codeintel-service/backend/services/codeintel_query_service.py\",\"search_replace_blocks\":\"<<<<<<< SEARCH\\ndef entity_names():\\n    return ['legacy']\\n=======\\ndef entity_names():\\n    return ['normalized']\\n>>>>>>> REPLACE\"}}]}"
+  }
+}

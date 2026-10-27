@@ -1,0 +1,29 @@
+{
+  "version": 1,
+  "cases": [
+    {
+      "id": "adv_malformed_tool_payload",
+      "kind": "malformed_tool_call",
+      "expected_terminal": "needs_human",
+      "reason_code": "tool_payload_invalid"
+    },
+    {
+      "id": "adv_repeated_drift_loop",
+      "kind": "repeated_drift",
+      "expected_terminal": "drift_block",
+      "reason_code": "workspace_drift_repeated"
+    },
+    {
+      "id": "adv_policy_violation_loop",
+      "kind": "policy_violation",
+      "expected_terminal": "policy_block",
+      "reason_code": "allowlist_denied"
+    },
+    {
+      "id": "adv_escalation_exhausted",
+      "kind": "escalation_exhausted",
+      "expected_terminal": "escalation_exhausted",
+      "reason_code": "model_escalation_limit_reached"
+    }
+  ]
+}

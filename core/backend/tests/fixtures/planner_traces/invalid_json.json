@@ -1,0 +1,12 @@
+{
+  "packet_id": "invalid-json-trace",
+  "provider": "openrouter",
+  "model": "openrouter/z-ai/glm-5",
+  "attempts_used": 1,
+  "raw_output_text": "not-json-at-all",
+  "parse_error": "PLANNER_OUTPUT_NOT_JSON",
+  "normalized_steps": [],
+  "upstream_payload": {
+    "output_text": "not-json-at-all"
+  }
+}

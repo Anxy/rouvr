@@ -1,0 +1,130 @@
+--- a/CronJobController.php
++++ b/CronJobController.php
+@@ -3,20 +3,26 @@
+ namespace App\Http\Controllers;
+ 
+ use Illuminate\Http\Request;
+-// ===== Broadcast / FCM domain models =====
++// ============================================================================
++// Broadcast / FCM domain models
++// ============================================================================
+ use App\Models\BroadcastMessage;
+ use App\Models\BroadcastMessageDetail;
+ use App\Models\BroadcastMessagePrivacy;
+ use App\Models\FcmMessage;
+ use App\Models\FcmMessageDetail;
+-// ===== Student domain models =====
++// ============================================================================
++// Student domain models
++// ============================================================================
+ use App\Models\Student;
+ use App\Models\StudentUniform;
+ use App\Models\StudentUniformDetail;
+ use App\Models\StudentAcademicHistory;
+ use App\Models\StudentContact;
+ use App\Models\StudentDetail;
+-// ===== Fee domain models =====
++// ============================================================================
++// Fee domain models
++// ============================================================================
+ use App\Models\FeeRule;
+ use App\Models\StudentFeeRuleAssoc;
+ use App\Models\StudentFeeRuleAssocDetail;
+@@ -38,19 +44,25 @@
+ use App\Models\MessageTemplate;
+ use App\Models\FeeDue;
+ 
+-// ===== Payments / Webhooks domain models =====
++// ============================================================================
++// Payments / Webhooks domain models
++// ============================================================================
+ use App\Models\FeeCollectionMaster;
+ use App\Models\FeeCollectionPaymentMode;
+ use App\Models\FeePartialPaymentDue;
+ use App\Models\OnlinePaymentTransaction;
+-// ===== Reporting domain models =====
++// ============================================================================
++// Reporting domain models
++// ============================================================================
+ use App\Models\DailyBulletinNews;
+ use App\Models\DailyBulletinNewsDetail;
+ use App\Models\FeePayByLink;
+ use App\Models\FeePayByLinkDetail;
+ use App\Models\StudentSubscriptionPlan;
+ 
+-// ===== Shared services and integrations =====
++// ============================================================================
++// Shared services and integrations
++// ============================================================================
+ use App\Services\FirebaseService;
+ use App\Services\FileService;
+ use Razorpay\Api\Api;
+@@ -63,6 +75,11 @@
+ 
+ class CronJobController extends Controller
+ {
++
++    // ========================================================================
++    // Cron actions are organized by domain: Fee, Broadcast / FCM, Student,
++    // Payments / Webhooks, and Reporting.
++    // ========================================================================
+ 
+    /**
+      * Create a new controller instance.
+@@ -3918,15 +3935,37 @@
+ 	 * Resolve the tenant database name consistently for cron queries.
+ 	 */
+ 	/**
++	 * Resolve the central database name consistently for cross-tenant queries.
++	 *
++	 * @return string
++	 */
++	private function centralDatabaseName()
++	{
++		return env('DB_DATABASE', '360degree');
++	}
++
++	/**
+ 	 * Return active institutes from the central database for tenant-scoped jobs.
+ 	 *
+ 	 * @return array
+ 	 */
+ 	private function activeInstitutes()
+ 	{
+-		$centralDatabase = env('DB_DATABASE', '360degree');
++		$centralDatabase = $this->centralDatabaseName();
+ 
+ 		return DB::select("select id, domain_name from {$centralDatabase}.institutes where entity_status = 'Active'");
++	}
++
++	/**
++	 * Build a qualified tenant table name for reusable tenant-scoped queries.
++	 *
++	 * @param string $databaseName
++	 * @param string $tableName
++	 * @return string
++	 */
++	private function tenantTableName($databaseName, $tableName)
++	{
++		return $databaseName . '.' . $tableName;
+ 	}
+ 
+ 	/**
+@@ -3938,7 +3977,7 @@
+ 	 */
+ 	private function expireTenantFiles($databaseName, $cutoffDate)
+ 	{
+-		return DB::table($databaseName . '.file_downloads')
++		return DB::table($this->tenantTableName($databaseName, 'file_downloads'))
+ 			->whereDate('generated_at', '<', $cutoffDate)
+ 			->where('is_expired', false)
+ 			->update([
+@@ -3952,7 +3991,7 @@
+ 	 */
+ 	private function tenantDatabaseName($domainName)
+ 	{
+-		return '360_' . $domainName;
++		return '360_' . trim($domainName);
+ 	}
+ 
+ }

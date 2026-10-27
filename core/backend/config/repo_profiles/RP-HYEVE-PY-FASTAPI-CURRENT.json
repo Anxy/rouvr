@@ -1,0 +1,58 @@
+{
+  "schema_version": "repo_profile.current",
+  "profile_id": "RP-HYEVE-PY-FASTAPI-CURRENT",
+  "version": 1,
+  "repo_patterns": [
+    "hyeve*",
+    "*aix*"
+  ],
+  "inherits_profile_id": "RP-BASE-PY-CURRENT",
+  "command_policy": {
+    "allow_prefixes": [
+      ["python"],
+      ["pytest"],
+      ["rg"],
+      ["uv"],
+      ["git"]
+    ],
+    "default_timeout_seconds": 45.0,
+    "max_timeout_seconds": 180.0
+  },
+  "default_commands": {
+    "test_command": ["pytest", "-q", "backend/tests"],
+    "lint_command": ["python", "-m", "ruff", "check", "backend"],
+    "typecheck_command": ["python", "-m", "mypy", "backend"]
+  },
+  "drift_guards": {
+    "max_files_changed": 30,
+    "max_diff_bytes": 750000,
+    "blocked_path_prefixes": [
+      ".git",
+      "secrets",
+      "infra/prod"
+    ]
+  },
+  "overlay_policy": {
+    "allowed_override_paths": [
+      "command_policy.allow_prefixes",
+      "command_policy.default_timeout_seconds",
+      "drift_guards.max_files_changed",
+      "drift_guards.max_diff_bytes",
+      "drift_guards.blocked_path_prefixes"
+    ]
+  },
+  "metadata": {
+    "language": "python",
+    "framework": "fastapi",
+    "owner": "aix",
+    "instruction_contract": {
+      "service_root": "hyeve-aix-service",
+      "package_root": "backend",
+      "test_root": "backend/tests",
+      "allowed_validation_commands": [
+        "python -m py_compile backend/tests/fixtures/meta_test_fixture.py",
+        "pytest -q backend/tests"
+      ]
+    }
+  }
+}

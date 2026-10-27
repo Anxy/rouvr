@@ -1,0 +1,376 @@
+{
+  "http_hints": {},
+  "messages": {},
+  "metadata": {
+    "context": {
+      "entity": "feature_flags",
+      "service": "feature_flags_service",
+      "version": "v1"
+    },
+    "schema_key": "edprime.feature_flags.current",
+    "style_layers": [
+      {
+        "id": "core/base",
+        "priority": 0
+      }
+    ],
+    "style_pack": {
+      "id": "core/feature_flags",
+      "layer": "base",
+      "tailwind": {
+        "theme": {
+          "colors": {
+            "accent": {
+              "500": "#f97316"
+            },
+            "primary": {
+              "500": "#2563eb",
+              "700": "#1d4ed8"
+            }
+          }
+        }
+      }
+    },
+    "table_name": "feature_flags",
+    "ui_metadata": {
+      "dataSources": [
+        {
+          "id": "default",
+          "schemaKey": "edprime.feature_flags.current",
+          "type": "pack"
+        },
+        {
+          "id": "auditTrail",
+          "path": "/api/feature-flags/audit",
+          "type": "rest"
+        }
+      ],
+      "entity": {
+        "icon": "Squares2X2",
+        "primaryKey": [
+          "id"
+        ],
+        "table": "feature_flags",
+        "title": "Feature Flags"
+      },
+      "navigation": {
+        "breadcrumbs": [
+          "home",
+          "feature-flags"
+        ],
+        "icon": "Squares2X2",
+        "primaryRoute": "/feature-flags"
+      },
+      "overrides": {
+        "hooks": [
+          "useFeatureFlagsFilters"
+        ],
+        "provider": "FeatureFlagsProvider"
+      },
+      "version": "1.0.0",
+      "views": [
+        {
+          "actions": [
+            {
+              "id": "create",
+              "intent": "primary",
+              "workflow": "feature_flags.create.current"
+            }
+          ],
+          "dataSource": "default",
+          "id": "feature_flags.list",
+          "label": "Feature Flags",
+          "layout": {
+            "columns": [
+              {
+                "component": "Field",
+                "field": "project_id",
+                "label": "Project Id",
+                "sortable": true,
+                "width": "1fr"
+              },
+              {
+                "component": "Field",
+                "field": "flag_key",
+                "label": "Flag Key",
+                "sortable": true,
+                "width": "1fr"
+              },
+              {
+                "component": "Field",
+                "field": "enabled",
+                "label": "Enabled",
+                "sortable": true,
+                "width": "1fr"
+              },
+              {
+                "component": "Field",
+                "field": "rules_json",
+                "label": "Rules Json",
+                "sortable": true,
+                "width": "1fr"
+              }
+            ],
+            "type": "table"
+          },
+          "navigation": {
+            "icon": "Squares2X2",
+            "label": "Feature Flags",
+            "primaryRoute": "/feature-flags"
+          },
+          "type": "list"
+        },
+        {
+          "actions": [
+            {
+              "id": "edit",
+              "route": "/feature-flags/{id}/edit",
+              "type": "link"
+            },
+            {
+              "id": "delete",
+              "intent": "danger",
+              "workflow": "feature_flags.delete.current"
+            }
+          ],
+          "dataSource": "default",
+          "id": "feature_flags.detail",
+          "layout": {
+            "regions": [
+              {
+                "id": "summary",
+                "widgets": [
+                  {
+                    "component": "Field",
+                    "field": "project_id",
+                    "label": "Project Id"
+                  },
+                  {
+                    "component": "Field",
+                    "field": "flag_key",
+                    "label": "Flag Key"
+                  },
+                  {
+                    "component": "Field",
+                    "field": "enabled",
+                    "label": "Enabled"
+                  }
+                ]
+              },
+              {
+                "id": "details",
+                "widgets": [
+                  {
+                    "component": "Field",
+                    "field": "rules_json",
+                    "label": "Rules Json"
+                  },
+                  {
+                    "component": "Field",
+                    "field": "custom_data",
+                    "label": "Custom Data"
+                  },
+                  {
+                    "component": "Field",
+                    "field": "deleted_at",
+                    "label": "Deleted At"
+                  }
+                ]
+              }
+            ],
+            "type": "split"
+          },
+          "type": "detail"
+        },
+        {
+          "actions": [
+            {
+              "id": "save",
+              "intent": "primary",
+              "type": "submit",
+              "workflow": "feature_flags.update.current"
+            },
+            {
+              "id": "cancel",
+              "route": "/feature-flags",
+              "type": "link"
+            }
+          ],
+          "dataSource": "default",
+          "id": "feature_flags.form",
+          "layout": {
+            "columns": 2,
+            "sections": [
+              {
+                "title": "Primary Information",
+                "widgets": [
+                  {
+                    "component": "Input",
+                    "field": "project_id",
+                    "label": "Project Id"
+                  },
+                  {
+                    "component": "Input",
+                    "field": "flag_key",
+                    "label": "Flag Key",
+                    "props": {
+                      "required": true
+                    }
+                  },
+                  {
+                    "component": "Checkbox",
+                    "field": "enabled",
+                    "label": "Enabled",
+                    "props": {
+                      "required": true
+                    }
+                  }
+                ]
+              },
+              {
+                "title": "Additional Details",
+                "widgets": [
+                  {
+                    "component": "Input",
+                    "field": "rules_json",
+                    "label": "Rules Json"
+                  },
+                  {
+                    "component": "Input",
+                    "field": "custom_data",
+                    "label": "Custom Data"
+                  },
+                  {
+                    "component": "DateTimePicker",
+                    "field": "deleted_at",
+                    "label": "Deleted At",
+                    "props": {
+                      "type": "datetime-local"
+                    }
+                  }
+                ]
+              }
+            ],
+            "type": "grid"
+          },
+          "type": "form"
+        }
+      ],
+      "workflows": [
+        {
+          "failure": {
+            "toast": "Failed to create feature flags"
+          },
+          "id": "feature_flags.create.current",
+          "method": "POST",
+          "path": "/api/feature-flags",
+          "success": {
+            "toast": "Feature Flags created"
+          },
+          "type": "api"
+        },
+        {
+          "id": "feature_flags.update.current",
+          "method": "PUT",
+          "path": "/api/feature-flags/{id}",
+          "success": {
+            "toast": "Feature Flags updated"
+          },
+          "type": "api"
+        },
+        {
+          "id": "feature_flags.delete.current",
+          "method": "DELETE",
+          "path": "/api/feature-flags/{id}",
+          "success": {
+            "toast": "Feature Flags deleted"
+          },
+          "type": "api"
+        }
+      ]
+    }
+  },
+  "schema": {
+    "additionalProperties": false,
+    "properties": {
+      "custom_data": {
+        "title": "Custom Data",
+        "type": [
+          "object",
+          "null"
+        ]
+      },
+      "deleted_at": {
+        "format": "date-time",
+        "title": "Deleted At",
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "enabled": {
+        "title": "Enabled",
+        "type": "boolean"
+      },
+      "flag_key": {
+        "title": "Flag Key",
+        "type": "string"
+      },
+      "project_id": {
+        "title": "Project Id",
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "rules_json": {
+        "title": "Rules Json",
+        "type": [
+          "object",
+          "null"
+        ]
+      }
+    },
+    "type": "object"
+  },
+  "validation_rules": {
+    "_shared": {
+      "deleted_at": {
+        "customMessages": {
+          "format": "Enter a valid deleted at."
+        },
+        "format": "date-time",
+        "message_keys": {
+          "format": "feature_flags.deleted_at.format_date_time"
+        }
+      },
+      "flag_key": {
+        "customMessages": {
+          "minLength": "Flag Key must be at least 1 characters.",
+          "required": "Flag Key is required."
+        },
+        "message_keys": {
+          "minLength": "feature_flags.flag_key.min_length",
+          "required": "feature_flags.flag_key.required"
+        },
+        "minLength": 1,
+        "required": true
+      }
+    },
+    "create": {
+      "required_fields": [
+        "flag_key",
+        "enabled"
+      ]
+    },
+    "update": {
+      "required_fields": []
+    }
+  },
+  "version": "v1",
+  "workflows": {
+    "create": "feature_flags.create.current",
+    "delete": "feature_flags.delete.current",
+    "update": "feature_flags.update.current"
+  }
+}

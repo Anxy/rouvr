@@ -1,0 +1,367 @@
+# AIX autonomous lane changes must run through scripts/run_aix_lane_gauntlet.sh before deploy.
+schema_version: aix.model_routing_config.v2
+config_id: aix-model-routing-pools
+version: 2
+
+roles:
+  planner:
+    default_persona: structured_logician
+  coder:
+    default_persona: mutation_artisan
+  verifier:
+    default_persona: surgical_auditor
+  observer:
+    default_persona: high_speed_scout
+  consultant:
+    default_persona: domain_consultant
+
+personas:
+  structured_logician:
+    purpose: planner
+    selection_mode: ordered_fallback
+    retry_budget:
+      semantic_validation_failure: 1
+      anchor_validation: 2
+      mutation_missing: 1
+    candidates:
+      - provider: openrouter
+        model: openai/gpt-5.1-codex
+        priority: 100
+        supports_json_object: true
+        cost_tier: premium
+        timeout_seconds: 180
+        max_retries: 1
+        retry_backoff_ms: 500
+        circuit_breaker_window_seconds: 1800
+        circuit_breaker_failure_threshold: 2
+        tags: [planner, primary, codex, stable_baseline]
+      - provider: openrouter
+        model: deepseek/deepseek-v3.2
+        priority: 80
+        supports_json_object: true
+        cost_tier: balanced
+        timeout_seconds: 180
+        max_retries: 1
+        retry_backoff_ms: 500
+        circuit_breaker_window_seconds: 1800
+        circuit_breaker_failure_threshold: 2
+        tags: [planner, primary, reasoning, cost_effective]
+      - provider: openrouter
+        model: mistralai/codestral-2508
+        priority: 80
+        supports_json_object: true
+        cost_tier: premium
+        timeout_seconds: 60
+        max_retries: 1
+        retry_backoff_ms: 500
+        circuit_breaker_window_seconds: 1800
+        circuit_breaker_failure_threshold: 2
+        tags: [planner, fallback, structured_output, protocol]
+  mutation_artisan:
+    purpose: coder
+    selection_mode: ordered_fallback
+    retry_budget:
+      semantic_validation_failure: 1
+      anchor_validation: 2
+      mutation_missing: 1
+    candidates:
+      - provider: openrouter
+        model: openai/gpt-5.1-codex
+        priority: 100
+        supports_json_object: true
+        cost_tier: premium
+        timeout_seconds: 180
+        max_retries: 1
+        retry_backoff_ms: 250
+        circuit_breaker_window_seconds: 1800
+        circuit_breaker_failure_threshold: 2
+        tags: [coder, primary, codex, stable_baseline]
+      - provider: openrouter
+        model: deepseek/deepseek-v3.2
+        priority: 80
+        supports_json_object: true
+        cost_tier: balanced
+        timeout_seconds: 180
+        max_retries: 1
+        retry_backoff_ms: 250
+        circuit_breaker_window_seconds: 1800
+        circuit_breaker_failure_threshold: 2
+        tags: [coder, primary, implementation, repair]
+      - provider: openrouter
+        model: mistralai/codestral-2508
+        priority: 60
+        supports_json_object: true
+        cost_tier: premium
+        timeout_seconds: 180
+        max_retries: 1
+        retry_backoff_ms: 250
+        circuit_breaker_window_seconds: 1800
+        circuit_breaker_failure_threshold: 2
+        tags: [coder, fallback, complex]
+
+  mutation_repair_artisan:
+    purpose: coder
+    selection_mode: ordered_fallback
+    retry_budget:
+      semantic_validation_failure: 1
+      anchor_validation: 2
+      mutation_missing: 1
+    candidates:
+      - provider: openrouter
+        model: openai/gpt-5.1-codex
+        priority: 100
+        supports_json_object: true
+        cost_tier: premium
+        timeout_seconds: 180
+        max_retries: 1
+        retry_backoff_ms: 250
+        circuit_breaker_window_seconds: 1800
+        circuit_breaker_failure_threshold: 2
+        tags: [coder, repair, primary, codex, stable_baseline]
+      - provider: openrouter
+        model: deepseek/deepseek-v3.2
+        priority: 80
+        supports_json_object: true
+        cost_tier: balanced
+        timeout_seconds: 180
+        max_retries: 1
+        retry_backoff_ms: 250
+        circuit_breaker_window_seconds: 1800
+        circuit_breaker_failure_threshold: 2
+        tags: [coder, repair, primary]
+      - provider: openrouter
+        model: mistralai/codestral-2508
+        priority: 60
+        supports_json_object: true
+        cost_tier: premium
+        timeout_seconds: 180
+        max_retries: 1
+        retry_backoff_ms: 250
+        circuit_breaker_window_seconds: 1800
+        circuit_breaker_failure_threshold: 2
+        tags: [coder, repair, fallback, complex]
+
+  cli_mutation_artisan:
+    purpose: coder
+    selection_mode: ordered_fallback
+    retry_budget:
+      semantic_validation_failure: 0
+      anchor_validation: 0
+      mutation_missing: 0
+    candidates:
+      - provider: openrouter
+        model: openai/gpt-5.1-codex
+        priority: 100
+        supports_json_object: false
+        cost_tier: premium
+        timeout_seconds: 1800
+        max_retries: 0
+        circuit_breaker_window_seconds: 1800
+        circuit_breaker_failure_threshold: 2
+        tags: [coder, cli_executor, codex, mutation, primary, stable_baseline]
+      - provider: openrouter
+        model: openai/gpt-5.3-codex
+        priority: 90
+        supports_json_object: false
+        cost_tier: premium
+        timeout_seconds: 1800
+        max_retries: 0
+        circuit_breaker_window_seconds: 1800
+        circuit_breaker_failure_threshold: 2
+        tags: [coder, cli_executor, codex, mutation, escalation_fallback]
+      - provider: openrouter
+        model: openai/gpt-5.1-codex-mini
+        priority: 70
+        supports_json_object: false
+        cost_tier: balanced
+        timeout_seconds: 1800
+        max_retries: 0
+        circuit_breaker_window_seconds: 1800
+        circuit_breaker_failure_threshold: 2
+        tags: [coder, cli_executor, codex, mutation, bakeoff_candidate, cost_probe]
+
+  surgical_auditor:
+    purpose: verifier
+    selection_mode: ordered_fallback
+    candidates:
+      - provider: openrouter
+        model: openai/gpt-5.1-codex
+        priority: 100
+        supports_json_object: true
+        cost_tier: premium
+        timeout_seconds: 180
+        max_retries: 0
+        tags: [verifier, primary, codex, stable_baseline]
+      - provider: openrouter
+        model: deepseek/deepseek-v3.2-speciale
+        priority: 80
+        cost_tier: premium
+        timeout_seconds: 180
+        max_retries: 0
+        tags: [verifier, semantic_correctness]
+      - provider: openrouter
+        model: deepseek/deepseek-v3.2
+        priority: 60
+        cost_tier: balanced
+        timeout_seconds: 180
+        max_retries: 0
+        tags: [verifier, fallback, semantic_correctness]
+
+  high_speed_scout:
+    purpose: observer
+    selection_mode: ordered_fallback
+    candidates:
+      - provider: openrouter
+        model: openai/gpt-5.1-codex
+        priority: 100
+        supports_json_object: true
+        cost_tier: premium
+        timeout_seconds: 180
+        max_retries: 0
+        tags: [observer, primary, codex, stable_baseline]
+      - provider: openrouter
+        model: nvidia/nemotron-3-super-120b-a12b
+        priority: 80
+        cost_tier: balanced
+        timeout_seconds: 180
+        max_retries: 0
+        tags: [observer, budget, trace]
+
+  domain_consultant:
+    purpose: consultant
+    selection_mode: ordered_fallback
+    candidates:
+      - provider: openrouter
+        model: openai/gpt-5.1-codex
+        priority: 100
+        supports_json_object: true
+        cost_tier: premium
+        timeout_seconds: 180
+        max_retries: 0
+        tags: [consultant, primary, codex, stable_baseline]
+      - provider: openrouter
+        model: google/gemini-3-flash-preview
+        priority: 80
+        cost_tier: premium
+        timeout_seconds: 180
+        max_retries: 0
+        tags: [consultant, advisory]
+
+  grounded_protocol_planner:
+    purpose: planner
+    selection_mode: ordered_fallback
+    retry_budget:
+      semantic_validation_failure: 1
+      anchor_validation: 2
+      mutation_missing: 1
+    candidates:
+      - provider: openrouter
+        model: openai/gpt-5.1-codex
+        priority: 100
+        supports_json_object: true
+        cost_tier: premium
+        timeout_seconds: 180
+        max_retries: 1
+        circuit_breaker_window_seconds: 1800
+        circuit_breaker_failure_threshold: 2
+        tags: [planner, grounded, protocol_extension, primary, codex, stable_baseline]
+      - provider: openrouter
+        model: mistralai/codestral-2508
+        priority: 60
+        supports_json_object: true
+        cost_tier: premium
+        timeout_seconds: 60
+        max_retries: 1
+        circuit_breaker_window_seconds: 1800
+        circuit_breaker_failure_threshold: 2
+        tags: [planner, grounded, protocol_extension, primary, reasoning]
+      - provider: openrouter
+        model: deepseek/deepseek-v3.2
+        priority: 60
+        supports_json_object: true
+        cost_tier: balanced
+        timeout_seconds: 180
+        max_retries: 1
+        circuit_breaker_window_seconds: 1800
+        circuit_breaker_failure_threshold: 2
+        tags: [planner, grounded, protocol_extension, fallback, structured_output]
+routing:
+  planning:
+    role: planner
+    default_persona: structured_logician
+    conditions:
+      - when:
+          oversized: true
+        persona: structured_logician
+      - when:
+          complexity: high
+        persona: structured_logician
+  planning_safe:
+    role: planner
+    default_persona: structured_logician
+    conditions:
+      - when:
+          mutation_kind: bounded_method_protocol_extension
+          oversized: true
+        persona: structured_logician
+      - when:
+          mutation_kind: bounded_method_protocol_extension
+        persona: grounded_protocol_planner
+  structured_logician:
+    role: planner
+    default_persona: structured_logician
+  mutation:
+    role: coder
+    default_persona: mutation_artisan
+  cli_mutation:
+    role: coder
+    default_persona: cli_mutation_artisan
+  mutation_repair:
+    role: coder
+    default_persona: mutation_repair_artisan
+  mutation_extraction:
+    role: coder
+    default_persona: mutation_artisan
+    conditions:
+      - when:
+          oversized: true
+        persona: structured_logician
+      - when:
+          complexity: high
+        persona: structured_logician
+      - when:
+          task_family: mutation_extraction
+          estimated_tokens_gte: 2000
+        persona: structured_logician
+  repair:
+    role: coder
+    default_persona: mutation_artisan
+  verification:
+    role: verifier
+    default_persona: surgical_auditor
+  diagnostic:
+    role: observer
+    default_persona: high_speed_scout
+  observation:
+    role: observer
+    default_persona: high_speed_scout
+
+policy:
+  yaml_only: true
+  allow_metadata_override: false
+  allow_instruction_override: false
+  allow_repo_profile_override: false
+  allow_builtin_fallbacks: false
+
+metadata:
+  operator_notes:
+    owner: aix-operators
+    precedence: yaml_config_only
+  bakeoff:
+    cli_mutation:
+      source_persona: cli_mutation_artisan
+      comparison_goal: quality_capability_price_balance
+      canonical_candidates:
+        - openrouter/openai/gpt-5.1-codex
+        - openrouter/openai/gpt-5.3-codex
+        - openrouter/openai/gpt-5.1-codex-mini

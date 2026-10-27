@@ -1,0 +1,450 @@
+{
+  "http_hints": {},
+  "messages": {},
+  "metadata": {
+    "context": {
+      "entity": "inbox",
+      "service": "inbox_service",
+      "version": "v1"
+    },
+    "schema_key": "edprime.inbox.current",
+    "style_layers": [
+      {
+        "id": "core/base",
+        "priority": 0
+      }
+    ],
+    "style_pack": {
+      "id": "core/inbox",
+      "layer": "base",
+      "tailwind": {
+        "theme": {
+          "colors": {
+            "accent": {
+              "500": "#f97316"
+            },
+            "primary": {
+              "500": "#2563eb",
+              "700": "#1d4ed8"
+            }
+          }
+        }
+      }
+    },
+    "table_name": "inbox",
+    "ui_metadata": {
+      "dataSources": [
+        {
+          "id": "default",
+          "schemaKey": "edprime.inbox.current",
+          "type": "pack"
+        },
+        {
+          "id": "auditTrail",
+          "path": "/api/inbox/audit",
+          "type": "rest"
+        }
+      ],
+      "entity": {
+        "icon": "Squares2X2",
+        "primaryKey": [
+          "id"
+        ],
+        "table": "inbox",
+        "title": "Inbox"
+      },
+      "navigation": {
+        "breadcrumbs": [
+          "home",
+          "inbox"
+        ],
+        "icon": "Squares2X2",
+        "primaryRoute": "/inbox"
+      },
+      "overrides": {
+        "hooks": [
+          "useInboxFilters"
+        ],
+        "provider": "InboxProvider"
+      },
+      "version": "1.0.0",
+      "views": [
+        {
+          "actions": [
+            {
+              "id": "create",
+              "intent": "primary",
+              "workflow": "inbox.create.current"
+            }
+          ],
+          "dataSource": "default",
+          "id": "inbox.list",
+          "label": "Inbox",
+          "layout": {
+            "columns": [
+              {
+                "component": "Field",
+                "field": "project_id",
+                "label": "Project Id",
+                "sortable": true,
+                "width": "1fr"
+              },
+              {
+                "component": "Field",
+                "field": "event_type",
+                "label": "Event Type",
+                "sortable": true,
+                "width": "1fr"
+              },
+              {
+                "component": "Field",
+                "field": "payload",
+                "label": "Payload",
+                "sortable": true,
+                "width": "1fr"
+              },
+              {
+                "component": "Field",
+                "field": "causation_id",
+                "label": "Causation Id",
+                "sortable": true,
+                "width": "1fr"
+              }
+            ],
+            "type": "table"
+          },
+          "navigation": {
+            "icon": "Squares2X2",
+            "label": "Inbox",
+            "primaryRoute": "/inbox"
+          },
+          "type": "list"
+        },
+        {
+          "actions": [
+            {
+              "id": "edit",
+              "route": "/inbox/{id}/edit",
+              "type": "link"
+            },
+            {
+              "id": "delete",
+              "intent": "danger",
+              "workflow": "inbox.delete.current"
+            }
+          ],
+          "dataSource": "default",
+          "id": "inbox.detail",
+          "layout": {
+            "regions": [
+              {
+                "id": "summary",
+                "widgets": [
+                  {
+                    "component": "Field",
+                    "field": "project_id",
+                    "label": "Project Id"
+                  },
+                  {
+                    "component": "Field",
+                    "field": "event_type",
+                    "label": "Event Type"
+                  },
+                  {
+                    "component": "Field",
+                    "field": "payload",
+                    "label": "Payload"
+                  }
+                ]
+              },
+              {
+                "id": "details",
+                "widgets": [
+                  {
+                    "component": "Field",
+                    "field": "causation_id",
+                    "label": "Causation Id"
+                  },
+                  {
+                    "component": "Field",
+                    "field": "processing_status",
+                    "label": "Processing Status"
+                  },
+                  {
+                    "component": "Field",
+                    "field": "error_message",
+                    "label": "Error Message"
+                  },
+                  {
+                    "component": "Field",
+                    "field": "processed_at",
+                    "label": "Processed At"
+                  },
+                  {
+                    "component": "Field",
+                    "field": "custom_data",
+                    "label": "Custom Data"
+                  },
+                  {
+                    "component": "Field",
+                    "field": "deleted_at",
+                    "label": "Deleted At"
+                  }
+                ]
+              }
+            ],
+            "type": "split"
+          },
+          "type": "detail"
+        },
+        {
+          "actions": [
+            {
+              "id": "save",
+              "intent": "primary",
+              "type": "submit",
+              "workflow": "inbox.update.current"
+            },
+            {
+              "id": "cancel",
+              "route": "/inbox",
+              "type": "link"
+            }
+          ],
+          "dataSource": "default",
+          "id": "inbox.form",
+          "layout": {
+            "columns": 2,
+            "sections": [
+              {
+                "title": "Primary Information",
+                "widgets": [
+                  {
+                    "component": "Input",
+                    "field": "project_id",
+                    "label": "Project Id"
+                  },
+                  {
+                    "component": "Input",
+                    "field": "event_type",
+                    "label": "Event Type",
+                    "props": {
+                      "required": true
+                    }
+                  },
+                  {
+                    "component": "Input",
+                    "field": "payload",
+                    "label": "Payload",
+                    "props": {
+                      "required": true
+                    }
+                  },
+                  {
+                    "component": "Input",
+                    "field": "causation_id",
+                    "label": "Causation Id"
+                  }
+                ]
+              },
+              {
+                "title": "Additional Details",
+                "widgets": [
+                  {
+                    "component": "Input",
+                    "field": "processing_status",
+                    "label": "Processing Status",
+                    "props": {
+                      "required": true
+                    }
+                  },
+                  {
+                    "component": "Input",
+                    "field": "error_message",
+                    "label": "Error Message"
+                  },
+                  {
+                    "component": "DateTimePicker",
+                    "field": "processed_at",
+                    "label": "Processed At",
+                    "props": {
+                      "type": "datetime-local"
+                    }
+                  },
+                  {
+                    "component": "Input",
+                    "field": "custom_data",
+                    "label": "Custom Data"
+                  },
+                  {
+                    "component": "DateTimePicker",
+                    "field": "deleted_at",
+                    "label": "Deleted At",
+                    "props": {
+                      "type": "datetime-local"
+                    }
+                  }
+                ]
+              }
+            ],
+            "type": "grid"
+          },
+          "type": "form"
+        }
+      ],
+      "workflows": [
+        {
+          "failure": {
+            "toast": "Failed to create inbox"
+          },
+          "id": "inbox.create.current",
+          "method": "POST",
+          "path": "/api/inbox",
+          "success": {
+            "toast": "Inbox created"
+          },
+          "type": "api"
+        },
+        {
+          "id": "inbox.update.current",
+          "method": "PUT",
+          "path": "/api/inbox/{id}",
+          "success": {
+            "toast": "Inbox updated"
+          },
+          "type": "api"
+        },
+        {
+          "id": "inbox.delete.current",
+          "method": "DELETE",
+          "path": "/api/inbox/{id}",
+          "success": {
+            "toast": "Inbox deleted"
+          },
+          "type": "api"
+        }
+      ]
+    }
+  },
+  "schema": {
+    "additionalProperties": false,
+    "properties": {
+      "causation_id": {
+        "title": "Causation Id",
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "custom_data": {
+        "title": "Custom Data",
+        "type": [
+          "object",
+          "null"
+        ]
+      },
+      "deleted_at": {
+        "format": "date-time",
+        "title": "Deleted At",
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "error_message": {
+        "title": "Error Message",
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "event_type": {
+        "title": "Event Type",
+        "type": "string"
+      },
+      "payload": {
+        "title": "Payload",
+        "type": "object"
+      },
+      "processed_at": {
+        "format": "date-time",
+        "title": "Processed At",
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "processing_status": {
+        "title": "Processing Status",
+        "type": "string"
+      },
+      "project_id": {
+        "title": "Project Id",
+        "type": [
+          "string",
+          "null"
+        ]
+      }
+    },
+    "type": "object"
+  },
+  "validation_rules": {
+    "_shared": {
+      "deleted_at": {
+        "customMessages": {
+          "format": "Enter a valid deleted at."
+        },
+        "format": "date-time",
+        "message_keys": {
+          "format": "inbox.deleted_at.format_date_time"
+        }
+      },
+      "event_type": {
+        "customMessages": {
+          "minLength": "Event Type must be at least 1 characters.",
+          "required": "Event Type is required."
+        },
+        "message_keys": {
+          "minLength": "inbox.event_type.min_length",
+          "required": "inbox.event_type.required"
+        },
+        "minLength": 1,
+        "required": true
+      },
+      "payload": {
+        "customMessages": {
+          "required": "Payload is required."
+        },
+        "message_keys": {
+          "required": "inbox.payload.required"
+        },
+        "required": true
+      },
+      "processed_at": {
+        "customMessages": {
+          "format": "Enter a valid processed at."
+        },
+        "format": "date-time",
+        "message_keys": {
+          "format": "inbox.processed_at.format_date_time"
+        }
+      }
+    },
+    "create": {
+      "required_fields": [
+        "event_type",
+        "payload",
+        "processing_status"
+      ]
+    },
+    "update": {
+      "required_fields": []
+    }
+  },
+  "version": "v1",
+  "workflows": {
+    "create": "inbox.create.current",
+    "delete": "inbox.delete.current",
+    "update": "inbox.update.current"
+  }
+}

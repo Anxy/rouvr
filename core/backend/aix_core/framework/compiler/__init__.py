@@ -1,0 +1,55 @@
+"""AIX Framework Work Compiler."""
+
+from backend.aix_core.framework.compiler.pipeline import CompilerPipeline
+from backend.aix_core.framework.compiler.runtime_bridge import (
+    CompilerCompileResult,
+    compile_from_work_and_plan,
+    compiler_enabled,
+    ensure_work_from_canonical,
+    multi_agent_enabled,
+)
+from backend.aix_core.framework.compiler.stages import (
+    AssignedWorkGraph,
+    AssignStage,
+    BindStage,
+    BoundPlan,
+    CompilerIntakeSnapshot,
+    CompilerVerificationError,
+    DefinedOutcome,
+    DefineStage,
+    GraphStage,
+    IntakeStage,
+    PlanStage,
+    ProductStructureDecomposition,
+    RawPlanSynthesis,
+    StructureStage,
+    UnitAssignment,
+    ValidateStage,
+    VerifiedPlan,
+)
+
+__all__ = [
+    "AssignedWorkGraph",
+    "AssignStage",
+    "BindStage",
+    "BoundPlan",
+    "CompilerCompileResult",
+    "CompilerIntakeSnapshot",
+    "CompilerPipeline",
+    "CompilerVerificationError",
+    "DefinedOutcome",
+    "DefineStage",
+    "GraphStage",
+    "IntakeStage",
+    "PlanStage",
+    "ProductStructureDecomposition",
+    "RawPlanSynthesis",
+    "StructureStage",
+    "UnitAssignment",
+    "ValidateStage",
+    "VerifiedPlan",
+    "compile_from_work_and_plan",
+    "compiler_enabled",
+    "ensure_work_from_canonical",
+    "multi_agent_enabled",
+]

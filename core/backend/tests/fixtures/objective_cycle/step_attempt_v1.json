@@ -1,0 +1,10 @@
+{
+  "version": "v1",
+  "step_id": "step-fixture-1",
+  "tenant_id": "tenant-fixture",
+  "attempt_number": 1,
+  "move_token": "move-token-fixture-1",
+  "executor_ref": "executor:aider",
+  "outcome": "SUCCEEDED",
+  "completed_at": "2026-07-29T00:00:00Z"
+}

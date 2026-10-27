@@ -1,0 +1,60 @@
+{
+  "schema_version": "hyeve.aix.collaboration_policy.current",
+  "purpose": "Define how governed roles collaborate on a workstream using the canonical model communication lane.",
+  "default_workstream_policy": {
+    "persistent_roles": [
+      "planner",
+      "coder"
+    ],
+    "independent_roles": [
+      "verifier"
+    ],
+    "optional_roles": [
+      "consultant",
+      "human_supervisor"
+    ]
+  },
+  "acceptance_loop": {
+    "sequence": [
+      "planner_proposes_slice",
+      "coder_evaluates_capacity",
+      "planner_revises_if_needed",
+      "verifier_or_human_only_after_execution_or_policy_gate"
+    ],
+    "max_unassisted_revision_rounds": 2,
+    "decomposition_required_action": "route_back_to_planner",
+    "false_green_forbidden": true
+  },
+  "consultant_escalation": {
+    "trigger_conditions": [
+      "planner_coder_disagreement_persists",
+      "scope_cannot_be_bounded_after_revision_rounds",
+      "specialist_diagnosis_required"
+    ],
+    "consultant_may": [
+      "propose_direction",
+      "diagnose_failure_class",
+      "recommend_scope_reduction"
+    ],
+    "consultant_may_not": [
+      "mutate_task_state_directly",
+      "bypass_verifier",
+      "override_human_policy"
+    ]
+  },
+  "human_in_loop": {
+    "required_for": [
+      "approval_gates",
+      "strategic_tradeoff_decisions",
+      "policy_exceptions",
+      "low_confidence_unresolved_escalations"
+    ],
+    "voice_entry_rule": "Human voice or chat input is normalized into structured communication messages before it can affect task state."
+  },
+  "sticky_ownership": {
+    "key": "workstream_id",
+    "planner": "sticky_by_workstream",
+    "coder": "sticky_by_workstream",
+    "verifier": "prefer_fresh_or_independent"
+  }
+}

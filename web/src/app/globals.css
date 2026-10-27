@@ -1,0 +1,343 @@
+@import "tailwindcss";
+
+@theme inline {
+  --font-sans: var(--font-ubuntu-sans), "Ubuntu Sans", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-geist-mono), ui-monospace, monospace;
+}
+
+@theme {
+  --color-brand: #08a9f0;
+  --color-brand-300: #6fd3ff;
+  --color-brand-600: #0687c2;
+  --color-navy: #071522;
+  --color-abyss: #040b13;
+  --color-steel: #24445e;
+  --color-steel-400: #3b6789;
+  --color-cloud: #f5f8fb;
+  --color-muted: #8ba3b8;
+  --color-success: #34d399;
+  --color-warning: #fbbf24;
+  --color-danger: #f87171;
+
+  --animate-shimmer: shimmer 6s linear infinite;
+  --animate-drift-a: drift-a 22s ease-in-out infinite;
+  --animate-drift-b: drift-b 28s ease-in-out infinite;
+  --animate-pulse-dot: pulse-dot 1.6s ease-in-out infinite;
+  --animate-marquee: marquee 40s linear infinite;
+  --animate-scan: scan 7s linear infinite;
+  --animate-spin-slow: rotate-full 8s linear infinite;
+  --animate-blink: blink 1s steps(2, start) infinite;
+  --animate-header-scan: header-scan 2.6s linear infinite;
+
+  @keyframes shimmer {
+    from { background-position: 0% 50%; }
+    to { background-position: 200% 50%; }
+  }
+  @keyframes drift-a {
+    0%, 100% { transform: translate3d(0, 0, 0) scale(1); }
+    50% { transform: translate3d(8%, 6%, 0) scale(1.08); }
+  }
+  @keyframes drift-b {
+    0%, 100% { transform: translate3d(0, 0, 0) scale(1); }
+    50% { transform: translate3d(-10%, -4%, 0) scale(0.94); }
+  }
+  @keyframes pulse-dot {
+    0%, 100% { opacity: 1; transform: scale(1); }
+    50% { opacity: 0.35; transform: scale(0.8); }
+  }
+  @keyframes marquee {
+    from { transform: translate3d(0, 0, 0); }
+    to { transform: translate3d(-50%, 0, 0); }
+  }
+  @keyframes scan {
+    from { transform: translate3d(0, -100%, 0); }
+    to { transform: translate3d(0, 100vh, 0); }
+  }
+  @keyframes rotate-full {
+    to { transform: rotate(360deg); }
+  }
+  @keyframes blink {
+    to { visibility: hidden; }
+  }
+  @keyframes header-scan {
+    from { transform: translateX(-120%); }
+    to { transform: translateX(480%); }
+  }
+}
+
+:root {
+  color-scheme: dark;
+  --header-bar: #040b13;
+  --header-sheen: #ffffff;
+  --header-line: #ffffff;
+  --glass-bg: linear-gradient(180deg, rgb(13 33 51 / 0.72), rgb(7 21 34 / 0.6));
+  --glass-border: rgb(59 103 137 / 0.35);
+  --grid-line: rgb(36 68 94 / 0.35);
+  --dot-line: rgb(59 103 137 / 0.55);
+  --grad-a: #ffffff;
+  --grad-b: #9fe2ff;
+  --selection-fg: #fff;
+}
+
+/* Same surfaces and type, with light values. Dark mode keeps the tokens above. */
+html.light {
+  color-scheme: light;
+  --color-abyss: #f3f6fa;
+  --color-navy: #ffffff;
+  --color-cloud: #1a3146;
+  --color-muted: #4a6275;
+  --color-steel: #a9bfd2;
+  --color-steel-400: #6d879c;
+  --color-white: #102033;
+  --color-success: #047857;
+  --color-warning: #b45309;
+  --color-danger: #b91c1c;
+  --header-bar: #ffffff;
+  --header-sheen: #102033;
+  --header-line: #102033;
+  --glass-bg: linear-gradient(180deg, rgb(255 255 255 / 0.9), rgb(255 255 255 / 0.74));
+  --glass-border: rgb(16 32 51 / 0.12);
+  --grid-line: rgb(36 68 94 / 0.14);
+  --dot-line: rgb(36 68 94 / 0.28);
+  --grad-a: #071522;
+  --grad-b: #046687;
+  --selection-fg: #071522;
+}
+
+/* Text that sits on the brand fill stays dark in both themes. */
+html.light .text-abyss {
+  color: #040b13;
+}
+
+/* Light cyan accents are for dark surfaces. On a light page they shift deeper. */
+html.light .text-brand-300 {
+  color: #046687;
+}
+
+/* Translucent dark panels become solid light surfaces. */
+html.light .bg-navy\/50,
+html.light .bg-navy\/60,
+html.light .bg-navy\/70,
+html.light .bg-navy\/80,
+html.light .bg-navy\/90 {
+  background-color: #ffffff;
+}
+
+html.light .bg-abyss\/40,
+html.light .bg-abyss\/60,
+html.light .bg-abyss\/70,
+html.light .bg-abyss\/80,
+html.light .bg-abyss\/90 {
+  background-color: #e8eef5;
+}
+
+html.light .bg-\[\#0D2133\] {
+  background-color: #e7eef5;
+}
+
+.theme-icon-moon {
+  display: none;
+}
+
+html.light .theme-icon-sun {
+  display: none;
+}
+
+html.light .theme-icon-moon {
+  display: block;
+}
+
+html {
+  background: var(--color-abyss);
+}
+
+html.lenis,
+html.lenis body {
+  height: auto;
+}
+.lenis.lenis-smooth {
+  scroll-behavior: auto !important;
+}
+.lenis.lenis-stopped {
+  overflow: hidden;
+}
+
+body {
+  background: var(--color-abyss);
+  color: var(--color-cloud);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+::selection {
+  background: rgb(8 169 240 / 0.35);
+  color: var(--selection-fg);
+}
+
+:focus-visible {
+  outline: 2px solid var(--color-brand);
+  outline-offset: 3px;
+  border-radius: 6px;
+}
+
+@utility text-gradient {
+  background-image: linear-gradient(
+    100deg,
+    var(--grad-a) 0%,
+    var(--grad-b) 25%,
+    #08a9f0 50%,
+    var(--grad-b) 75%,
+    var(--grad-a) 100%
+  );
+  background-size: 200% auto;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+@utility glass {
+  background: var(--glass-bg);
+  border: 1px solid var(--glass-border);
+}
+
+@utility grid-bg {
+  background-image:
+    linear-gradient(to right, var(--grid-line) 1px, transparent 1px),
+    linear-gradient(to bottom, var(--grid-line) 1px, transparent 1px);
+  background-size: 56px 56px;
+}
+
+@utility dot-bg {
+  background-image: radial-gradient(var(--dot-line) 1px, transparent 1px);
+  background-size: 22px 22px;
+}
+
+@utility mask-radial {
+  mask-image: radial-gradient(ellipse at center, #000 20%, transparent 72%);
+}
+
+@utility mask-fade-x {
+  mask-image: linear-gradient(to right, transparent, #000 12%, #000 88%, transparent);
+}
+
+@utility no-scrollbar {
+  scrollbar-width: none;
+  &::-webkit-scrollbar {
+    display: none;
+  }
+}
+
+/* Glowing gradient border driven by --glow-angle (no layout properties animated). */
+@utility glow-border {
+  position: relative;
+  isolation: isolate;
+  &::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    padding: 1px;
+    border-radius: inherit;
+    background: linear-gradient(
+      140deg,
+      rgb(8 169 240 / 0.7),
+      rgb(36 68 94 / 0.35) 35%,
+      rgb(36 68 94 / 0.2) 65%,
+      rgb(8 169 240 / 0.5)
+    );
+    -webkit-mask:
+      linear-gradient(#000 0 0) content-box,
+      linear-gradient(#000 0 0);
+    -webkit-mask-composite: xor;
+    mask-composite: exclude;
+    pointer-events: none;
+    z-index: -1;
+  }
+}
+
+/* Cursor spotlight: --mx/--my set via rAF in SpotlightCard. */
+@utility spotlight {
+  position: relative;
+  &::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    background: radial-gradient(
+      420px circle at var(--mx, 50%) var(--my, -20%),
+      rgb(8 169 240 / 0.14),
+      transparent 45%
+    );
+    opacity: var(--spot, 0);
+    transition: opacity 300ms ease;
+    pointer-events: none;
+  }
+}
+
+/* Mascot micro-animations (transform/opacity only). */
+.mascot .mascot-ear-l,
+.mascot .mascot-ear-r,
+.mascot .mascot-blink,
+.mascot .mascot-look,
+.mascot .mascot-visor,
+.mascot .mascot-badge {
+  transform-box: fill-box;
+  transform-origin: center;
+}
+.mascot .mascot-ear-l { transform-origin: 80% 100%; animation: ear-l 5s ease-in-out infinite; }
+.mascot .mascot-ear-r { transform-origin: 20% 100%; animation: ear-r 5s ease-in-out infinite 0.4s; }
+.mascot .mascot-blink { animation: mascot-blink 4.5s infinite; }
+.mascot .mascot-look { animation: mascot-look 2.4s ease-in-out infinite; }
+.mascot .mascot-visor { animation: mascot-visor 1.4s ease-in-out infinite alternate; }
+.mascot .mascot-badge { animation: pulse-dot 1.6s ease-in-out infinite; }
+.mascot[data-state="done"] .mascot-badge { animation: none; }
+
+@keyframes ear-l {
+  0%, 85%, 100% { transform: rotate(0deg); }
+  90% { transform: rotate(-8deg); }
+  95% { transform: rotate(3deg); }
+}
+@keyframes ear-r {
+  0%, 85%, 100% { transform: rotate(0deg); }
+  90% { transform: rotate(8deg); }
+  95% { transform: rotate(-3deg); }
+}
+@keyframes mascot-blink {
+  0%, 94%, 100% { transform: scaleY(1); }
+  97% { transform: scaleY(0.1); }
+}
+@keyframes mascot-look {
+  0%, 100% { transform: translateX(-3px); }
+  50% { transform: translateX(3px); }
+}
+@keyframes mascot-visor {
+  from { transform: translateX(0); }
+  to { transform: translateX(32px); }
+}
+
+.pause-offscreen[data-paused],
+.pause-offscreen[data-paused] * {
+  animation-play-state: paused !important;
+}
+
+/* A short bright segment traveling from each facet into the shared record. */
+@keyframes string-light {
+  from { stroke-dashoffset: 88; }
+  to { stroke-dashoffset: -12; }
+}
+
+.string-light {
+  stroke-dasharray: 12 88;
+  animation: string-light 2.2s linear infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

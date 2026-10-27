@@ -1,0 +1,21 @@
+# AIX orchestration stack (pinned for deterministic local/dev parity)
+# AIX-CH-001: required to collect tests/runtime/objective_cycle (libcst).
+# Full collect setup: pip install -r requirements.objective-cycle.txt
+redis==5.0.8
+temporalio==1.23.0
+langgraph==0.3.34
+haystack-ai==2.25.1
+tiktoken==0.9.0
+tree-sitter==0.25.2
+tree-sitter-python==0.25.0
+libcst==1.8.6
+ruff==0.13.2
+mypy==1.8.0
+pytest==9.1.1
+pytest-asyncio==1.4.0
+# AIX-ASYNC-01 closure: undeclared transitive imports of the async test
+# modules (proven in isolated uv env; pins match working .venv).
+asyncpg==0.31.0
+pydantic-settings==2.15.0
+sqlalchemy==2.0.52
+python-ulid==4.0.1

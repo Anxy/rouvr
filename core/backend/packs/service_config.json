@@ -1,0 +1,357 @@
+{
+  "context": {
+    "entity": "service_config",
+    "service": "service_config_service",
+    "version": "v1"
+  },
+  "json_schema": {
+    "additionalProperties": false,
+    "properties": {
+      "config_key": {
+        "title": "Config Key",
+        "type": "string"
+      },
+      "config_value": {
+        "title": "Config Value",
+        "type": "object"
+      },
+      "custom_data": {
+        "title": "Custom Data",
+        "type": [
+          "object",
+          "null"
+        ]
+      },
+      "deleted_at": {
+        "format": "date-time",
+        "title": "Deleted At",
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "project_id": {
+        "title": "Project Id",
+        "type": [
+          "string",
+          "null"
+        ]
+      }
+    },
+    "required": [
+      "config_key",
+      "config_value"
+    ],
+    "type": "object"
+  },
+  "pii_fields": [],
+  "schema_key": "edprime.service_config.current",
+  "style_layers": [
+    {
+      "id": "core/base",
+      "priority": 0
+    }
+  ],
+  "style_pack": {
+    "id": "core/service_config",
+    "layer": "base",
+    "tailwind": {
+      "theme": {
+        "colors": {
+          "accent": {
+            "500": "#f97316"
+          },
+          "primary": {
+            "500": "#2563eb",
+            "700": "#1d4ed8"
+          }
+        }
+      }
+    }
+  },
+  "table_name": "service_config",
+  "ui_metadata": {
+    "dataSources": [
+      {
+        "id": "default",
+        "schemaKey": "edprime.service_config.current",
+        "type": "pack"
+      },
+      {
+        "id": "auditTrail",
+        "path": "/api/service-config/audit",
+        "type": "rest"
+      }
+    ],
+    "entity": {
+      "icon": "Squares2X2",
+      "primaryKey": [
+        "id"
+      ],
+      "table": "service_config",
+      "title": "Service Config"
+    },
+    "navigation": {
+      "breadcrumbs": [
+        "home",
+        "service-config"
+      ],
+      "icon": "Squares2X2",
+      "primaryRoute": "/service-config"
+    },
+    "overrides": {
+      "hooks": [
+        "useServiceConfigFilters"
+      ],
+      "provider": "ServiceConfigProvider"
+    },
+    "version": "1.0.0",
+    "views": [
+      {
+        "actions": [
+          {
+            "id": "create",
+            "intent": "primary",
+            "workflow": "service_config.create.current"
+          }
+        ],
+        "dataSource": "default",
+        "id": "service_config.list",
+        "label": "Service Config",
+        "layout": {
+          "columns": [
+            {
+              "component": "Field",
+              "field": "project_id",
+              "label": "Project Id",
+              "sortable": true,
+              "width": "1fr"
+            },
+            {
+              "component": "Field",
+              "field": "config_key",
+              "label": "Config Key",
+              "sortable": true,
+              "width": "1fr"
+            },
+            {
+              "component": "Field",
+              "field": "config_value",
+              "label": "Config Value",
+              "sortable": true,
+              "width": "1fr"
+            },
+            {
+              "component": "Field",
+              "field": "custom_data",
+              "label": "Custom Data",
+              "sortable": true,
+              "width": "1fr"
+            }
+          ],
+          "type": "table"
+        },
+        "navigation": {
+          "icon": "Squares2X2",
+          "label": "Service Config",
+          "primaryRoute": "/service-config"
+        },
+        "type": "list"
+      },
+      {
+        "actions": [
+          {
+            "id": "edit",
+            "route": "/service-config/{id}/edit",
+            "type": "link"
+          },
+          {
+            "id": "delete",
+            "intent": "danger",
+            "workflow": "service_config.delete.current"
+          }
+        ],
+        "dataSource": "default",
+        "id": "service_config.detail",
+        "layout": {
+          "regions": [
+            {
+              "id": "summary",
+              "widgets": [
+                {
+                  "component": "Field",
+                  "field": "project_id",
+                  "label": "Project Id"
+                },
+                {
+                  "component": "Field",
+                  "field": "config_key",
+                  "label": "Config Key"
+                },
+                {
+                  "component": "Field",
+                  "field": "config_value",
+                  "label": "Config Value"
+                }
+              ]
+            },
+            {
+              "id": "details",
+              "widgets": [
+                {
+                  "component": "Field",
+                  "field": "custom_data",
+                  "label": "Custom Data"
+                },
+                {
+                  "component": "Field",
+                  "field": "deleted_at",
+                  "label": "Deleted At"
+                }
+              ]
+            }
+          ],
+          "type": "split"
+        },
+        "type": "detail"
+      },
+      {
+        "actions": [
+          {
+            "id": "save",
+            "intent": "primary",
+            "type": "submit",
+            "workflow": "service_config.update.current"
+          },
+          {
+            "id": "cancel",
+            "route": "/service-config",
+            "type": "link"
+          }
+        ],
+        "dataSource": "default",
+        "id": "service_config.form",
+        "layout": {
+          "columns": 2,
+          "sections": [
+            {
+              "title": "Primary Information",
+              "widgets": [
+                {
+                  "component": "Input",
+                  "field": "project_id",
+                  "label": "Project Id"
+                },
+                {
+                  "component": "Input",
+                  "field": "config_key",
+                  "label": "Config Key",
+                  "props": {
+                    "required": true
+                  }
+                }
+              ]
+            },
+            {
+              "title": "Additional Details",
+              "widgets": [
+                {
+                  "component": "Input",
+                  "field": "config_value",
+                  "label": "Config Value",
+                  "props": {
+                    "required": true
+                  }
+                },
+                {
+                  "component": "Input",
+                  "field": "custom_data",
+                  "label": "Custom Data"
+                },
+                {
+                  "component": "DateTimePicker",
+                  "field": "deleted_at",
+                  "label": "Deleted At",
+                  "props": {
+                    "type": "datetime-local"
+                  }
+                }
+              ]
+            }
+          ],
+          "type": "grid"
+        },
+        "type": "form"
+      }
+    ],
+    "workflows": [
+      {
+        "failure": {
+          "toast": "Failed to create service config"
+        },
+        "id": "service_config.create.current",
+        "method": "POST",
+        "path": "/api/service-config",
+        "success": {
+          "toast": "Service Config created"
+        },
+        "type": "api"
+      },
+      {
+        "id": "service_config.update.current",
+        "method": "PUT",
+        "path": "/api/service-config/{id}",
+        "success": {
+          "toast": "Service Config updated"
+        },
+        "type": "api"
+      },
+      {
+        "id": "service_config.delete.current",
+        "method": "DELETE",
+        "path": "/api/service-config/{id}",
+        "success": {
+          "toast": "Service Config deleted"
+        },
+        "type": "api"
+      }
+    ]
+  },
+  "validation_rules": {
+    "config_key": {
+      "customMessages": {
+        "minLength": "Config Key must be at least 1 characters.",
+        "required": "Config Key is required."
+      },
+      "message_keys": {
+        "minLength": "service_config.config_key.min_length",
+        "required": "service_config.config_key.required"
+      },
+      "minLength": 1,
+      "required": true
+    },
+    "config_value": {
+      "customMessages": {
+        "required": "Config Value is required."
+      },
+      "message_keys": {
+        "required": "service_config.config_value.required"
+      },
+      "required": true
+    },
+    "deleted_at": {
+      "customMessages": {
+        "format": "Enter a valid deleted at."
+      },
+      "format": "date-time",
+      "message_keys": {
+        "format": "service_config.deleted_at.format_date_time"
+      }
+    }
+  },
+  "workflows": {
+    "create": "service_config.create.current",
+    "delete": "service_config.delete.current",
+    "update": "service_config.update.current"
+  }
+}

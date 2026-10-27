@@ -1,0 +1,8 @@
+{
+  "event_type": "created",
+  "event_data_json": {
+    "source": "aix-sdk-example",
+    "note": "packet submitted"
+  },
+  "actor_id": "system"
+}

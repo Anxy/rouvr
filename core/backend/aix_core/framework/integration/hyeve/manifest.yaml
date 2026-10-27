@@ -1,0 +1,30 @@
+# AIX Framework - Hyeve Fleet Capability Manifest
+# Sprint: F9 Hyeve Capability Layer (F9-P1)
+
+version: "1.0"
+capabilities:
+  llm.chat_completion:
+    service_name: "hyeve-integration-service"
+    endpoint: "/api/v1/chat/completions"
+    auth_type: "bearer"
+    description: "Governed multi-model LLM chat completion gateway."
+  codeintel.query:
+    service_name: "hyeve-codeintel-service"
+    endpoint: "/api/v1/query"
+    auth_type: "bearer"
+    description: "Codebase semantic and structural symbol indexing and search."
+  opsbus.telemetry:
+    service_name: "hyeve-opsbus-service"
+    endpoint: "/api/v1/runs/{run_id}/logs"
+    auth_type: "bearer"
+    description: "Distributed execution logging and telemetry bus."
+  auth.token_validation:
+    service_name: "hyeve-auth-service"
+    endpoint: "/api/v1/tokens/validate"
+    auth_type: "service_token"
+    description: "Central authentication and JWT token validation."
+  workhub.task_context:
+    service_name: "hyeve-workhub-service"
+    endpoint: "/api/v1/projects/{project_id}/tasks"
+    auth_type: "bearer"
+    description: "System of Record for work item lifecycle and briefing."

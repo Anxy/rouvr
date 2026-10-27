@@ -1,0 +1,238 @@
+{
+  "outcome_contract_ui": {
+    "operations": [
+      "register_student",
+      "view_attendance",
+      "submit_attendance"
+    ],
+    "views": [
+      "student_registration",
+      "attendance_view",
+      "attendance_submission"
+    ]
+  },
+  "code_path": {
+    "propose_step_contract_params": [
+      "objective",
+      "definition_of_done",
+      "understanding",
+      "constraints",
+      "tenant_id",
+      "cycle_id",
+      "step_index",
+      "assigned_role",
+      "step_budget",
+      "actor_id",
+      "authorization_header",
+      "timeout_seconds",
+      "obligations",
+      "prior_failure_evidence",
+      "objective_id",
+      "file_excerpts",
+      "evidence_revision_ref",
+      "plan_request",
+      "intent",
+      "understanding_revision",
+      "needs",
+      "exploration_evidence",
+      "governance",
+      "plan_revision"
+    ],
+    "has_outcome_contract_param": false,
+    "bind_steps_creates_new_steps": false,
+    "bind_steps_behavior": "Annotates existing steps by file-extension/token heuristics; dumps ALL UI ops onto any UI-looking step; does not emit one step per operation/view.",
+    "durable_api_order": [
+      "1. propose_step_contract (no OutcomeContract input)",
+      "2. _ensure_outcome_contract (seal)",
+      "3. bind_steps_to_contract (retrofit refs)",
+      "4. CoverageGate / evaluate_plan_quality"
+    ],
+    "planner_prompt_greenfield_rule_13": "When greenfield_page_generation: propose exactly ONE step with content.generate_html_css into proposed/ \u2014 not per-view UI ops."
+  },
+  "file_level_plan_bound_to_llm_contract": {
+    "steps": [
+      {
+        "step_index": 0,
+        "purpose": "Create frontend shell",
+        "target_scope": [
+          "proposed/attendance-system/index.html",
+          "proposed/attendance-system/styles.css",
+          "proposed/attendance-system/app.js"
+        ],
+        "facet_refs": [
+          "UI"
+        ],
+        "operation_refs": [
+          "register_student",
+          "view_attendance",
+          "submit_attendance"
+        ],
+        "entity_refs": [],
+        "mapping_refs": [
+          "map-0",
+          "map-1",
+          "map-2"
+        ],
+        "binding_role": "IMPLEMENT"
+      },
+      {
+        "step_index": 1,
+        "purpose": "Create PHP API backend",
+        "target_scope": [
+          "proposed/attendance-system/api.php",
+          "proposed/attendance-system/config.php"
+        ],
+        "facet_refs": [
+          "API"
+        ],
+        "operation_refs": [
+          "students.create",
+          "attendance.list",
+          "attendance.create"
+        ],
+        "entity_refs": [],
+        "mapping_refs": [
+          "map-3",
+          "map-4",
+          "map-5"
+        ],
+        "binding_role": "IMPLEMENT"
+      },
+      {
+        "step_index": 2,
+        "purpose": "Create MySQL schema",
+        "target_scope": [
+          "proposed/attendance-system/database.sql"
+        ],
+        "facet_refs": [
+          "DB"
+        ],
+        "operation_refs": [],
+        "entity_refs": [
+          "students",
+          "attendance_records"
+        ],
+        "mapping_refs": [],
+        "binding_role": "IMPLEMENT"
+      },
+      {
+        "step_index": 3,
+        "purpose": "Write README",
+        "target_scope": [
+          "proposed/attendance-system/README.md"
+        ],
+        "facet_refs": [],
+        "operation_refs": [],
+        "entity_refs": [],
+        "mapping_refs": [],
+        "binding_role": null
+      }
+    ],
+    "coverage_ok": true,
+    "coverage_code": "CONTRACT_COVERAGE_OK",
+    "per_ui_operation": {
+      "register_student": {
+        "dedicated_step": false,
+        "bundled_on_frontend_step": true
+      },
+      "view_attendance": {
+        "dedicated_step": false,
+        "bundled_on_frontend_step": true
+      },
+      "submit_attendance": {
+        "dedicated_step": false,
+        "bundled_on_frontend_step": true
+      }
+    },
+    "per_ui_view_has_step": {
+      "student_registration": false,
+      "attendance_view": false,
+      "attendance_submission": false
+    },
+    "verdict": "Coverage can PASS while every UI op is bundled onto one frontend file step; no dedicated IMPLEMENT UI student_registration / attendance_view / attendance_submission steps exist."
+  },
+  "live_provenance_planner": {
+    "attempted": true,
+    "planner_api": "http://127.0.0.1:8233/",
+    "reason": null,
+    "reply": "Create the attendance registration system as seven files under proposed/attendance-system/, covering the frontend, PHP backend, MySQL schema, configuration, and setup documentation. No existing-file evidence is required because all targets are permitted CREATE paths under proposed/.",
+    "provenance_decision": "ACCEPT",
+    "step_count": 1,
+    "steps_pre_bind": [
+      {
+        "step_index": 0,
+        "purpose": "Create the complete frontend, backend, database schema, configuration, and documentation for the attendance registration system.",
+        "target_scope": [
+          "proposed/attendance-system/index.html",
+          "proposed/attendance-system/styles.css",
+          "proposed/attendance-system/app.js",
+          "proposed/attendance-system/api.php",
+          "proposed/attendance-system/config.php",
+          "proposed/attendance-system/database.sql",
+          "proposed/attendance-system/README.md"
+        ],
+        "facet_refs": [],
+        "operation_refs": [],
+        "entity_refs": [],
+        "mapping_refs": [],
+        "binding_role": null
+      }
+    ],
+    "steps_post_bind": [
+      {
+        "step_index": 0,
+        "purpose": "Create the complete frontend, backend, database schema, configuration, and documentation for the attendance registration system.",
+        "target_scope": [
+          "proposed/attendance-system/index.html",
+          "proposed/attendance-system/styles.css",
+          "proposed/attendance-system/app.js",
+          "proposed/attendance-system/api.php",
+          "proposed/attendance-system/config.php",
+          "proposed/attendance-system/database.sql",
+          "proposed/attendance-system/README.md"
+        ],
+        "facet_refs": [
+          "UI",
+          "API",
+          "DB"
+        ],
+        "operation_refs": [
+          "register_student",
+          "view_attendance",
+          "submit_attendance",
+          "students.create",
+          "attendance.list",
+          "attendance.create"
+        ],
+        "entity_refs": [
+          "students",
+          "attendance_records"
+        ],
+        "mapping_refs": [
+          "map-0",
+          "map-1",
+          "map-2",
+          "map-3",
+          "map-4",
+          "map-5"
+        ],
+        "binding_role": "IMPLEMENT"
+      }
+    ],
+    "coverage_ok": true,
+    "coverage_code": "CONTRACT_COVERAGE_OK",
+    "coverage_detail": "all mandatory facet operations/entities/mappings are bound to steps",
+    "mentions_register_student": false,
+    "mentions_ui_views": {
+      "student_registration": false,
+      "attendance_view": false,
+      "attendance_submission": false
+    }
+  },
+  "diagnosis": {
+    "contract_intelligence": "GOOD (prior experiment)",
+    "plan_driven_by_outcome_ops": false,
+    "where_frontend_disappears": "Between OutcomeContract and StepContracts: planner decomposes by files/PlanTargets (index.html/api.php/database.sql), not by register_student/view_attendance/submit_attendance. bind_steps_to_contract only labels file steps after the fact.",
+    "next_rung": "Plan/binding decomposition from sealed contract (not executor yet)"
+  }
+}

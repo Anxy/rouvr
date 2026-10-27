@@ -1,0 +1,4 @@
+{
+  "case": "changed file outside packet allowed_paths must reject",
+  "expected_failure_class": "FAIL_PATCH_SCOPE_VIOLATION"
+}

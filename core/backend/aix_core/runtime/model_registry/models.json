@@ -1,0 +1,145 @@
+{
+  "profiles": [
+    {
+      "model_id": "openai/gpt-5.6-luna",
+      "provider": "openai",
+      "family": "gpt-5.6-luna",
+      "display_name": "GPT-5.6 Luna",
+      "context_window": 128000,
+      "input_cost_per_M": 0.30,
+      "output_cost_per_M": 1.20,
+      "cached_cost_per_M": 0.06,
+      "capabilities": [
+        "objective_understanding",
+        "complex_planning",
+        "critical_gap_review",
+        "escalation"
+      ],
+      "max_tokens": 16384,
+      "supports_tools": true
+    },
+    {
+      "model_id": "deepseek/deepseek-v3.2",
+      "provider": "deepseek",
+      "family": "deepseek-v3.2",
+      "display_name": "DeepSeek V3.2",
+      "context_window": 128000,
+      "input_cost_per_M": 0.14,
+      "output_cost_per_M": 0.28,
+      "cached_cost_per_M": 0.03,
+      "capabilities": [
+        "planning",
+        "verification",
+        "repair_planning"
+      ],
+      "max_tokens": 8192,
+      "supports_tools": true
+    },
+    {
+      "model_id": "qwen/qwen3-coder-next",
+      "provider": "qwen",
+      "family": "qwen3-coder",
+      "display_name": "Qwen3 Coder Next",
+      "context_window": 128000,
+      "input_cost_per_M": 0.10,
+      "output_cost_per_M": 0.20,
+      "cached_cost_per_M": 0.02,
+      "capabilities": [
+        "coding",
+        "implementation"
+      ],
+      "max_tokens": 8192,
+      "supports_tools": true
+    },
+    {
+      "model_id": "qwen/qwen3-coder-30b-a3b",
+      "provider": "qwen",
+      "family": "qwen3-coder-30b",
+      "display_name": "Qwen3 Coder 30B A3B",
+      "context_window": 128000,
+      "input_cost_per_M": 0.02,
+      "output_cost_per_M": 0.05,
+      "cached_cost_per_M": 0.01,
+      "capabilities": [
+        "bulk_coding",
+        "testing"
+      ],
+      "max_tokens": 8192,
+      "supports_tools": false
+    }
+  ],
+  "policies": [
+    {
+      "role": "objective_understanding",
+      "primary_model_id": "openai/gpt-5.6-luna",
+      "fallback_model_ids": [],
+      "max_attempts": 1,
+      "cost_budget_usd": 0.10,
+      "require_different_family_from": [],
+      "escalation_only": false
+    },
+    {
+      "role": "planner",
+      "primary_model_id": "deepseek/deepseek-v3.2",
+      "fallback_model_ids": ["openai/gpt-5.6-luna"],
+      "max_attempts": 2,
+      "cost_budget_usd": 0.50,
+      "require_different_family_from": ["executor", "tester"],
+      "escalation_only": false
+    },
+    {
+      "role": "complex_planner",
+      "primary_model_id": "openai/gpt-5.6-luna",
+      "fallback_model_ids": [],
+      "max_attempts": 1,
+      "cost_budget_usd": 0.50,
+      "require_different_family_from": ["executor"],
+      "escalation_only": true
+    },
+    {
+      "role": "executor",
+      "primary_model_id": "qwen/qwen3-coder-next",
+      "fallback_model_ids": ["qwen/qwen3-coder-30b-a3b"],
+      "max_attempts": 3,
+      "cost_budget_usd": 2.00,
+      "require_different_family_from": ["verifier"],
+      "escalation_only": false
+    },
+    {
+      "role": "bulk_executor",
+      "primary_model_id": "qwen/qwen3-coder-30b-a3b",
+      "fallback_model_ids": [],
+      "max_attempts": 2,
+      "cost_budget_usd": 0.50,
+      "require_different_family_from": ["verifier"],
+      "escalation_only": false
+    },
+    {
+      "role": "tester",
+      "primary_model_id": "qwen/qwen3-coder-30b-a3b",
+      "fallback_model_ids": ["qwen/qwen3-coder-next"],
+      "max_attempts": 2,
+      "cost_budget_usd": 0.50,
+      "require_different_family_from": ["verifier"],
+      "escalation_only": false
+    },
+    {
+      "role": "verifier",
+      "primary_model_id": "deepseek/deepseek-v3.2",
+      "fallback_model_ids": ["openai/gpt-5.6-luna"],
+      "max_attempts": 2,
+      "cost_budget_usd": 0.50,
+      "require_different_family_from": ["executor", "bulk_executor"],
+      "escalation_only": false
+    },
+    {
+      "role": "critical_reviewer",
+      "primary_model_id": "openai/gpt-5.6-luna",
+      "fallback_model_ids": [],
+      "max_attempts": 1,
+      "cost_budget_usd": 0.50,
+      "require_different_family_from": ["executor", "verifier"],
+      "escalation_only": true
+    }
+  ]
+}

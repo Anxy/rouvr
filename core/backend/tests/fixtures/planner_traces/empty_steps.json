@@ -1,0 +1,12 @@
+{
+  "packet_id": "empty-steps-trace",
+  "provider": "openrouter",
+  "model": "openrouter/z-ai/glm-5",
+  "attempts_used": 1,
+  "raw_output_text": "{\"steps\":[]}",
+  "parse_error": "PLANNER_EMPTY_PLAN",
+  "normalized_steps": [],
+  "upstream_payload": {
+    "output_text": "{\"steps\":[]}"
+  }
+}

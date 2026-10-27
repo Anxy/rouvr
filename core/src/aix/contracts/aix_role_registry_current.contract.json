@@ -1,0 +1,95 @@
+{
+  "schema_version": "hyeve.aix.role_registry.current",
+  "purpose": "Define the governed personas that may participate in the canonical model communication lane.",
+  "roles": [
+    {
+      "role_id": "planner",
+      "authority_level": "coordination",
+      "primary_functions": [
+        "decompose_work",
+        "propose_execution_slices",
+        "request_guidance",
+        "request_replan"
+      ],
+      "allowed_message_types": [
+        "status_note",
+        "question",
+        "handoff_note",
+        "guidance_request",
+        "reasoning_trace"
+      ]
+    },
+    {
+      "role_id": "coder",
+      "authority_level": "execution",
+      "primary_functions": [
+        "accept_or_reject_slice",
+        "execute_bounded_change",
+        "request_clarification",
+        "publish_execution_result"
+      ],
+      "allowed_message_types": [
+        "status_note",
+        "question",
+        "answer",
+        "handoff_note",
+        "tool_intent",
+        "tool_observation"
+      ]
+    },
+    {
+      "role_id": "verifier",
+      "authority_level": "review_gate",
+      "primary_functions": [
+        "evaluate_evidence",
+        "request_follow_up",
+        "publish_verification_result"
+      ],
+      "allowed_message_types": [
+        "status_note",
+        "question",
+        "answer",
+        "decision_request",
+        "reasoning_trace"
+      ]
+    },
+    {
+      "role_id": "consultant",
+      "authority_level": "advisory",
+      "primary_functions": [
+        "diagnose_disagreement",
+        "propose_direction",
+        "narrow_scope"
+      ],
+      "allowed_message_types": [
+        "status_note",
+        "question",
+        "answer",
+        "guidance_request",
+        "reasoning_trace"
+      ]
+    },
+    {
+      "role_id": "human_supervisor",
+      "authority_level": "approval",
+      "primary_functions": [
+        "approve",
+        "reject",
+        "clarify",
+        "reprioritize"
+      ],
+      "allowed_message_types": [
+        "status_note",
+        "question",
+        "answer",
+        "decision_request",
+        "handoff_note"
+      ]
+    }
+  ],
+  "rules": {
+    "default_consultant_authority": "advisory_only",
+    "human_override_authority": true,
+    "ungoverned_roles_forbidden": true
+  }
+}

@@ -1,0 +1,15 @@
+{
+  "en": {
+    "validation": {
+      "unknown_entity": "Unknown entity: {field}",
+      "unknown_field": "Unknown field: {field}",
+      "invalid_value": "Invalid value for field: {field}",
+      "invalid_format": "Invalid format for field: {field}",
+      "schema_error": "Schema validation failed for field: {field}"
+    },
+    "business": {
+      "invalid_domain": "Email domain not allowed",
+      "blocked_domain": "Email domain is blocked"
+    }
+  }
+}

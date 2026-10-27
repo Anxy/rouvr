@@ -1,0 +1,351 @@
+{
+  "version": 1,
+  "policy_cases": [
+    {
+      "id": "invalid_symbol_format",
+      "kwargs": {
+        "code": "INVALID_SYMBOL_FORMAT",
+        "workflow_stage": "planning",
+        "task_intent": "code_change_required"
+      },
+      "expected": {
+        "policy_action": "retry",
+        "failure_family": "parse_error",
+        "retry_budget_key": "parse_failure",
+        "outcome_class": "planner.invalid_symbol",
+        "tool_class": "planner",
+        "route_target": "same_lane_retry"
+      }
+    },
+    {
+      "id": "content_syntax_error",
+      "kwargs": {
+        "code": "CONTENT_SYNTAX_ERROR",
+        "workflow_stage": "execution",
+        "task_intent": "code_change_required"
+      },
+      "expected": {
+        "policy_action": "retry",
+        "failure_family": "parse_error",
+        "retry_budget_key": "parse_failure",
+        "outcome_class": "mutation.invalid_patch",
+        "tool_class": "mutation",
+        "route_target": "same_lane_retry"
+      }
+    },
+    {
+      "id": "mutation_invalid_function_replacement",
+      "kwargs": {
+        "code": "MUTATION_INVALID_FUNCTION_REPLACEMENT",
+        "workflow_stage": "execution",
+        "task_intent": "code_change_required"
+      },
+      "expected": {
+        "policy_action": "retry",
+        "failure_family": "parse_error",
+        "retry_budget_key": "parse_failure",
+        "outcome_class": "mutation.invalid_shape",
+        "tool_class": "mutation",
+        "route_target": "same_lane_retry"
+      }
+    },
+    {
+      "id": "candidate_validation_missing",
+      "kwargs": {
+        "code": "CANDIDATE_VALIDATION_MISSING",
+        "workflow_stage": "quality_gate",
+        "task_intent": "code_change_required"
+      },
+      "expected": {
+        "policy_action": "verifier_reject",
+        "failure_family": "test_local",
+        "retry_budget_key": "test_local_failure",
+        "outcome_class": "evidence.incomplete",
+        "tool_class": "verifier",
+        "route_target": "recovery_task"
+      }
+    },
+    {
+      "id": "executor_terminal_step_failed",
+      "kwargs": {
+        "code": "EXECUTOR_TERMINAL_STEP_FAILED",
+        "workflow_stage": "quality_gate",
+        "task_intent": "code_change_required"
+      },
+      "expected": {
+        "policy_action": "retry",
+        "failure_family": "lint_error",
+        "retry_budget_key": "lint_failure",
+        "outcome_class": "mutation.terminal_step_failed",
+        "tool_class": "mutation",
+        "route_target": "same_lane_retry"
+      }
+    }
+  ],
+  "candidate_safety_cases": [
+    {
+      "id": "validation_attached_under_tests_commands",
+      "task_intent": "code_change_required",
+      "metadata": {
+        "target_files": [
+          "app/main.py"
+        ],
+        "validation_commands": [
+          "pytest tests/test_auth.py -q"
+        ]
+      },
+      "instruction_contract": {},
+      "evidence": {
+        "changed_files": [
+          "app/main.py"
+        ],
+        "commands": [],
+        "tests": {
+          "detected": true,
+          "commands": [
+            {
+              "command": [
+                "pytest",
+                "tests/test_auth.py",
+                "-q",
+                "--tb=short"
+              ],
+              "stdout": ".                                                                        [100%]\n1 passed in 0.20s\n",
+              "returncode": 0
+            }
+          ]
+        }
+      },
+      "expected": {
+        "status": "accepted",
+        "executed_commands": [
+          "pytest tests/test_auth.py -q --tb=short"
+        ]
+      }
+    },
+    {
+      "id": "truncated_matching_pytest_output_still_counts_as_executed_validation",
+      "task_intent": "code_change_required",
+      "metadata": {
+        "target_files": [
+          "app/main.py"
+        ],
+        "validation_commands": [
+          "pytest tests/test_auth.py -q"
+        ]
+      },
+      "instruction_contract": {},
+      "evidence": {
+        "changed_files": [
+          "app/main.py"
+        ],
+        "commands": [],
+        "tests": {
+          "detected": true,
+          "commands": [
+            {
+              "command": [
+                "pytest",
+                "tests/test_auth.py",
+                "-q",
+                "--tb=short"
+              ],
+              "stdout": "============================= test session starts =============================\ncollected 1 item\n\n... output truncated ...\n",
+              "returncode": 0
+            }
+          ]
+        }
+      },
+      "expected": {
+        "status": "accepted",
+        "executed_commands": [
+          "pytest tests/test_auth.py -q --tb=short"
+        ]
+      }
+    }
+  ],
+  "acceptance_proof_cases": [
+    {
+      "id": "truncated_pytest_output_is_not_treated_as_skipped_only",
+      "metadata": {
+        "target_files": [
+          "app/main.py",
+          "tests/test_auth.py"
+        ],
+        "acceptance_criteria": [
+          "Auth metrics route remains green."
+        ]
+      },
+      "validation_commands": [
+        "pytest tests/test_auth.py -q --tb=short"
+      ],
+      "evidence": {
+        "changed_files": [
+          "app/main.py"
+        ],
+        "commands": [],
+        "tests": {
+          "detected": true,
+          "commands": [
+            {
+              "command": [
+                "pytest",
+                "tests/test_auth.py",
+                "-q",
+                "--tb=short"
+              ],
+              "stdout": "============================= test session starts =============================\ncollected 1 item\n\n... output truncated ...\n",
+              "returncode": 0
+            }
+          ]
+        }
+      },
+      "expected": {
+        "status": "accepted",
+        "synthesized_acceptance_id": "AC-1",
+        "proof_kind": "test_command"
+      }
+    }
+  ],
+  "planner_boundary_cases": [
+    {
+      "id": "reject_symbol_outside_grounded_target_surface",
+      "task_intent": "code_change_required",
+      "metadata": {
+        "admitted_target_files": [
+          "backend/services/workhub_contract_service.py"
+        ],
+        "prompt_symbol_targets": [
+          {
+            "relative_path": "backend/services/workhub_contract_service.py",
+            "symbol": "WorkhubContractService.create_task"
+          }
+        ],
+        "validation_commands": [
+          "python -m pytest backend/tests/test_workhub_contract_service_create_task.py -q"
+        ]
+      },
+      "steps": [
+        {
+          "tool": "read_range",
+          "args": {
+            "relative_path": "backend/services/other_service.py",
+            "start_line": 1,
+            "end_line": 40
+          }
+        },
+        {
+          "tool": "confirm_anchor",
+          "args": {
+            "relative_path": "backend/services/other_service.py",
+            "symbol_name": "OtherService.create_task"
+          }
+        },
+        {
+          "tool": "edit_file",
+          "args": {
+            "relative_path": "backend/services/other_service.py",
+            "search": "def create_task(self):\n    return {}\n",
+            "replace": "def create_task(self):\n    return {'ok': False}\n"
+          }
+        },
+        {
+          "tool": "cmd.run",
+          "args": {
+            "command": [
+              "python",
+              "-m",
+              "pytest",
+              "backend/tests/test_workhub_contract_service_create_task.py",
+              "-q"
+            ]
+          }
+        }
+      ],
+      "expected": {
+        "validation_error": "PLANNER_SYMBOL_OUTSIDE_GROUNDED_TARGETS"
+      }
+    },
+    {
+      "id": "accept_fully_qualified_symbol_equivalent_to_grounded_target",
+      "task_intent": "code_change_required",
+      "metadata": {
+        "admitted_target_files": [
+          "backend/services/workhub_contract_service.py"
+        ],
+        "prompt_symbol_targets": [
+          {
+            "relative_path": "backend/services/workhub_contract_service.py",
+            "symbol": "WorkhubContractService.create_task"
+          }
+        ],
+        "validation_commands": [
+          "python -m pytest backend/tests/test_workhub_contract_service_create_task.py -q"
+        ]
+      },
+      "steps": [
+        {
+          "tool": "read_range",
+          "args": {
+            "relative_path": "backend/services/workhub_contract_service.py",
+            "start_line": 1,
+            "end_line": 80
+          }
+        },
+        {
+          "tool": "confirm_anchor",
+          "args": {
+            "relative_path": "backend/services/workhub_contract_service.py",
+            "symbol_name": "backend.services.workhub_contract_service.WorkhubContractService.create_task"
+          }
+        },
+        {
+          "tool": "edit_file",
+          "args": {
+            "relative_path": "backend/services/workhub_contract_service.py",
+            "search": "def create_task(self):\n    return {}\n",
+            "replace": "def create_task(self):\n    return {'ok': True}\n"
+          }
+        },
+        {
+          "tool": "cmd.run",
+          "args": {
+            "command": [
+              "python",
+              "-m",
+              "pytest",
+              "backend/tests/test_workhub_contract_service_create_task.py",
+              "-q"
+            ]
+          }
+        }
+      ],
+      "expected": {
+        "validation_error": null
+      }
+    }
+  ],
+  "mutation_transport_cases": [
+    {
+      "id": "edit_file_strips_resolved_path_transport_arg",
+      "step": {
+        "tool": "edit_file",
+        "args": {
+          "relative_path": "backend/services/workhub_contract_service.py",
+          "resolved_path": "/workspace/hyeve/backend/services/workhub_contract_service.py",
+          "search_replace_blocks": "SEARCH\nfoo\nREPLACE\nbar"
+        }
+      },
+      "expected": {
+        "ok": true,
+        "captured_keys": [
+          "relative_path",
+          "search_replace_blocks",
+          "runtime",
+          "execution_context",
+          "workspace_root"
+        ]
+      }
+    }
+  ]
+}

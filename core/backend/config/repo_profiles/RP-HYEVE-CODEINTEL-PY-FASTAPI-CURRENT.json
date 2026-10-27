@@ -1,0 +1,70 @@
+{
+  "schema_version": "repo_profile.current",
+  "profile_id": "RP-HYEVE-CODEINTEL-PY-FASTAPI-CURRENT",
+  "version": 1,
+  "repo_patterns": [
+    "hyeve-codeintel-service",
+    "*codeintel*"
+  ],
+  "inherits_profile_id": "RP-BASE-PY-CURRENT",
+  "command_policy": {
+    "allow_prefixes": [
+      ["python"],
+      ["pytest"],
+      ["uv"],
+      ["git"]
+    ],
+    "default_timeout_seconds": 45.0,
+    "max_timeout_seconds": 180.0
+  },
+  "default_commands": {
+    "test_command": ["pytest", "-q", "tests"],
+    "lint_command": ["python", "-m", "ruff", "check", "backend", "tests"],
+    "typecheck_command": ["python", "-m", "mypy", "backend"]
+  },
+  "drift_guards": {
+    "max_files_changed": 30,
+    "max_diff_bytes": 750000,
+    "blocked_path_prefixes": [
+      ".git",
+      "secrets",
+      "infra/prod"
+    ]
+  },
+  "overlay_policy": {
+    "allowed_override_paths": [
+      "command_policy.allow_prefixes",
+      "command_policy.default_timeout_seconds",
+      "drift_guards.max_files_changed",
+      "drift_guards.max_diff_bytes",
+      "drift_guards.blocked_path_prefixes"
+    ]
+  },
+  "metadata": {
+    "language": "python",
+    "framework": "fastapi",
+    "owner": "aix",
+    "service": "hyeve-codeintel-service",
+    "instruction_contract": {
+      "service_root": "services/hyeve-codeintel-service",
+      "package_root": "backend",
+      "test_root": "tests",
+      "protected_structure": [
+        "router prefix '/api/v1' must remain intact",
+        "route dependency-based auth/project context wiring must remain intact",
+        "existing response_model markers must remain intact for narrow route tasks",
+        "CodeintelQueryService relation queries use self._connect() and raw asyncpg SQL; do not introduce collection.find/count_documents patterns"
+      ],
+      "owning_symbols": [
+        "CodeintelQueryService.list_relations owns relation query behavior",
+        "codeintel_query_service_router.list_repo_relations owns relation route wiring"
+      ],
+      "call_signatures": {
+        "CodeintelQueryService.list_relations": "async def list_relations(self, tenant_id: str, project_id: str, repo_id: str, entity_id: str | None, limit: int, offset: int) -> dict"
+      },
+      "allowed_validation_commands": [
+        "pytest tests/test_codeintel_query_write_routes.py -q"
+      ]
+    }
+  }
+}

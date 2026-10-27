@@ -1,0 +1,219 @@
+[tool.poetry]
+name = "hyeve-core-dal"
+version = "0.1.0"
+description = "Robust Data Access Layer library for Hyeve multi-tenant SaaS ERP platform"
+authors = ["Hyeve Development Team <dev@hyeve.com>"]
+readme = "README.md"
+packages = [
+    {include = "*"}
+]
+
+[tool.poetry.dependencies]
+python = "^3.9"
+# Core async framework
+asyncio-mqtt = "^0.16.0"
+
+# Database ORMs and drivers
+prisma = "^0.11.0"
+sqlalchemy = {extras = ["asyncio"], version = "^2.0.0"}
+asyncpg = "^0.29.0"
+psycopg2-binary = "^2.9.0"
+
+# Data validation and serialization
+pydantic = "^2.9.0"
+pydantic-settings = "^2.1.0"
+
+# Caching
+redis = {extras = ["hiredis"], version = "^5.0.0"}
+aioredis = "^2.0.0"
+
+# ID generation
+python-ulid = "^3.0.0"
+
+# JSON handling and utilities
+orjson = "^3.9.0"
+python-json-logger = "^2.0.0"
+
+# Configuration management
+python-dotenv = "^1.0.0"
+pyyaml = "^6.0.0"
+
+# Async utilities
+tenacity = "^8.2.0"
+asyncio-throttle = "^1.0.0"
+
+# Logging and monitoring
+structlog = "^24.0.0"
+prometheus-client = "^0.19.0"
+
+# Date/time handling
+python-dateutil = "^2.8.0"
+pytz = "^2023.3"
+
+# Validation helpers
+jsonschema = "^4.17.3"
+
+# Type checking support
+typing-extensions = "^4.8.0"
+
+[tool.poetry.group.dev.dependencies]
+pytest = "^8.0.0"
+pytest-asyncio = "^0.23.0"
+pytest-cov = "*"
+pytest-mock = "*"
+pytest-xdist = "*"
+pytest-benchmark = "*"
+black = "^24.0.0"
+isort = "^5.13.0"
+flake8 = "^6.1.0"
+mypy = "^1.8.0"
+pylint = "^3.0.0"
+bandit = "^1.7.0"
+pre-commit = "^3.6.0"
+tox = "^4.11.0"
+build = "^1.0.0"
+twine = "^4.0.0"
+
+[tool.poetry.group.test.dependencies]
+fakeredis = "^2.20.0"
+aiosqlite = "^0.19.0"
+
+[tool.poetry.group.docs.dependencies]
+sphinx = "^7.2.0"
+sphinx-rtd-theme = "^2.0.0"
+myst-parser = "^2.0.0"
+sphinx-autodoc-typehints = "^1.25.0"
+
+[tool.poetry.group.performance.dependencies]
+pytest-benchmark = "^4.0.0"
+memory-profiler = "^0.61.0"
+py-spy = "^0.3.0"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
+
+[tool.black]
+line-length = 100
+target-version = ['py39', 'py310', 'py311', 'py312']
+include = '\.pyi?$'
+extend-exclude = '''
+/(
+  # directories
+  \.eggs
+  | \.git
+  | \.hg
+  | \.mypy_cache
+  | \.tox
+  | \.venv
+  | build
+  | dist
+)/
+'''
+
+[tool.isort]
+profile = "black"
+line_length = 100
+multi_line_output = 3
+include_trailing_comma = true
+force_grid_wrap = 0
+use_parentheses = true
+ensure_newline_before_comments = true
+
+[tool.mypy]
+python_version = "3.9"
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = true
+disallow_incomplete_defs = true
+check_untyped_defs = true
+disallow_untyped_decorators = true
+no_implicit_optional = true
+warn_redundant_casts = true
+warn_unused_ignores = true
+warn_no_return = true
+warn_unreachable = true
+strict_equality = true
+show_error_codes = true
+
+[[tool.mypy.overrides]]
+module = [
+    "prisma.*",
+    "asyncpg.*",
+    "redis.*",
+    "aioredis.*",
+    "ulid.*",
+    "orjson.*",
+]
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = [
+    "hyeve_core.dal.asyncpg_integration",
+    "hyeve_core.dal.dal_service",
+    "hyeve_core.dal.prisma_integration",
+    "hyeve_core.dal.sqlalchemy_integration",
+]
+ignore_errors = true
+
+[tool.pytest.ini_options]
+minversion = "7.0"
+addopts = [
+    "--strict-markers",
+    "--strict-config",
+    "--cov=hyeve_core",
+    "--cov-report=html",
+    "--cov-report=term-missing",
+#    "--cov-fail-under=85",
+]
+testpaths = ["tests"]
+python_files = ["test_*.py", "*_test.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+asyncio_mode = "auto"
+markers = [
+    "unit: Unit tests",
+    "integration: Integration tests",
+    "performance: Performance tests",
+    "slow: Slow running tests",
+    "redis: Tests requiring Redis",
+    "postgres: Tests requiring PostgreSQL",
+]
+
+[tool.coverage.run]
+source = ["hyeve_core"]
+omit = [
+    "*/tests/*",
+    "*/test_*",
+    "*/__pycache__/*",
+    "*/migrations/*",
+]
+
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: no cover",
+    "def __repr__",
+    "if self.debug:",
+    "if settings.DEBUG",
+    "raise AssertionError",
+    "raise NotImplementedError",
+    "if 0:",
+    "if __name__ == .__main__.:",
+    "class .*\\bProtocol\\):",
+    "@(abc\\.)?abstractmethod",
+]
+
+[tool.bandit]
+exclude_dirs = ["tests", "build", "dist"]
+skips = ["B101", "B601"]
+
+[tool.pylint.messages_control]
+disable = [
+    "too-few-public-methods",
+    "too-many-arguments",
+    "too-many-instance-attributes",
+    "import-error",
+]
+
+[tool.pylint.format]
+max-line-length = 100

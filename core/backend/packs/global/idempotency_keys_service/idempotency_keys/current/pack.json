@@ -1,0 +1,422 @@
+{
+  "http_hints": {},
+  "messages": {},
+  "metadata": {
+    "context": {
+      "entity": "idempotency_keys",
+      "service": "idempotency_keys_service",
+      "version": "v1"
+    },
+    "schema_key": "edprime.idempotency_keys.current",
+    "style_layers": [
+      {
+        "id": "core/base",
+        "priority": 0
+      }
+    ],
+    "style_pack": {
+      "id": "core/idempotency_keys",
+      "layer": "base",
+      "tailwind": {
+        "theme": {
+          "colors": {
+            "accent": {
+              "500": "#f97316"
+            },
+            "primary": {
+              "500": "#2563eb",
+              "700": "#1d4ed8"
+            }
+          }
+        }
+      }
+    },
+    "table_name": "idempotency_keys",
+    "ui_metadata": {
+      "dataSources": [
+        {
+          "id": "default",
+          "schemaKey": "edprime.idempotency_keys.current",
+          "type": "pack"
+        },
+        {
+          "id": "auditTrail",
+          "path": "/api/idempotency-keys/audit",
+          "type": "rest"
+        }
+      ],
+      "entity": {
+        "icon": "Squares2X2",
+        "primaryKey": [
+          "id"
+        ],
+        "table": "idempotency_keys",
+        "title": "Idempotency Keys"
+      },
+      "navigation": {
+        "breadcrumbs": [
+          "home",
+          "idempotency-keys"
+        ],
+        "icon": "Squares2X2",
+        "primaryRoute": "/idempotency-keys"
+      },
+      "overrides": {
+        "hooks": [
+          "useIdempotencyKeysFilters"
+        ],
+        "provider": "IdempotencyKeysProvider"
+      },
+      "version": "1.0.0",
+      "views": [
+        {
+          "actions": [
+            {
+              "id": "create",
+              "intent": "primary",
+              "workflow": "idempotency_keys.create.current"
+            }
+          ],
+          "dataSource": "default",
+          "id": "idempotency_keys.list",
+          "label": "Idempotency Keys",
+          "layout": {
+            "columns": [
+              {
+                "component": "Field",
+                "field": "project_id",
+                "label": "Project Id",
+                "sortable": true,
+                "width": "1fr"
+              },
+              {
+                "component": "Field",
+                "field": "idempotency_key",
+                "label": "Idempotency Key",
+                "sortable": true,
+                "width": "1fr"
+              },
+              {
+                "component": "Field",
+                "field": "request_hash",
+                "label": "Request Hash",
+                "sortable": true,
+                "width": "1fr"
+              },
+              {
+                "component": "Field",
+                "field": "response_payload",
+                "label": "Response Payload",
+                "sortable": true,
+                "width": "1fr"
+              }
+            ],
+            "type": "table"
+          },
+          "navigation": {
+            "icon": "Squares2X2",
+            "label": "Idempotency Keys",
+            "primaryRoute": "/idempotency-keys"
+          },
+          "type": "list"
+        },
+        {
+          "actions": [
+            {
+              "id": "edit",
+              "route": "/idempotency-keys/{id}/edit",
+              "type": "link"
+            },
+            {
+              "id": "delete",
+              "intent": "danger",
+              "workflow": "idempotency_keys.delete.current"
+            }
+          ],
+          "dataSource": "default",
+          "id": "idempotency_keys.detail",
+          "layout": {
+            "regions": [
+              {
+                "id": "summary",
+                "widgets": [
+                  {
+                    "component": "Field",
+                    "field": "project_id",
+                    "label": "Project Id"
+                  },
+                  {
+                    "component": "Field",
+                    "field": "idempotency_key",
+                    "label": "Idempotency Key"
+                  },
+                  {
+                    "component": "Field",
+                    "field": "request_hash",
+                    "label": "Request Hash"
+                  }
+                ]
+              },
+              {
+                "id": "details",
+                "widgets": [
+                  {
+                    "component": "Field",
+                    "field": "response_payload",
+                    "label": "Response Payload"
+                  },
+                  {
+                    "component": "Field",
+                    "field": "status_code",
+                    "label": "Status Code"
+                  },
+                  {
+                    "component": "Field",
+                    "field": "expires_at",
+                    "label": "Expires At"
+                  },
+                  {
+                    "component": "Field",
+                    "field": "custom_data",
+                    "label": "Custom Data"
+                  },
+                  {
+                    "component": "Field",
+                    "field": "deleted_at",
+                    "label": "Deleted At"
+                  }
+                ]
+              }
+            ],
+            "type": "split"
+          },
+          "type": "detail"
+        },
+        {
+          "actions": [
+            {
+              "id": "save",
+              "intent": "primary",
+              "type": "submit",
+              "workflow": "idempotency_keys.update.current"
+            },
+            {
+              "id": "cancel",
+              "route": "/idempotency-keys",
+              "type": "link"
+            }
+          ],
+          "dataSource": "default",
+          "id": "idempotency_keys.form",
+          "layout": {
+            "columns": 2,
+            "sections": [
+              {
+                "title": "Primary Information",
+                "widgets": [
+                  {
+                    "component": "Input",
+                    "field": "project_id",
+                    "label": "Project Id"
+                  },
+                  {
+                    "component": "Input",
+                    "field": "idempotency_key",
+                    "label": "Idempotency Key",
+                    "props": {
+                      "required": true
+                    }
+                  },
+                  {
+                    "component": "Input",
+                    "field": "request_hash",
+                    "label": "Request Hash"
+                  },
+                  {
+                    "component": "Input",
+                    "field": "response_payload",
+                    "label": "Response Payload"
+                  }
+                ]
+              },
+              {
+                "title": "Additional Details",
+                "widgets": [
+                  {
+                    "component": "Input",
+                    "field": "status_code",
+                    "label": "Status Code"
+                  },
+                  {
+                    "component": "DateTimePicker",
+                    "field": "expires_at",
+                    "label": "Expires At",
+                    "props": {
+                      "type": "datetime-local"
+                    }
+                  },
+                  {
+                    "component": "Input",
+                    "field": "custom_data",
+                    "label": "Custom Data"
+                  },
+                  {
+                    "component": "DateTimePicker",
+                    "field": "deleted_at",
+                    "label": "Deleted At",
+                    "props": {
+                      "type": "datetime-local"
+                    }
+                  }
+                ]
+              }
+            ],
+            "type": "grid"
+          },
+          "type": "form"
+        }
+      ],
+      "workflows": [
+        {
+          "failure": {
+            "toast": "Failed to create idempotency keys"
+          },
+          "id": "idempotency_keys.create.current",
+          "method": "POST",
+          "path": "/api/idempotency-keys",
+          "success": {
+            "toast": "Idempotency Keys created"
+          },
+          "type": "api"
+        },
+        {
+          "id": "idempotency_keys.update.current",
+          "method": "PUT",
+          "path": "/api/idempotency-keys/{id}",
+          "success": {
+            "toast": "Idempotency Keys updated"
+          },
+          "type": "api"
+        },
+        {
+          "id": "idempotency_keys.delete.current",
+          "method": "DELETE",
+          "path": "/api/idempotency-keys/{id}",
+          "success": {
+            "toast": "Idempotency Keys deleted"
+          },
+          "type": "api"
+        }
+      ]
+    }
+  },
+  "schema": {
+    "additionalProperties": false,
+    "properties": {
+      "custom_data": {
+        "title": "Custom Data",
+        "type": [
+          "object",
+          "null"
+        ]
+      },
+      "deleted_at": {
+        "format": "date-time",
+        "title": "Deleted At",
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "expires_at": {
+        "format": "date-time",
+        "title": "Expires At",
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "idempotency_key": {
+        "title": "Idempotency Key",
+        "type": "string"
+      },
+      "project_id": {
+        "title": "Project Id",
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "request_hash": {
+        "title": "Request Hash",
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "response_payload": {
+        "title": "Response Payload",
+        "type": [
+          "object",
+          "null"
+        ]
+      },
+      "status_code": {
+        "title": "Status Code",
+        "type": [
+          "integer",
+          "null"
+        ]
+      }
+    },
+    "type": "object"
+  },
+  "validation_rules": {
+    "_shared": {
+      "deleted_at": {
+        "customMessages": {
+          "format": "Enter a valid deleted at."
+        },
+        "format": "date-time",
+        "message_keys": {
+          "format": "idempotency_keys.deleted_at.format_date_time"
+        }
+      },
+      "expires_at": {
+        "customMessages": {
+          "format": "Enter a valid expires at."
+        },
+        "format": "date-time",
+        "message_keys": {
+          "format": "idempotency_keys.expires_at.format_date_time"
+        }
+      },
+      "idempotency_key": {
+        "customMessages": {
+          "minLength": "Idempotency Key must be at least 1 characters.",
+          "required": "Idempotency Key is required."
+        },
+        "message_keys": {
+          "minLength": "idempotency_keys.idempotency_key.min_length",
+          "required": "idempotency_keys.idempotency_key.required"
+        },
+        "minLength": 1,
+        "required": true
+      }
+    },
+    "create": {
+      "required_fields": [
+        "idempotency_key"
+      ]
+    },
+    "update": {
+      "required_fields": []
+    }
+  },
+  "version": "v1",
+  "workflows": {
+    "create": "idempotency_keys.create.current",
+    "delete": "idempotency_keys.delete.current",
+    "update": "idempotency_keys.update.current"
+  }
+}

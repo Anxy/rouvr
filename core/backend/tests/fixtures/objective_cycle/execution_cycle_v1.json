@@ -1,0 +1,15 @@
+{
+  "version": "v1",
+  "objective_id": "objective-fixture-1",
+  "tenant_id": "tenant-fixture",
+  "status": "PLANNING",
+  "step_ids": [],
+  "consumed_budget": {
+    "time_seconds": 0,
+    "tokens": 0,
+    "cost_usd": 0.0,
+    "retries": 0,
+    "steps": 0,
+    "concurrency": 1
+  }
+}

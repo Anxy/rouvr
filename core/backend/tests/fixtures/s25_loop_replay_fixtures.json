@@ -1,0 +1,25 @@
+{
+  "version": 1,
+  "fixtures": [
+    {
+      "id": "s25_success_path",
+      "input": {"intent": "apply_safe_patch", "ambiguity": false, "drift_detected": false},
+      "expected": {"route": "slavx", "terminal": "done", "tool_calls": 3}
+    },
+    {
+      "id": "s25_escalation_path",
+      "input": {"intent": "complex_refactor", "ambiguity": true, "drift_detected": false},
+      "expected": {"route": "onlineai", "terminal": "done", "reason_code": "escalation_ambiguity"}
+    },
+    {
+      "id": "s25_policy_block_path",
+      "input": {"intent": "write_outside_repo", "ambiguity": false, "drift_detected": false},
+      "expected": {"route": "slavx", "terminal": "policy_block", "reason_code": "allowlist_denied"}
+    },
+    {
+      "id": "s25_drift_block_path",
+      "input": {"intent": "normal_edit", "ambiguity": false, "drift_detected": true},
+      "expected": {"route": "slavx", "terminal": "drift_block", "reason_code": "workspace_drift"}
+    }
+  ]
+}

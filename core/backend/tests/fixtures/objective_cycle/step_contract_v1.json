@@ -1,0 +1,21 @@
+{
+  "version": "v1",
+  "cycle_id": "cycle-fixture-1",
+  "tenant_id": "tenant-fixture",
+  "step_index": 0,
+  "purpose": "Fixture step purpose.",
+  "target_scope": ["README.md"],
+  "expected_output_schema_ref": "schema://step-output/v1",
+  "acceptance_criteria": ["fixture criterion satisfied"],
+  "validation_commands": ["pytest -q"],
+  "assigned_role": "executor",
+  "step_budget": {
+    "time_seconds": 600,
+    "tokens": 10000,
+    "cost_usd": 1.0,
+    "retries": 1,
+    "steps": 1,
+    "concurrency": 1
+  },
+  "status": "PENDING"
+}

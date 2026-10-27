@@ -1,0 +1,56 @@
+{
+  "task_id": "task-s001",
+  "executor_id": "patchworker",
+  "executor_version": "0.0-contract-test",
+  "status": "PASS",
+  "failure_class": null,
+  "repo": {
+    "start_commit": "abc123",
+    "end_commit": "def456",
+    "workdir": ".aix/worktrees/s001",
+    "dirty_before": false,
+    "dirty_after": true
+  },
+  "mutation": {
+    "changed_files": ["backend/aix_core/executor_contracts/models.py"],
+    "diff_path": ".aix/evidence/s001/diff.patch",
+    "diff_hash": "sha256:diff",
+    "patch_applied": true
+  },
+  "validation": {
+    "commands": [
+      {
+        "command": {
+          "argv": ["python", "-m", "pytest", "backend/tests/aix_core/bootstrap/test_s001.py"],
+          "timeout_seconds": 60,
+          "cwd": "."
+        },
+        "exit_code": 0,
+        "duration_ms": 120,
+        "stdout_path": ".aix/evidence/s001/pytest.stdout",
+        "stderr_path": ".aix/evidence/s001/pytest.stderr",
+        "timed_out": false
+      }
+    ]
+  },
+  "events": {
+    "event_log_path": ".aix/evidence/s001/events.jsonl",
+    "tool_calls_path": null
+  },
+  "metrics": {
+    "tokens_in": 100,
+    "tokens_out": 80,
+    "duration_ms": 1000,
+    "model": "gpt-5.3-codex"
+  },
+  "security": {
+    "network": "off",
+    "sandbox": "workdir_only",
+    "scope_violation": false,
+    "violation_details": null
+  },
+  "artifacts": {
+    "root": ".aix/evidence/s001",
+    "files": ["diff.patch", "pytest.stdout", "pytest.stderr", "events.jsonl"]
+  }
+}

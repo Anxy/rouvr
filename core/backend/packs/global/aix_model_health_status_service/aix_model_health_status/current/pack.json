@@ -1,0 +1,513 @@
+{
+  "http_hints": {},
+  "messages": {},
+  "metadata": {
+    "context": {
+      "entity": "aix_model_health_status",
+      "service": "aix_model_health_status_service",
+      "version": "v1"
+    },
+    "schema_key": "edprime.aix_model_health_status.current",
+    "style_layers": [
+      {
+        "id": "core/base",
+        "priority": 0
+      }
+    ],
+    "style_pack": {
+      "id": "core/aix_model_health_status",
+      "layer": "base",
+      "tailwind": {
+        "theme": {
+          "colors": {
+            "accent": {
+              "500": "#f97316"
+            },
+            "primary": {
+              "500": "#2563eb",
+              "700": "#1d4ed8"
+            }
+          }
+        }
+      }
+    },
+    "table_name": "aix_model_health_status",
+    "ui_metadata": {
+      "dataSources": [
+        {
+          "id": "default",
+          "schemaKey": "edprime.aix_model_health_status.current",
+          "type": "pack"
+        },
+        {
+          "id": "auditTrail",
+          "path": "/api/aix-model-health-status/audit",
+          "type": "rest"
+        }
+      ],
+      "entity": {
+        "icon": "Squares2X2",
+        "primaryKey": [
+          "id"
+        ],
+        "table": "aix_model_health_status",
+        "title": "Aix Model Health Status"
+      },
+      "navigation": {
+        "breadcrumbs": [
+          "home",
+          "aix-model-health-status"
+        ],
+        "icon": "Squares2X2",
+        "primaryRoute": "/aix-model-health-status"
+      },
+      "overrides": {
+        "hooks": [
+          "useAixModelHealthStatusFilters"
+        ],
+        "provider": "AixModelHealthStatusProvider"
+      },
+      "version": "1.0.0",
+      "views": [
+        {
+          "actions": [
+            {
+              "id": "create",
+              "intent": "primary",
+              "workflow": "aix_model_health_status.create.current"
+            }
+          ],
+          "dataSource": "default",
+          "id": "aix_model_health_status.list",
+          "label": "Aix Model Health Status",
+          "layout": {
+            "columns": [
+              {
+                "component": "Field",
+                "field": "project_id",
+                "label": "Project Id",
+                "sortable": true,
+                "width": "1fr"
+              },
+              {
+                "component": "Field",
+                "field": "provider",
+                "label": "Provider",
+                "sortable": true,
+                "width": "1fr"
+              },
+              {
+                "component": "Field",
+                "field": "model_id",
+                "label": "Model Id",
+                "sortable": true,
+                "width": "1fr"
+              },
+              {
+                "component": "Field",
+                "field": "model_name",
+                "label": "Model Name",
+                "sortable": true,
+                "width": "1fr"
+              }
+            ],
+            "type": "table"
+          },
+          "navigation": {
+            "icon": "Squares2X2",
+            "label": "Aix Model Health Status",
+            "primaryRoute": "/aix-model-health-status"
+          },
+          "type": "list"
+        },
+        {
+          "actions": [
+            {
+              "id": "edit",
+              "route": "/aix-model-health-status/{id}/edit",
+              "type": "link"
+            },
+            {
+              "id": "delete",
+              "intent": "danger",
+              "workflow": "aix_model_health_status.delete.current"
+            }
+          ],
+          "dataSource": "default",
+          "id": "aix_model_health_status.detail",
+          "layout": {
+            "regions": [
+              {
+                "id": "summary",
+                "widgets": [
+                  {
+                    "component": "Field",
+                    "field": "project_id",
+                    "label": "Project Id"
+                  },
+                  {
+                    "component": "Field",
+                    "field": "provider",
+                    "label": "Provider"
+                  },
+                  {
+                    "component": "Field",
+                    "field": "model_id",
+                    "label": "Model Id"
+                  }
+                ]
+              },
+              {
+                "id": "details",
+                "widgets": [
+                  {
+                    "component": "Field",
+                    "field": "model_name",
+                    "label": "Model Name"
+                  },
+                  {
+                    "component": "Field",
+                    "field": "health_status",
+                    "label": "Health Status"
+                  },
+                  {
+                    "component": "Field",
+                    "field": "last_checked_at",
+                    "label": "Last Checked At"
+                  },
+                  {
+                    "component": "Field",
+                    "field": "latency_ms",
+                    "label": "Latency Ms"
+                  },
+                  {
+                    "component": "Field",
+                    "field": "error_rate_pct",
+                    "label": "Error Rate Pct"
+                  },
+                  {
+                    "component": "Field",
+                    "field": "health_source",
+                    "label": "Health Source"
+                  },
+                  {
+                    "component": "Field",
+                    "field": "details_json",
+                    "label": "Details Json"
+                  },
+                  {
+                    "component": "Field",
+                    "field": "deleted_at",
+                    "label": "Deleted At"
+                  }
+                ]
+              }
+            ],
+            "type": "split"
+          },
+          "type": "detail"
+        },
+        {
+          "actions": [
+            {
+              "id": "save",
+              "intent": "primary",
+              "type": "submit",
+              "workflow": "aix_model_health_status.update.current"
+            },
+            {
+              "id": "cancel",
+              "route": "/aix-model-health-status",
+              "type": "link"
+            }
+          ],
+          "dataSource": "default",
+          "id": "aix_model_health_status.form",
+          "layout": {
+            "columns": 2,
+            "sections": [
+              {
+                "title": "Primary Information",
+                "widgets": [
+                  {
+                    "component": "Input",
+                    "field": "project_id",
+                    "label": "Project Id"
+                  },
+                  {
+                    "component": "Input",
+                    "field": "provider",
+                    "label": "Provider",
+                    "props": {
+                      "required": true
+                    }
+                  },
+                  {
+                    "component": "Input",
+                    "field": "model_id",
+                    "label": "Model Id",
+                    "props": {
+                      "required": true
+                    }
+                  },
+                  {
+                    "component": "Input",
+                    "field": "model_name",
+                    "label": "Model Name",
+                    "props": {
+                      "required": true
+                    }
+                  },
+                  {
+                    "component": "Input",
+                    "field": "health_status",
+                    "label": "Health Status",
+                    "props": {
+                      "required": true
+                    }
+                  }
+                ]
+              },
+              {
+                "title": "Additional Details",
+                "widgets": [
+                  {
+                    "component": "DateTimePicker",
+                    "field": "last_checked_at",
+                    "label": "Last Checked At",
+                    "props": {
+                      "required": true,
+                      "type": "datetime-local"
+                    }
+                  },
+                  {
+                    "component": "Input",
+                    "field": "latency_ms",
+                    "label": "Latency Ms"
+                  },
+                  {
+                    "component": "Input",
+                    "field": "error_rate_pct",
+                    "label": "Error Rate Pct"
+                  },
+                  {
+                    "component": "Input",
+                    "field": "health_source",
+                    "label": "Health Source",
+                    "props": {
+                      "required": true
+                    }
+                  },
+                  {
+                    "component": "Input",
+                    "field": "details_json",
+                    "label": "Details Json",
+                    "props": {
+                      "required": true
+                    }
+                  },
+                  {
+                    "component": "DateTimePicker",
+                    "field": "deleted_at",
+                    "label": "Deleted At",
+                    "props": {
+                      "type": "datetime-local"
+                    }
+                  }
+                ]
+              }
+            ],
+            "type": "grid"
+          },
+          "type": "form"
+        }
+      ],
+      "workflows": [
+        {
+          "failure": {
+            "toast": "Failed to create aix model health status"
+          },
+          "id": "aix_model_health_status.create.current",
+          "method": "POST",
+          "path": "/api/aix-model-health-status",
+          "success": {
+            "toast": "Aix Model Health Status created"
+          },
+          "type": "api"
+        },
+        {
+          "id": "aix_model_health_status.update.current",
+          "method": "PUT",
+          "path": "/api/aix-model-health-status/{id}",
+          "success": {
+            "toast": "Aix Model Health Status updated"
+          },
+          "type": "api"
+        },
+        {
+          "id": "aix_model_health_status.delete.current",
+          "method": "DELETE",
+          "path": "/api/aix-model-health-status/{id}",
+          "success": {
+            "toast": "Aix Model Health Status deleted"
+          },
+          "type": "api"
+        }
+      ]
+    }
+  },
+  "schema": {
+    "additionalProperties": false,
+    "properties": {
+      "deleted_at": {
+        "format": "date-time",
+        "title": "Deleted At",
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "details_json": {
+        "title": "Details Json",
+        "type": "object"
+      },
+      "error_rate_pct": {
+        "title": "Error Rate Pct",
+        "type": [
+          "number",
+          "null"
+        ]
+      },
+      "health_source": {
+        "title": "Health Source",
+        "type": "string"
+      },
+      "health_status": {
+        "title": "Health Status",
+        "type": "string"
+      },
+      "last_checked_at": {
+        "format": "date-time",
+        "title": "Last Checked At",
+        "type": "string"
+      },
+      "latency_ms": {
+        "title": "Latency Ms",
+        "type": [
+          "integer",
+          "null"
+        ]
+      },
+      "model_id": {
+        "title": "Model Id",
+        "type": "string"
+      },
+      "model_name": {
+        "title": "Model Name",
+        "type": "string"
+      },
+      "project_id": {
+        "title": "Project Id",
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "provider": {
+        "title": "Provider",
+        "type": "string"
+      }
+    },
+    "type": "object"
+  },
+  "validation_rules": {
+    "_shared": {
+      "deleted_at": {
+        "customMessages": {
+          "format": "Enter a valid deleted at."
+        },
+        "format": "date-time",
+        "message_keys": {
+          "format": "aix_model_health_status.deleted_at.format_date_time"
+        }
+      },
+      "health_status": {
+        "customMessages": {
+          "minLength": "Health Status must be at least 1 characters.",
+          "required": "Health Status is required."
+        },
+        "message_keys": {
+          "minLength": "aix_model_health_status.health_status.min_length",
+          "required": "aix_model_health_status.health_status.required"
+        },
+        "minLength": 1,
+        "required": true
+      },
+      "last_checked_at": {
+        "customMessages": {
+          "format": "Enter a valid last checked at."
+        },
+        "format": "date-time",
+        "message_keys": {
+          "format": "aix_model_health_status.last_checked_at.format_date_time"
+        }
+      },
+      "model_id": {
+        "customMessages": {
+          "minLength": "Model Id must be at least 1 characters.",
+          "required": "Model Id is required."
+        },
+        "message_keys": {
+          "minLength": "aix_model_health_status.model_id.min_length",
+          "required": "aix_model_health_status.model_id.required"
+        },
+        "minLength": 1,
+        "required": true
+      },
+      "model_name": {
+        "customMessages": {
+          "minLength": "Model Name must be at least 1 characters.",
+          "required": "Model Name is required."
+        },
+        "message_keys": {
+          "minLength": "aix_model_health_status.model_name.min_length",
+          "required": "aix_model_health_status.model_name.required"
+        },
+        "minLength": 1,
+        "required": true
+      },
+      "provider": {
+        "customMessages": {
+          "minLength": "Provider must be at least 1 characters.",
+          "required": "Provider is required."
+        },
+        "message_keys": {
+          "minLength": "aix_model_health_status.provider.min_length",
+          "required": "aix_model_health_status.provider.required"
+        },
+        "minLength": 1,
+        "required": true
+      }
+    },
+    "create": {
+      "required_fields": [
+        "provider",
+        "model_id",
+        "model_name",
+        "health_status",
+        "last_checked_at",
+        "health_source",
+        "details_json"
+      ]
+    },
+    "update": {
+      "required_fields": []
+    }
+  },
+  "version": "v1",
+  "workflows": {
+    "create": "aix_model_health_status.create.current",
+    "delete": "aix_model_health_status.delete.current",
+    "update": "aix_model_health_status.update.current"
+  }
+}

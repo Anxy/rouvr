@@ -1,0 +1,48 @@
+{
+  "schema_version": "repo_profile.current",
+  "profile_id": "RP-HYEVE-READONLY-CURRENT",
+  "version": 1,
+  "repo_patterns": [
+    "aix-verifier",
+    "hyeve-readonly"
+  ],
+  "inherits_profile_id": "RP-BASE-PY-CURRENT",
+  "command_policy": {
+    "allow_prefixes": [
+      [
+        "git",
+        "status"
+      ],
+      [
+        "git",
+        "diff"
+      ],
+      [
+        "rg"
+      ]
+    ],
+    "default_timeout_seconds": 15.0,
+    "max_timeout_seconds": 60.0
+  },
+  "default_commands": {
+    "test_command": [],
+    "lint_command": [],
+    "typecheck_command": []
+  },
+  "drift_guards": {
+    "max_files_changed": 1,
+    "max_diff_bytes": 1,
+    "blocked_path_prefixes": [
+      ""
+    ]
+  },
+  "overlay_policy": {
+    "allowed_override_paths": [
+      "command_policy.default_timeout_seconds",
+      "command_policy.max_timeout_seconds"
+    ]
+  },
+  "metadata": {
+    "mode": "readonly"
+  }
+}

@@ -1,0 +1,62 @@
+{
+  "schema_version": "hyeve.aix.model_comms.current",
+  "purpose": "Define the canonical communication lane for planner, coder, verifier, consultant, and human discussion without inflating the task control packet.",
+  "authoritative_lane": {
+    "storage": "workhub.task_communication",
+    "transport": "workhub.task.communication.added outbox + communication_publication_current",
+    "projection_contract": "hyeve_core.task_communication_contract.TaskCommunicationCurrent",
+    "thread_scope": "task_number + communication_thread_key",
+    "control_packet_rule": "The task packet stores refs and status only; discussion bodies live in task_communication."
+  },
+  "channel_vocabulary": [
+    {
+      "channel": "communication",
+      "purpose": "General model-to-model or human-to-model discussion."
+    },
+    {
+      "channel": "coordination",
+      "purpose": "Actionable requests that can block or redirect execution."
+    }
+  ],
+  "message_type_vocabulary": [
+    "status_note",
+    "question",
+    "answer",
+    "handoff_note",
+    "guidance_request",
+    "decision_request",
+    "reasoning_trace",
+    "tool_intent",
+    "tool_observation"
+  ],
+  "required_fields": [
+    "channel",
+    "message_type",
+    "thread_key",
+    "summary"
+  ],
+  "metadata_extensions": {
+    "discuss_current": {
+      "purpose": "Project Discuss workspace role labels over the canonical lane.",
+      "fields": [
+        "role",
+        "author",
+        "actor_type",
+        "project_id",
+        "thread_key"
+      ]
+    },
+    "assist_loop": {
+      "purpose": "Runner-emitted guidance and recovery coordination metadata."
+    }
+  },
+  "threading_rules": {
+    "project_discuss_thread": "discuss:project:{project_id}",
+    "task_thread": "task:{project_id}:{task_number}",
+    "continuation_rule": "Related planning/recovery continuations must reuse or explicitly reply_to the originating thread when preserving lineage."
+  },
+  "large_payload_rule": {
+    "inline_payload": "Keep message bodies concise and summary-first.",
+    "overflow_strategy": "Use refs for plans, evidence bundles, transcripts, or large generated content."
+  }
+}

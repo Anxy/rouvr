@@ -1,0 +1,21 @@
+{
+  "version": "v1",
+  "tenant_id": "tenant-fixture",
+  "actor_ref": "user:fixture",
+  "project_id": "project-fixture",
+  "workhub_task_ref": "wh-task-fixture",
+  "task_class": "docs_only_change",
+  "definition_of_done": "Fixture docs updated and reviewed.",
+  "acceptance_criteria": ["docs updated"],
+  "repository_scope": ["AIX"],
+  "environment_scope": "development",
+  "budget_ceiling": {
+    "time_seconds": 3600,
+    "tokens": 100000,
+    "cost_usd": 5.0,
+    "retries": 2,
+    "steps": 10,
+    "concurrency": 1
+  },
+  "idempotency_key": "idem-fixture-1"
+}

@@ -1,0 +1,28 @@
+{
+  "packet_id": "dedented-mutate-task-header",
+  "provider": "openrouter",
+  "model": "openrouter/mistralai/codestral-2508",
+  "attempts_used": 1,
+  "raw_output_text": "{\"steps\":[{\"tool\":\"read_range\",\"args\":{\"relative_path\":\"backend/services/example.py\",\"start_line\":1,\"end_line\":3}},{\"tool\":\"edit_file\",\"args\":{\"relative_path\":\"backend/services/example.py\",\"search_replace_blocks\":\"<<<<<<< SEARCH\\n    async def mutate_task(self, task_id: str, reason: str | None = None) -> dict[str, str]:\\n=======\\nasync def mutate_task(self, task_id: str, reason: str | None = None, target_project_id: str | None = None) -> dict[str, str]:\\n>>>>>>> REPLACE\\n\"}}]}",
+  "parse_error": null,
+  "normalized_steps": [
+    {
+      "tool": "read_range",
+      "args": {
+        "relative_path": "backend/services/example.py",
+        "start_line": 1,
+        "end_line": 3
+      }
+    },
+    {
+      "tool": "edit_file",
+      "args": {
+        "relative_path": "backend/services/example.py",
+        "search_replace_blocks": "<<<<<<< SEARCH\n    async def mutate_task(self, task_id: str, reason: str | None = None) -> dict[str, str]:\n=======\nasync def mutate_task(self, task_id: str, reason: str | None = None, target_project_id: str | None = None) -> dict[str, str]:\n>>>>>>> REPLACE\n"
+      }
+    }
+  ],
+  "upstream_payload": {
+    "output_text": "{\"steps\":[{\"tool\":\"read_range\",\"args\":{\"relative_path\":\"backend/services/example.py\",\"start_line\":1,\"end_line\":3}},{\"tool\":\"edit_file\",\"args\":{\"relative_path\":\"backend/services/example.py\",\"search_replace_blocks\":\"<<<<<<< SEARCH\\n    async def mutate_task(self, task_id: str, reason: str | None = None) -> dict[str, str]:\\n=======\\nasync def mutate_task(self, task_id: str, reason: str | None = None, target_project_id: str | None = None) -> dict[str, str]:\\n>>>>>>> REPLACE\\n\"}}]}"
+  }
+}

@@ -1,0 +1,46 @@
+{
+  "schema_version": "command_allowlist.current",
+  "profile_id": "ACP-CODER-L3-CURRENT",
+  "rules": [
+    {
+      "mode": "exact",
+      "argv": [
+        "git",
+        "status",
+        "--porcelain"
+      ]
+    },
+    {
+      "mode": "prefix",
+      "argv": [
+        "git",
+        "diff"
+      ]
+    },
+    {
+      "mode": "prefix",
+      "argv": [
+        "git",
+        "add"
+      ]
+    },
+    {
+      "mode": "prefix",
+      "argv": [
+        "rg"
+      ]
+    },
+    {
+      "mode": "prefix",
+      "argv": [
+        "pytest"
+      ]
+    },
+    {
+      "mode": "prefix",
+      "argv": [
+        "python"
+      ]
+    }
+  ]
+}

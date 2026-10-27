@@ -1,0 +1,10 @@
+# Required to collect/run tests/runtime/objective_cycle (AIX-CH-001).
+#
+#   pip install -r requirements.objective-cycle.txt
+#
+# hyeve_task_contract_engine is not published from this repo. tests/conftest.py
+# resolves it in order:
+#   1. $HYEVE_TASK_CONTRACT_ENGINE_ROOT
+#   2. <AIX_ROOT>/../hyeve/libs/hyeve_task_contract_engine
+#   3. <AIX_ROOT>/libs/hyeve_task_contract_engine
+-r requirements.orchestration.txt

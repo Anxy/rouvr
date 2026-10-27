@@ -1,0 +1,15 @@
+{
+  "manifest_id": "OC-PLANNER-V1",
+  "version": "v1",
+  "role": "planner",
+  "purpose": "Ground and decompose; no execution authority",
+  "autonomy_cap": "bounded",
+  "allowed_gateway": "hyeve_integration",
+  "forbidden": [
+    "direct_provider_route",
+    "auto_accept",
+    "workhub_lifecycle_mutation",
+    "recursive_spawn"
+  ],
+  "programme": "AIX-E2E-CYCLE-001"
+}

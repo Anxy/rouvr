@@ -1,0 +1,8 @@
+{
+  "version": "v1",
+  "cycle_id": "cycle-fixture-1",
+  "tenant_id": "tenant-fixture",
+  "terminal_status": "COMPLETED_FOR_REVIEW",
+  "completed_step_ids": ["step-fixture-1"],
+  "objective_acceptance_map": {"fixture criterion satisfied": true}
+}

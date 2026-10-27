@@ -1,0 +1,9 @@
+{
+  "schema_version": "command_allowlist.current",
+  "profile_id": "ACP-OBJECTIVE-CYCLE-PLANNER-V1",
+  "rules": [
+    {"mode": "exact", "argv": ["git", "status", "--porcelain"]},
+    {"mode": "prefix", "argv": ["git", "diff"]},
+    {"mode": "prefix", "argv": ["rg"]}
+  ]
+}

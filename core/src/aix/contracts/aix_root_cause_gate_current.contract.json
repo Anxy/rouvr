@@ -1,0 +1,61 @@
+{
+  "schema_version": "hyeve.aix.root_cause_gate.current",
+  "purpose": "Standardize the compact reasoning and safeguard payload required when a task intentionally deletes or suppresses an existing compensating function, fallback path, or rollback-only branch.",
+  "applies_to": [
+    "code_change_required tasks that remove an existing helper, compensating function, retry guard, compatibility fallback, or rollback-only path"
+  ],
+  "required_fields": [
+    {
+      "field": "target_symbol_or_path",
+      "description": "Function, method, file path, or guarded branch being removed."
+    },
+    {
+      "field": "why_safe_now",
+      "description": "Short statement of why the system no longer requires the compensating path."
+    },
+    {
+      "field": "replacement_authority",
+      "description": "Canonical authority that now owns the behavior being preserved."
+    },
+    {
+      "field": "failure_if_wrong",
+      "description": "What user-visible or system-level failure would occur if the deletion is incorrect."
+    },
+    {
+      "field": "verification_proof",
+      "description": "Focused validation command, test, or runtime proof that demonstrates parity after deletion."
+    }
+  ],
+  "optional_fields": [
+    {
+      "field": "migration_note",
+      "description": "Short note when deletion is part of a staged migration and the prior path is intentionally being retired."
+    },
+    {
+      "field": "rollback_trigger",
+      "description": "Condition that would justify reintroducing or replacing the removed path."
+    }
+  ],
+  "authoring_rules": [
+    "Keep the payload compact and execution-friendly.",
+    "Do not repeat broad background already captured in ticket_contract_current.",
+    "Describe the replacement authority concretely, using a contract, service, or canonical lane reference when possible.",
+    "Use this gate only for real removal/suppression decisions, not for routine edits."
+  ],
+  "verifier_expectations": [
+    "Verifier must be able to identify what was removed.",
+    "Verifier must be able to trace the replacement authority.",
+    "Verifier must see a focused proof that the removal preserved behavior or intentionally retired obsolete behavior.",
+    "Missing or vague gate content should be treated as insufficient evidence for destructive deletion."
+  ],
+  "compact_template": {
+    "root_cause_gate_current": {
+      "target_symbol_or_path": "backend/services/example.py::legacy_fallback",
+      "why_safe_now": "YAML-only routing is now authoritative and this fallback can no longer select live models.",
+      "replacement_authority": "projects/AIX/hyeve-aix-service/backend/services/model_lane_policy_service.py",
+      "failure_if_wrong": "Planner or gateway could silently route via a retired fallback path.",
+      "verification_proof": "python -m pytest projects/AIX/hyeve-aix-service/backend/tests/test_model_lane_policy_service.py -q --tb=short",
+      "migration_note": "Final cleanup after YAML-only routing rollout."
+    }
+  }
+}

@@ -1,0 +1,43 @@
+{
+  "schema_version": "repo_profile.current",
+  "profile_id": "RP-BASE-PY-CURRENT",
+  "version": 1,
+  "repo_patterns": [
+    "*"
+  ],
+  "command_policy": {
+    "allow_prefixes": [
+      ["python"],
+      ["pytest"],
+      ["git"]
+    ],
+    "default_timeout_seconds": 30.0,
+    "max_timeout_seconds": 120.0
+  },
+  "default_commands": {
+    "test_command": ["pytest", "-q"],
+    "lint_command": ["python", "-m", "ruff", "check", "."],
+    "typecheck_command": ["python", "-m", "mypy", "."]
+  },
+  "drift_guards": {
+    "max_files_changed": 25,
+    "max_diff_bytes": 500000,
+    "blocked_path_prefixes": [
+      ".git",
+      ".env"
+    ]
+  },
+  "overlay_policy": {
+    "allowed_override_paths": [
+      "command_policy.allow_prefixes",
+      "command_policy.default_timeout_seconds",
+      "drift_guards.max_files_changed",
+      "drift_guards.max_diff_bytes",
+      "drift_guards.blocked_path_prefixes"
+    ]
+  },
+  "metadata": {
+    "language": "python",
+    "owner": "aix"
+  }
+}

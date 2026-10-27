@@ -1,0 +1,504 @@
+{
+  "context": {
+    "entity": "aix_model_gateway_policies",
+    "service": "aix_model_gateway_policies_service",
+    "version": "v1"
+  },
+  "json_schema": {
+    "additionalProperties": false,
+    "properties": {
+      "default_provider": {
+        "title": "Default Provider",
+        "type": "string"
+      },
+      "deleted_at": {
+        "format": "date-time",
+        "title": "Deleted At",
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "escalation_provider": {
+        "title": "Escalation Provider",
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "max_retry_before_escalate": {
+        "title": "Max Retry Before Escalate",
+        "type": "integer"
+      },
+      "metadata_json": {
+        "title": "Metadata Json",
+        "type": "object"
+      },
+      "model_policy": {
+        "title": "Model Policy",
+        "type": "string"
+      },
+      "policy_key": {
+        "title": "Policy Key",
+        "type": "string"
+      },
+      "project_id": {
+        "title": "Project Id",
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "risk_level": {
+        "title": "Risk Level",
+        "type": "string"
+      },
+      "status": {
+        "title": "Status",
+        "type": "string"
+      },
+      "task_type": {
+        "title": "Task Type",
+        "type": "string"
+      }
+    },
+    "required": [
+      "policy_key",
+      "task_type",
+      "risk_level",
+      "model_policy",
+      "default_provider",
+      "max_retry_before_escalate",
+      "status",
+      "metadata_json"
+    ],
+    "type": "object"
+  },
+  "pii_fields": [],
+  "schema_key": "edprime.aix_model_gateway_policies.current",
+  "style_layers": [
+    {
+      "id": "core/base",
+      "priority": 0
+    }
+  ],
+  "style_pack": {
+    "id": "core/aix_model_gateway_policies",
+    "layer": "base",
+    "tailwind": {
+      "theme": {
+        "colors": {
+          "accent": {
+            "500": "#f97316"
+          },
+          "primary": {
+            "500": "#2563eb",
+            "700": "#1d4ed8"
+          }
+        }
+      }
+    }
+  },
+  "table_name": "aix_model_gateway_policies",
+  "ui_metadata": {
+    "dataSources": [
+      {
+        "id": "default",
+        "schemaKey": "edprime.aix_model_gateway_policies.current",
+        "type": "pack"
+      },
+      {
+        "id": "auditTrail",
+        "path": "/api/aix-model-gateway-policies/audit",
+        "type": "rest"
+      }
+    ],
+    "entity": {
+      "icon": "Squares2X2",
+      "primaryKey": [
+        "id"
+      ],
+      "table": "aix_model_gateway_policies",
+      "title": "Aix Model Gateway Policies"
+    },
+    "navigation": {
+      "breadcrumbs": [
+        "home",
+        "aix-model-gateway-policies"
+      ],
+      "icon": "Squares2X2",
+      "primaryRoute": "/aix-model-gateway-policies"
+    },
+    "overrides": {
+      "hooks": [
+        "useAixModelGatewayPoliciesFilters"
+      ],
+      "provider": "AixModelGatewayPoliciesProvider"
+    },
+    "version": "1.0.0",
+    "views": [
+      {
+        "actions": [
+          {
+            "id": "create",
+            "intent": "primary",
+            "workflow": "aix_model_gateway_policies.create.current"
+          }
+        ],
+        "dataSource": "default",
+        "id": "aix_model_gateway_policies.list",
+        "label": "Aix Model Gateway Policies",
+        "layout": {
+          "columns": [
+            {
+              "component": "Field",
+              "field": "project_id",
+              "label": "Project Id",
+              "sortable": true,
+              "width": "1fr"
+            },
+            {
+              "component": "Field",
+              "field": "policy_key",
+              "label": "Policy Key",
+              "sortable": true,
+              "width": "1fr"
+            },
+            {
+              "component": "Field",
+              "field": "task_type",
+              "label": "Task Type",
+              "sortable": true,
+              "width": "1fr"
+            },
+            {
+              "component": "Field",
+              "field": "risk_level",
+              "label": "Risk Level",
+              "sortable": true,
+              "width": "1fr"
+            }
+          ],
+          "type": "table"
+        },
+        "navigation": {
+          "icon": "Squares2X2",
+          "label": "Aix Model Gateway Policies",
+          "primaryRoute": "/aix-model-gateway-policies"
+        },
+        "type": "list"
+      },
+      {
+        "actions": [
+          {
+            "id": "edit",
+            "route": "/aix-model-gateway-policies/{id}/edit",
+            "type": "link"
+          },
+          {
+            "id": "delete",
+            "intent": "danger",
+            "workflow": "aix_model_gateway_policies.delete.current"
+          }
+        ],
+        "dataSource": "default",
+        "id": "aix_model_gateway_policies.detail",
+        "layout": {
+          "regions": [
+            {
+              "id": "summary",
+              "widgets": [
+                {
+                  "component": "Field",
+                  "field": "project_id",
+                  "label": "Project Id"
+                },
+                {
+                  "component": "Field",
+                  "field": "policy_key",
+                  "label": "Policy Key"
+                },
+                {
+                  "component": "Field",
+                  "field": "task_type",
+                  "label": "Task Type"
+                }
+              ]
+            },
+            {
+              "id": "details",
+              "widgets": [
+                {
+                  "component": "Field",
+                  "field": "risk_level",
+                  "label": "Risk Level"
+                },
+                {
+                  "component": "Field",
+                  "field": "model_policy",
+                  "label": "Model Policy"
+                },
+                {
+                  "component": "Field",
+                  "field": "default_provider",
+                  "label": "Default Provider"
+                },
+                {
+                  "component": "Field",
+                  "field": "escalation_provider",
+                  "label": "Escalation Provider"
+                },
+                {
+                  "component": "Field",
+                  "field": "max_retry_before_escalate",
+                  "label": "Max Retry Before Escalate"
+                },
+                {
+                  "component": "Field",
+                  "field": "status",
+                  "label": "Status"
+                },
+                {
+                  "component": "Field",
+                  "field": "metadata_json",
+                  "label": "Metadata Json"
+                },
+                {
+                  "component": "Field",
+                  "field": "deleted_at",
+                  "label": "Deleted At"
+                }
+              ]
+            }
+          ],
+          "type": "split"
+        },
+        "type": "detail"
+      },
+      {
+        "actions": [
+          {
+            "id": "save",
+            "intent": "primary",
+            "type": "submit",
+            "workflow": "aix_model_gateway_policies.update.current"
+          },
+          {
+            "id": "cancel",
+            "route": "/aix-model-gateway-policies",
+            "type": "link"
+          }
+        ],
+        "dataSource": "default",
+        "id": "aix_model_gateway_policies.form",
+        "layout": {
+          "columns": 2,
+          "sections": [
+            {
+              "title": "Primary Information",
+              "widgets": [
+                {
+                  "component": "Input",
+                  "field": "project_id",
+                  "label": "Project Id"
+                },
+                {
+                  "component": "Input",
+                  "field": "policy_key",
+                  "label": "Policy Key",
+                  "props": {
+                    "required": true
+                  }
+                },
+                {
+                  "component": "Input",
+                  "field": "task_type",
+                  "label": "Task Type",
+                  "props": {
+                    "required": true
+                  }
+                },
+                {
+                  "component": "Input",
+                  "field": "risk_level",
+                  "label": "Risk Level",
+                  "props": {
+                    "required": true
+                  }
+                },
+                {
+                  "component": "Input",
+                  "field": "model_policy",
+                  "label": "Model Policy",
+                  "props": {
+                    "required": true
+                  }
+                },
+                {
+                  "component": "Input",
+                  "field": "default_provider",
+                  "label": "Default Provider",
+                  "props": {
+                    "required": true
+                  }
+                }
+              ]
+            },
+            {
+              "title": "Additional Details",
+              "widgets": [
+                {
+                  "component": "Input",
+                  "field": "escalation_provider",
+                  "label": "Escalation Provider"
+                },
+                {
+                  "component": "Input",
+                  "field": "max_retry_before_escalate",
+                  "label": "Max Retry Before Escalate",
+                  "props": {
+                    "required": true
+                  }
+                },
+                {
+                  "component": "Input",
+                  "field": "status",
+                  "label": "Status",
+                  "props": {
+                    "required": true
+                  }
+                },
+                {
+                  "component": "Input",
+                  "field": "metadata_json",
+                  "label": "Metadata Json",
+                  "props": {
+                    "required": true
+                  }
+                },
+                {
+                  "component": "DateTimePicker",
+                  "field": "deleted_at",
+                  "label": "Deleted At",
+                  "props": {
+                    "type": "datetime-local"
+                  }
+                }
+              ]
+            }
+          ],
+          "type": "grid"
+        },
+        "type": "form"
+      }
+    ],
+    "workflows": [
+      {
+        "failure": {
+          "toast": "Failed to create aix model gateway policies"
+        },
+        "id": "aix_model_gateway_policies.create.current",
+        "method": "POST",
+        "path": "/api/aix-model-gateway-policies",
+        "success": {
+          "toast": "Aix Model Gateway Policies created"
+        },
+        "type": "api"
+      },
+      {
+        "id": "aix_model_gateway_policies.update.current",
+        "method": "PUT",
+        "path": "/api/aix-model-gateway-policies/{id}",
+        "success": {
+          "toast": "Aix Model Gateway Policies updated"
+        },
+        "type": "api"
+      },
+      {
+        "id": "aix_model_gateway_policies.delete.current",
+        "method": "DELETE",
+        "path": "/api/aix-model-gateway-policies/{id}",
+        "success": {
+          "toast": "Aix Model Gateway Policies deleted"
+        },
+        "type": "api"
+      }
+    ]
+  },
+  "validation_rules": {
+    "default_provider": {
+      "customMessages": {
+        "minLength": "Default Provider must be at least 1 characters.",
+        "required": "Default Provider is required."
+      },
+      "message_keys": {
+        "minLength": "aix_model_gateway_policies.default_provider.min_length",
+        "required": "aix_model_gateway_policies.default_provider.required"
+      },
+      "minLength": 1,
+      "required": true
+    },
+    "deleted_at": {
+      "customMessages": {
+        "format": "Enter a valid deleted at."
+      },
+      "format": "date-time",
+      "message_keys": {
+        "format": "aix_model_gateway_policies.deleted_at.format_date_time"
+      }
+    },
+    "model_policy": {
+      "customMessages": {
+        "minLength": "Model Policy must be at least 1 characters.",
+        "required": "Model Policy is required."
+      },
+      "message_keys": {
+        "minLength": "aix_model_gateway_policies.model_policy.min_length",
+        "required": "aix_model_gateway_policies.model_policy.required"
+      },
+      "minLength": 1,
+      "required": true
+    },
+    "policy_key": {
+      "customMessages": {
+        "minLength": "Policy Key must be at least 1 characters.",
+        "required": "Policy Key is required."
+      },
+      "message_keys": {
+        "minLength": "aix_model_gateway_policies.policy_key.min_length",
+        "required": "aix_model_gateway_policies.policy_key.required"
+      },
+      "minLength": 1,
+      "required": true
+    },
+    "risk_level": {
+      "customMessages": {
+        "minLength": "Risk Level must be at least 1 characters.",
+        "required": "Risk Level is required."
+      },
+      "message_keys": {
+        "minLength": "aix_model_gateway_policies.risk_level.min_length",
+        "required": "aix_model_gateway_policies.risk_level.required"
+      },
+      "minLength": 1,
+      "required": true
+    },
+    "task_type": {
+      "customMessages": {
+        "minLength": "Task Type must be at least 1 characters.",
+        "required": "Task Type is required."
+      },
+      "message_keys": {
+        "minLength": "aix_model_gateway_policies.task_type.min_length",
+        "required": "aix_model_gateway_policies.task_type.required"
+      },
+      "minLength": 1,
+      "required": true
+    }
+  },
+  "workflows": {
+    "create": "aix_model_gateway_policies.create.current",
+    "delete": "aix_model_gateway_policies.delete.current",
+    "update": "aix_model_gateway_policies.update.current"
+  }
+}

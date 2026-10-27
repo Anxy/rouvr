@@ -1,0 +1,59 @@
+{
+  "task_id": "task-s001",
+  "tenant_id": "tenant-s001",
+  "project_id": "project-s001",
+  "workhub_task_ref": "workhub://task/s001",
+  "lane": "dev.l1",
+  "execution_mode": "patch_only",
+  "repo": {
+    "url": null,
+    "root_path": ".",
+    "ref": "main",
+    "start_commit": "abc123"
+  },
+  "prompt": {
+    "objective": "Define executor contracts.",
+    "instructions": "Validate packet and evidence contracts only.",
+    "acceptance": ["Contract validation passes."]
+  },
+  "scope": {
+    "allowed_paths": ["backend/aix_core/executor_contracts/models.py"],
+    "forbidden_paths": ["backend/secrets.env"],
+    "context_files": ["backend/aix_core/failures/failure_classification.py"],
+    "allow_new_files": false,
+    "allow_delete_files": false
+  },
+  "commands": {
+    "validation_commands": [
+      {
+        "argv": ["python", "-m", "pytest", "backend/tests/aix_core/bootstrap/test_s001.py"],
+        "timeout_seconds": 60,
+        "cwd": "."
+      }
+    ],
+    "allowed_commands": [["python", "-m", "pytest"]],
+    "forbidden_commands": [["powershell"], ["cmd", "/c"]]
+  },
+  "limits": {
+    "time_budget_seconds": 120,
+    "token_budget": 4000,
+    "output_limit_bytes": 65536,
+    "max_changed_files": 3
+  },
+  "security": {
+    "network": "off",
+    "filesystem": "workdir_only",
+    "secrets_access": "none",
+    "move_token_id": "move-token://s001/task/run"
+  },
+  "model": {
+    "provider": "openai",
+    "model": "gpt-5.3-codex",
+    "temperature": 0,
+    "max_output_tokens": 2000
+  },
+  "evidence": {
+    "required": true,
+    "evidence_dir": ".aix/evidence/s001"
+  }
+}

@@ -1,0 +1,37 @@
+{
+  "packet_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+  "project_id": "01ARZ3NDEKTSV4RRFFQ69G5FAW",
+  "conversation_id": "01ARZ3NDEKTSV4RRFFQ69G5FAX",
+  "trace_id": "01ARZ3NDEKTSV4RRFFQ69G5FAY",
+  "lane": "planner_trace",
+  "schema_name": "aix_trace_packet_current",
+  "schema_version": "v1",
+  "payload_json": {
+    "trace_kind": "planner_trace",
+    "provider": "slavx",
+    "model": "openai/gpt-4.1-mini",
+    "request": {
+      "messages": [
+        {
+          "role": "user",
+          "content": "Plan a safe repo-local fix."
+        }
+      ],
+      "temperature": 0.1,
+      "max_tokens": 900
+    },
+    "response": {
+      "status": "ok",
+      "content": "{\"steps\":[]}"
+    },
+    "task_context": {
+      "task_id": "task-123",
+      "project_id": "01ARZ3NDEKTSV4RRFFQ69G5FAW",
+      "repo_key": "AIX",
+      "workspace_root": "C:/dev/hyeve"
+    }
+  },
+  "metadata_json": {
+    "source": "aix-sdk-example"
+  }
+}

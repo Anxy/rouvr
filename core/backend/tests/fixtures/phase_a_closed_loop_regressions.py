@@ -1,0 +1,60 @@
+PAYLOAD = {
+    "cases": [
+        {
+            "code": "INVALID_SYMBOL_FORMAT",
+            "workflow_stage": "planning",
+            "task_intent": "code_change_required",
+            "expected_policy_action": "retry",
+            "expected_failure_family": "parse_error",
+            "expected_retry_budget_key": "parse_failure",
+        },
+        {
+            "code": "MUTATION_INVALID_FUNCTION_REPLACEMENT",
+            "workflow_stage": "execution",
+            "task_intent": "code_change_required",
+            "expected_policy_action": "retry",
+            "expected_failure_family": "parse_error",
+            "expected_retry_budget_key": "parse_failure",
+        },
+        {
+            "code": "CONTENT_SYNTAX_ERROR",
+            "workflow_stage": "execution",
+            "task_intent": "code_change_required",
+            "expected_policy_action": "retry",
+            "expected_failure_family": "parse_error",
+            "expected_retry_budget_key": "parse_failure",
+        },
+        {
+            "code": "PATCH_HYGIENE_MID_FILE_IMPORT",
+            "workflow_stage": "quality_gate",
+            "task_intent": "code_change_required",
+            "expected_policy_action": "retry",
+            "expected_failure_family": "lint_error",
+            "expected_retry_budget_key": "lint_failure",
+        },
+        {
+            "code": "ACCEPTANCE_MAPPING_MISSING",
+            "workflow_stage": "quality_gate",
+            "task_intent": "code_change_required",
+            "expected_policy_action": "retry",
+            "expected_failure_family": "test_local",
+            "expected_retry_budget_key": "test_local_failure",
+        },
+        {
+            "code": "EXECUTOR_TERMINAL_STEP_FAILED",
+            "workflow_stage": "quality_gate",
+            "task_intent": "code_change_required",
+            "expected_policy_action": "retry",
+            "expected_failure_family": "lint_error",
+            "expected_retry_budget_key": "lint_failure",
+        },
+        {
+            "code": "COMPLETENESS_FAIL",
+            "workflow_stage": "quality_gate",
+            "task_intent": "code_change_required",
+            "expected_policy_action": "retry",
+            "expected_failure_family": "test_local",
+            "expected_retry_budget_key": "test_local_failure",
+        },
+    ]
+}

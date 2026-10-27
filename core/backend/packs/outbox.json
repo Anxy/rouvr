@@ -1,0 +1,439 @@
+{
+  "context": {
+    "entity": "outbox",
+    "service": "outbox_service",
+    "version": "v1"
+  },
+  "json_schema": {
+    "additionalProperties": false,
+    "properties": {
+      "causation_id": {
+        "title": "Causation Id",
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "custom_data": {
+        "title": "Custom Data",
+        "type": [
+          "object",
+          "null"
+        ]
+      },
+      "deleted_at": {
+        "format": "date-time",
+        "title": "Deleted At",
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "event_type": {
+        "title": "Event Type",
+        "type": "string"
+      },
+      "idempotency_key": {
+        "title": "Idempotency Key",
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "payload": {
+        "title": "Payload",
+        "type": "object"
+      },
+      "project_id": {
+        "title": "Project Id",
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "published_at": {
+        "format": "date-time",
+        "title": "Published At",
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "status": {
+        "title": "Status",
+        "type": "string"
+      }
+    },
+    "required": [
+      "event_type",
+      "payload",
+      "status"
+    ],
+    "type": "object"
+  },
+  "pii_fields": [],
+  "schema_key": "edprime.outbox.current",
+  "style_layers": [
+    {
+      "id": "core/base",
+      "priority": 0
+    }
+  ],
+  "style_pack": {
+    "id": "core/outbox",
+    "layer": "base",
+    "tailwind": {
+      "theme": {
+        "colors": {
+          "accent": {
+            "500": "#f97316"
+          },
+          "primary": {
+            "500": "#2563eb",
+            "700": "#1d4ed8"
+          }
+        }
+      }
+    }
+  },
+  "table_name": "outbox",
+  "ui_metadata": {
+    "dataSources": [
+      {
+        "id": "default",
+        "schemaKey": "edprime.outbox.current",
+        "type": "pack"
+      },
+      {
+        "id": "auditTrail",
+        "path": "/api/outbox/audit",
+        "type": "rest"
+      }
+    ],
+    "entity": {
+      "icon": "Squares2X2",
+      "primaryKey": [
+        "id"
+      ],
+      "table": "outbox",
+      "title": "Outbox"
+    },
+    "navigation": {
+      "breadcrumbs": [
+        "home",
+        "outbox"
+      ],
+      "icon": "Squares2X2",
+      "primaryRoute": "/outbox"
+    },
+    "overrides": {
+      "hooks": [
+        "useOutboxFilters"
+      ],
+      "provider": "OutboxProvider"
+    },
+    "version": "1.0.0",
+    "views": [
+      {
+        "actions": [
+          {
+            "id": "create",
+            "intent": "primary",
+            "workflow": "outbox.create.current"
+          }
+        ],
+        "dataSource": "default",
+        "id": "outbox.list",
+        "label": "Outbox",
+        "layout": {
+          "columns": [
+            {
+              "component": "Field",
+              "field": "project_id",
+              "label": "Project Id",
+              "sortable": true,
+              "width": "1fr"
+            },
+            {
+              "component": "Field",
+              "field": "event_type",
+              "label": "Event Type",
+              "sortable": true,
+              "width": "1fr"
+            },
+            {
+              "component": "Field",
+              "field": "payload",
+              "label": "Payload",
+              "sortable": true,
+              "width": "1fr"
+            },
+            {
+              "component": "Field",
+              "field": "causation_id",
+              "label": "Causation Id",
+              "sortable": true,
+              "width": "1fr"
+            }
+          ],
+          "type": "table"
+        },
+        "navigation": {
+          "icon": "Squares2X2",
+          "label": "Outbox",
+          "primaryRoute": "/outbox"
+        },
+        "type": "list"
+      },
+      {
+        "actions": [
+          {
+            "id": "edit",
+            "route": "/outbox/{id}/edit",
+            "type": "link"
+          },
+          {
+            "id": "delete",
+            "intent": "danger",
+            "workflow": "outbox.delete.current"
+          }
+        ],
+        "dataSource": "default",
+        "id": "outbox.detail",
+        "layout": {
+          "regions": [
+            {
+              "id": "summary",
+              "widgets": [
+                {
+                  "component": "Field",
+                  "field": "project_id",
+                  "label": "Project Id"
+                },
+                {
+                  "component": "Field",
+                  "field": "event_type",
+                  "label": "Event Type"
+                },
+                {
+                  "component": "Field",
+                  "field": "payload",
+                  "label": "Payload"
+                }
+              ]
+            },
+            {
+              "id": "details",
+              "widgets": [
+                {
+                  "component": "Field",
+                  "field": "causation_id",
+                  "label": "Causation Id"
+                },
+                {
+                  "component": "Field",
+                  "field": "idempotency_key",
+                  "label": "Idempotency Key"
+                },
+                {
+                  "component": "Field",
+                  "field": "status",
+                  "label": "Status"
+                },
+                {
+                  "component": "Field",
+                  "field": "published_at",
+                  "label": "Published At"
+                },
+                {
+                  "component": "Field",
+                  "field": "custom_data",
+                  "label": "Custom Data"
+                },
+                {
+                  "component": "Field",
+                  "field": "deleted_at",
+                  "label": "Deleted At"
+                }
+              ]
+            }
+          ],
+          "type": "split"
+        },
+        "type": "detail"
+      },
+      {
+        "actions": [
+          {
+            "id": "save",
+            "intent": "primary",
+            "type": "submit",
+            "workflow": "outbox.update.current"
+          },
+          {
+            "id": "cancel",
+            "route": "/outbox",
+            "type": "link"
+          }
+        ],
+        "dataSource": "default",
+        "id": "outbox.form",
+        "layout": {
+          "columns": 2,
+          "sections": [
+            {
+              "title": "Primary Information",
+              "widgets": [
+                {
+                  "component": "Input",
+                  "field": "project_id",
+                  "label": "Project Id"
+                },
+                {
+                  "component": "Input",
+                  "field": "event_type",
+                  "label": "Event Type",
+                  "props": {
+                    "required": true
+                  }
+                },
+                {
+                  "component": "Input",
+                  "field": "payload",
+                  "label": "Payload",
+                  "props": {
+                    "required": true
+                  }
+                },
+                {
+                  "component": "Input",
+                  "field": "causation_id",
+                  "label": "Causation Id"
+                }
+              ]
+            },
+            {
+              "title": "Additional Details",
+              "widgets": [
+                {
+                  "component": "Input",
+                  "field": "idempotency_key",
+                  "label": "Idempotency Key"
+                },
+                {
+                  "component": "Input",
+                  "field": "status",
+                  "label": "Status",
+                  "props": {
+                    "required": true
+                  }
+                },
+                {
+                  "component": "DateTimePicker",
+                  "field": "published_at",
+                  "label": "Published At",
+                  "props": {
+                    "type": "datetime-local"
+                  }
+                },
+                {
+                  "component": "Input",
+                  "field": "custom_data",
+                  "label": "Custom Data"
+                },
+                {
+                  "component": "DateTimePicker",
+                  "field": "deleted_at",
+                  "label": "Deleted At",
+                  "props": {
+                    "type": "datetime-local"
+                  }
+                }
+              ]
+            }
+          ],
+          "type": "grid"
+        },
+        "type": "form"
+      }
+    ],
+    "workflows": [
+      {
+        "failure": {
+          "toast": "Failed to create outbox"
+        },
+        "id": "outbox.create.current",
+        "method": "POST",
+        "path": "/api/outbox",
+        "success": {
+          "toast": "Outbox created"
+        },
+        "type": "api"
+      },
+      {
+        "id": "outbox.update.current",
+        "method": "PUT",
+        "path": "/api/outbox/{id}",
+        "success": {
+          "toast": "Outbox updated"
+        },
+        "type": "api"
+      },
+      {
+        "id": "outbox.delete.current",
+        "method": "DELETE",
+        "path": "/api/outbox/{id}",
+        "success": {
+          "toast": "Outbox deleted"
+        },
+        "type": "api"
+      }
+    ]
+  },
+  "validation_rules": {
+    "deleted_at": {
+      "customMessages": {
+        "format": "Enter a valid deleted at."
+      },
+      "format": "date-time",
+      "message_keys": {
+        "format": "outbox.deleted_at.format_date_time"
+      }
+    },
+    "event_type": {
+      "customMessages": {
+        "minLength": "Event Type must be at least 1 characters.",
+        "required": "Event Type is required."
+      },
+      "message_keys": {
+        "minLength": "outbox.event_type.min_length",
+        "required": "outbox.event_type.required"
+      },
+      "minLength": 1,
+      "required": true
+    },
+    "payload": {
+      "customMessages": {
+        "required": "Payload is required."
+      },
+      "message_keys": {
+        "required": "outbox.payload.required"
+      },
+      "required": true
+    },
+    "published_at": {
+      "customMessages": {
+        "format": "Enter a valid published at."
+      },
+      "format": "date-time",
+      "message_keys": {
+        "format": "outbox.published_at.format_date_time"
+      }
+    }
+  },
+  "workflows": {
+    "create": "outbox.create.current",
+    "delete": "outbox.delete.current",
+    "update": "outbox.update.current"
+  }
+}

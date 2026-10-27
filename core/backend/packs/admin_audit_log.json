@@ -1,0 +1,459 @@
+{
+  "context": {
+    "entity": "admin_audit_log",
+    "service": "admin_audit_log_service",
+    "version": "v1"
+  },
+  "json_schema": {
+    "additionalProperties": false,
+    "properties": {
+      "action": {
+        "title": "Action",
+        "type": "string"
+      },
+      "actor_roles": {
+        "title": "Actor Roles",
+        "type": "object"
+      },
+      "actor_sub": {
+        "title": "Actor Sub",
+        "type": "string"
+      },
+      "custom_data": {
+        "title": "Custom Data",
+        "type": [
+          "object",
+          "null"
+        ]
+      },
+      "deleted_at": {
+        "format": "date-time",
+        "title": "Deleted At",
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "metadata_json": {
+        "title": "Metadata Json",
+        "type": [
+          "object",
+          "null"
+        ]
+      },
+      "project_id": {
+        "title": "Project Id",
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "request_id": {
+        "title": "Request Id",
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "resource_id": {
+        "title": "Resource Id",
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "resource_type": {
+        "title": "Resource Type",
+        "type": "string"
+      }
+    },
+    "required": [
+      "actor_sub",
+      "actor_roles",
+      "action",
+      "resource_type"
+    ],
+    "type": "object"
+  },
+  "pii_fields": [],
+  "schema_key": "edprime.admin_audit_log.current",
+  "style_layers": [
+    {
+      "id": "core/base",
+      "priority": 0
+    }
+  ],
+  "style_pack": {
+    "id": "core/admin_audit_log",
+    "layer": "base",
+    "tailwind": {
+      "theme": {
+        "colors": {
+          "accent": {
+            "500": "#f97316"
+          },
+          "primary": {
+            "500": "#2563eb",
+            "700": "#1d4ed8"
+          }
+        }
+      }
+    }
+  },
+  "table_name": "admin_audit_log",
+  "ui_metadata": {
+    "dataSources": [
+      {
+        "id": "default",
+        "schemaKey": "edprime.admin_audit_log.current",
+        "type": "pack"
+      },
+      {
+        "id": "auditTrail",
+        "path": "/api/admin-audit-log/audit",
+        "type": "rest"
+      }
+    ],
+    "entity": {
+      "icon": "Squares2X2",
+      "primaryKey": [
+        "id"
+      ],
+      "table": "admin_audit_log",
+      "title": "Admin Audit Log"
+    },
+    "navigation": {
+      "breadcrumbs": [
+        "home",
+        "admin-audit-log"
+      ],
+      "icon": "Squares2X2",
+      "primaryRoute": "/admin-audit-log"
+    },
+    "overrides": {
+      "hooks": [
+        "useAdminAuditLogFilters"
+      ],
+      "provider": "AdminAuditLogProvider"
+    },
+    "version": "1.0.0",
+    "views": [
+      {
+        "actions": [
+          {
+            "id": "create",
+            "intent": "primary",
+            "workflow": "admin_audit_log.create.current"
+          }
+        ],
+        "dataSource": "default",
+        "id": "admin_audit_log.list",
+        "label": "Admin Audit Log",
+        "layout": {
+          "columns": [
+            {
+              "component": "Field",
+              "field": "project_id",
+              "label": "Project Id",
+              "sortable": true,
+              "width": "1fr"
+            },
+            {
+              "component": "Field",
+              "field": "actor_sub",
+              "label": "Actor Sub",
+              "sortable": true,
+              "width": "1fr"
+            },
+            {
+              "component": "Field",
+              "field": "actor_roles",
+              "label": "Actor Roles",
+              "sortable": true,
+              "width": "1fr"
+            },
+            {
+              "component": "Field",
+              "field": "action",
+              "label": "Action",
+              "sortable": true,
+              "width": "1fr"
+            }
+          ],
+          "type": "table"
+        },
+        "navigation": {
+          "icon": "Squares2X2",
+          "label": "Admin Audit Log",
+          "primaryRoute": "/admin-audit-log"
+        },
+        "type": "list"
+      },
+      {
+        "actions": [
+          {
+            "id": "edit",
+            "route": "/admin-audit-log/{id}/edit",
+            "type": "link"
+          },
+          {
+            "id": "delete",
+            "intent": "danger",
+            "workflow": "admin_audit_log.delete.current"
+          }
+        ],
+        "dataSource": "default",
+        "id": "admin_audit_log.detail",
+        "layout": {
+          "regions": [
+            {
+              "id": "summary",
+              "widgets": [
+                {
+                  "component": "Field",
+                  "field": "project_id",
+                  "label": "Project Id"
+                },
+                {
+                  "component": "Field",
+                  "field": "actor_sub",
+                  "label": "Actor Sub"
+                },
+                {
+                  "component": "Field",
+                  "field": "actor_roles",
+                  "label": "Actor Roles"
+                }
+              ]
+            },
+            {
+              "id": "details",
+              "widgets": [
+                {
+                  "component": "Field",
+                  "field": "action",
+                  "label": "Action"
+                },
+                {
+                  "component": "Field",
+                  "field": "resource_type",
+                  "label": "Resource Type"
+                },
+                {
+                  "component": "Field",
+                  "field": "resource_id",
+                  "label": "Resource Id"
+                },
+                {
+                  "component": "Field",
+                  "field": "request_id",
+                  "label": "Request Id"
+                },
+                {
+                  "component": "Field",
+                  "field": "metadata_json",
+                  "label": "Metadata Json"
+                },
+                {
+                  "component": "Field",
+                  "field": "custom_data",
+                  "label": "Custom Data"
+                },
+                {
+                  "component": "Field",
+                  "field": "deleted_at",
+                  "label": "Deleted At"
+                }
+              ]
+            }
+          ],
+          "type": "split"
+        },
+        "type": "detail"
+      },
+      {
+        "actions": [
+          {
+            "id": "save",
+            "intent": "primary",
+            "type": "submit",
+            "workflow": "admin_audit_log.update.current"
+          },
+          {
+            "id": "cancel",
+            "route": "/admin-audit-log",
+            "type": "link"
+          }
+        ],
+        "dataSource": "default",
+        "id": "admin_audit_log.form",
+        "layout": {
+          "columns": 2,
+          "sections": [
+            {
+              "title": "Primary Information",
+              "widgets": [
+                {
+                  "component": "Input",
+                  "field": "project_id",
+                  "label": "Project Id"
+                },
+                {
+                  "component": "Input",
+                  "field": "actor_sub",
+                  "label": "Actor Sub",
+                  "props": {
+                    "required": true
+                  }
+                },
+                {
+                  "component": "Input",
+                  "field": "actor_roles",
+                  "label": "Actor Roles",
+                  "props": {
+                    "required": true
+                  }
+                },
+                {
+                  "component": "Input",
+                  "field": "action",
+                  "label": "Action",
+                  "props": {
+                    "required": true
+                  }
+                },
+                {
+                  "component": "Input",
+                  "field": "resource_type",
+                  "label": "Resource Type",
+                  "props": {
+                    "required": true
+                  }
+                }
+              ]
+            },
+            {
+              "title": "Additional Details",
+              "widgets": [
+                {
+                  "component": "Input",
+                  "field": "resource_id",
+                  "label": "Resource Id"
+                },
+                {
+                  "component": "Input",
+                  "field": "request_id",
+                  "label": "Request Id"
+                },
+                {
+                  "component": "Input",
+                  "field": "metadata_json",
+                  "label": "Metadata Json"
+                },
+                {
+                  "component": "Input",
+                  "field": "custom_data",
+                  "label": "Custom Data"
+                },
+                {
+                  "component": "DateTimePicker",
+                  "field": "deleted_at",
+                  "label": "Deleted At",
+                  "props": {
+                    "type": "datetime-local"
+                  }
+                }
+              ]
+            }
+          ],
+          "type": "grid"
+        },
+        "type": "form"
+      }
+    ],
+    "workflows": [
+      {
+        "failure": {
+          "toast": "Failed to create admin audit log"
+        },
+        "id": "admin_audit_log.create.current",
+        "method": "POST",
+        "path": "/api/admin-audit-log",
+        "success": {
+          "toast": "Admin Audit Log created"
+        },
+        "type": "api"
+      },
+      {
+        "id": "admin_audit_log.update.current",
+        "method": "PUT",
+        "path": "/api/admin-audit-log/{id}",
+        "success": {
+          "toast": "Admin Audit Log updated"
+        },
+        "type": "api"
+      },
+      {
+        "id": "admin_audit_log.delete.current",
+        "method": "DELETE",
+        "path": "/api/admin-audit-log/{id}",
+        "success": {
+          "toast": "Admin Audit Log deleted"
+        },
+        "type": "api"
+      }
+    ]
+  },
+  "validation_rules": {
+    "action": {
+      "customMessages": {
+        "minLength": "Action must be at least 1 characters.",
+        "required": "Action is required."
+      },
+      "message_keys": {
+        "minLength": "admin_audit_log.action.min_length",
+        "required": "admin_audit_log.action.required"
+      },
+      "minLength": 1,
+      "required": true
+    },
+    "actor_sub": {
+      "customMessages": {
+        "minLength": "Actor Sub must be at least 1 characters.",
+        "required": "Actor Sub is required."
+      },
+      "message_keys": {
+        "minLength": "admin_audit_log.actor_sub.min_length",
+        "required": "admin_audit_log.actor_sub.required"
+      },
+      "minLength": 1,
+      "required": true
+    },
+    "deleted_at": {
+      "customMessages": {
+        "format": "Enter a valid deleted at."
+      },
+      "format": "date-time",
+      "message_keys": {
+        "format": "admin_audit_log.deleted_at.format_date_time"
+      }
+    },
+    "resource_type": {
+      "customMessages": {
+        "minLength": "Resource Type must be at least 1 characters.",
+        "required": "Resource Type is required."
+      },
+      "message_keys": {
+        "minLength": "admin_audit_log.resource_type.min_length",
+        "required": "admin_audit_log.resource_type.required"
+      },
+      "minLength": 1,
+      "required": true
+    }
+  },
+  "workflows": {
+    "create": "admin_audit_log.create.current",
+    "delete": "admin_audit_log.delete.current",
+    "update": "admin_audit_log.update.current"
+  }
+}

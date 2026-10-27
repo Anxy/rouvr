@@ -1,0 +1,10 @@
+{
+  "version": "v1",
+  "cycle_id": "cycle-fixture-1",
+  "tenant_id": "tenant-fixture",
+  "triggering_evidence_ref": "evidence://attempt-fixture-1",
+  "reason": "Fixture step failed verification.",
+  "scope_comparison": "No new repository scope; same files.",
+  "policy_decision_ref": "policy-decision-fixture-1",
+  "decided_by": "aix-replan-agent"
+}

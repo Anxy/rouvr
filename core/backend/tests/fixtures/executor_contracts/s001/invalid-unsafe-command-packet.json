@@ -1,0 +1,4 @@
+{
+  "case": "validation command containing shell chain token must reject",
+  "expected_failure_class": "FAIL_VALIDATION_COMMAND_DENIED"
+}

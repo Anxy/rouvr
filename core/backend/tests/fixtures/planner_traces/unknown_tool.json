@@ -1,0 +1,12 @@
+{
+  "packet_id": "unknown-tool-trace",
+  "provider": "openrouter",
+  "model": "openrouter/z-ai/glm-5",
+  "attempts_used": 1,
+  "raw_output_text": "{\"steps\":[{\"tool\":\"invent_tool\",\"args\":{}}]}",
+  "parse_error": "PLANNER_INVALID_TOOL",
+  "normalized_steps": [],
+  "upstream_payload": {
+    "output_text": "{\"steps\":[{\"tool\":\"invent_tool\",\"args\":{}}]}"
+  }
+}

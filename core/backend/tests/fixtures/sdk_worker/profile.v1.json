@@ -1,0 +1,135 @@
+{
+  "contractVersion": "hyeve.aix/sdk-compilation-profile/v1",
+  "aixSourceRevision": "98720c9fb09aff51757bee139d0bed03d96523be",
+  "sdkApiVersion": "hyeve.agent-sdk/public-v2alpha1",
+  "sdkSchemaSha256": {
+    "agentProfile": "3d461c6172d5c01768f7e25853f980474c5e49ab0b830bd33f92e7748686b145",
+    "common": "9e288d4dfad4d9a9692ec91688ba8e71a75a2331b48a653b2697879c15b00e12",
+    "resolvedExecutionSpec": "c28b1040c15f72f5e5a4efe60649ce7e09b40c4e528e2ba2965ceae5d6ff8faf",
+    "runtimePolicy": "9c976ba40244c00e16ebac12d0b9f4ae0d66a4dce8e3a7901edecd99256fb5a1",
+    "taskSpec": "2a369f549862de63f8add48aebcbc13ab48339f54fc40a4f49ed83cb5cfcb369",
+    "toolPolicy": "447f5656bbf1e03b4800d98ea8e0c2f627ac5dce5966fa585e5f0161e1429fbf",
+    "typedDiagnostic": "f9d5af976fe8b2bcd599378a73406eeab6a5b8da253a8334bbad23f689b21a64"
+  },
+  "persona": {
+    "id": "developer",
+    "instructions": [
+      "Prefer capability-routed code discovery."
+    ],
+    "requestedCapabilities": [
+      "semantic-code-search"
+    ]
+  },
+  "assignment": {
+    "taskId": "fixture-task",
+    "attemptId": "attempt-1",
+    "correlationId": "test-run-1",
+    "objective": "Update the fixture implementation and run tests.",
+    "repository": {
+      "id": "fixture-repo",
+      "sourceRevision": "0123456789abcdef"
+    },
+    "constraints": {
+      "writePaths": [
+        "src/compiler.ts"
+      ],
+      "effects": [
+        "repository-read",
+        "repository-write",
+        "local-process"
+      ],
+      "network": "model-only"
+    },
+    "requiredCapabilities": [
+      "source-verification"
+    ],
+    "validation": [
+      "npm test"
+    ],
+    "integrationRefs": {
+      "aix.assignment": "assignment-1",
+      "aix.tenant": "tenant-1",
+      "aix.project": "project-1",
+      "aix.session": "session-1",
+      "aix.taskVersion": "7"
+    }
+  },
+  "policy": {
+    "policyId": "local-policy-v1",
+    "adapter": {
+      "id": "codex",
+      "version": "0.154.0"
+    },
+    "providers": [
+      {
+        "alias": "codeintel",
+        "providerId": "hyeve-codeintel",
+        "version": "1.0.0",
+        "capabilities": [
+          "semantic-code-search"
+        ],
+        "revisionBehavior": "exact"
+      },
+      {
+        "alias": "repository-search",
+        "providerId": "local-repository-search",
+        "version": "1.0.0",
+        "capabilities": [
+          "text-code-search"
+        ],
+        "revisionBehavior": "exact"
+      },
+      {
+        "alias": "repository-bytes",
+        "providerId": "local-repository-bytes",
+        "version": "1.0.0",
+        "capabilities": [
+          "source-verification"
+        ],
+        "revisionBehavior": "exact"
+      }
+    ],
+    "host": {
+      "workspaceRoot": "/tmp/aix-sdk-fixture",
+      "allowedWritePaths": [
+        "src",
+        "test"
+      ],
+      "allowedEffects": [
+        "repository-read",
+        "repository-write",
+        "local-process"
+      ],
+      "network": "model-only"
+    },
+    "budgets": {
+      "wallTimeMs": 300000,
+      "maxTurns": 1,
+      "maxToolCalls": 40
+    },
+    "tools": {
+      "codeDiscovery": {
+        "primary": {
+          "provider": "codeintel",
+          "capability": "semantic-code-search",
+          "requireSourceRevisionMatch": true
+        },
+        "fallback": {
+          "provider": "repository-search",
+          "allowedReasons": [
+            "provider_unavailable",
+            "unsupported_query"
+          ],
+          "capability": "text-code-search"
+        },
+        "verification": {
+          "provider": "repository-bytes",
+          "capability": "source-verification"
+        }
+      }
+    }
+  },
+  "repositoryInstructions": [
+    "Follow repository policy."
+  ]
+}

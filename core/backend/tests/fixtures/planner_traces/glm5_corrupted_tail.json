@@ -1,0 +1,12 @@
+{
+  "packet_id": "fae2ea3b-193e-539d-9b1b-c44e24901bce",
+  "provider": "openrouter",
+  "model": "openrouter/z-ai/glm-5",
+  "attempts_used": 1,
+  "raw_output_text": "{\"steps\":[{\"tool\":\"read_file\",\"args\":{\"relative_path\":\"services/hyeve-codeintel-service/backend/services/codeintel_query_service.py\"}},{\"tool\":\"edit_file\",\"args\":{\"relative_path\":\"services/hyeve-codeintel-service/backend/services/codeintel_query_service.py\",\"search_replace_blocks\":[]}},\"tool\",\"args\"]}",
+  "parse_error": "PLANNER_INVALID_RESPONSE unsupported_step_string='tool'",
+  "normalized_steps": [],
+  "upstream_payload": {
+    "output_text": "{\"steps\":[{\"tool\":\"read_file\",\"args\":{\"relative_path\":\"services/hyeve-codeintel-service/backend/services/codeintel_query_service.py\"}},{\"tool\":\"edit_file\",\"args\":{\"relative_path\":\"services/hyeve-codeintel-service/backend/services/codeintel_query_service.py\",\"search_replace_blocks\":[]}},\"tool\",\"args\"]}"
+  }
+}

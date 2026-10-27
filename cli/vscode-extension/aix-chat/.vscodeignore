@@ -1,0 +1,9 @@
+src/**
+**/*.ts
+**/*.mts
+**/*.map
+compile.mjs
+tsconfig.json
+.gitignore
+.vscode/**
+node_modules/**

@@ -1,0 +1,486 @@
+{
+  "http_hints": {},
+  "messages": {},
+  "metadata": {
+    "context": {
+      "entity": "aix_escalation_policies",
+      "service": "aix_escalation_policies_service",
+      "version": "v1"
+    },
+    "schema_key": "edprime.aix_escalation_policies.current",
+    "style_layers": [
+      {
+        "id": "core/base",
+        "priority": 0
+      }
+    ],
+    "style_pack": {
+      "id": "core/aix_escalation_policies",
+      "layer": "base",
+      "tailwind": {
+        "theme": {
+          "colors": {
+            "accent": {
+              "500": "#f97316"
+            },
+            "primary": {
+              "500": "#2563eb",
+              "700": "#1d4ed8"
+            }
+          }
+        }
+      }
+    },
+    "table_name": "aix_escalation_policies",
+    "ui_metadata": {
+      "dataSources": [
+        {
+          "id": "default",
+          "schemaKey": "edprime.aix_escalation_policies.current",
+          "type": "pack"
+        },
+        {
+          "id": "auditTrail",
+          "path": "/api/aix-escalation-policies/audit",
+          "type": "rest"
+        }
+      ],
+      "entity": {
+        "icon": "Squares2X2",
+        "primaryKey": [
+          "id"
+        ],
+        "table": "aix_escalation_policies",
+        "title": "Aix Escalation Policies"
+      },
+      "navigation": {
+        "breadcrumbs": [
+          "home",
+          "aix-escalation-policies"
+        ],
+        "icon": "Squares2X2",
+        "primaryRoute": "/aix-escalation-policies"
+      },
+      "overrides": {
+        "hooks": [
+          "useAixEscalationPoliciesFilters"
+        ],
+        "provider": "AixEscalationPoliciesProvider"
+      },
+      "version": "1.0.0",
+      "views": [
+        {
+          "actions": [
+            {
+              "id": "create",
+              "intent": "primary",
+              "workflow": "aix_escalation_policies.create.current"
+            }
+          ],
+          "dataSource": "default",
+          "id": "aix_escalation_policies.list",
+          "label": "Aix Escalation Policies",
+          "layout": {
+            "columns": [
+              {
+                "component": "Field",
+                "field": "project_id",
+                "label": "Project Id",
+                "sortable": true,
+                "width": "1fr"
+              },
+              {
+                "component": "Field",
+                "field": "policy_key",
+                "label": "Policy Key",
+                "sortable": true,
+                "width": "1fr"
+              },
+              {
+                "component": "Field",
+                "field": "task_type",
+                "label": "Task Type",
+                "sortable": true,
+                "width": "1fr"
+              },
+              {
+                "component": "Field",
+                "field": "risk_level",
+                "label": "Risk Level",
+                "sortable": true,
+                "width": "1fr"
+              }
+            ],
+            "type": "table"
+          },
+          "navigation": {
+            "icon": "Squares2X2",
+            "label": "Aix Escalation Policies",
+            "primaryRoute": "/aix-escalation-policies"
+          },
+          "type": "list"
+        },
+        {
+          "actions": [
+            {
+              "id": "edit",
+              "route": "/aix-escalation-policies/{id}/edit",
+              "type": "link"
+            },
+            {
+              "id": "delete",
+              "intent": "danger",
+              "workflow": "aix_escalation_policies.delete.current"
+            }
+          ],
+          "dataSource": "default",
+          "id": "aix_escalation_policies.detail",
+          "layout": {
+            "regions": [
+              {
+                "id": "summary",
+                "widgets": [
+                  {
+                    "component": "Field",
+                    "field": "project_id",
+                    "label": "Project Id"
+                  },
+                  {
+                    "component": "Field",
+                    "field": "policy_key",
+                    "label": "Policy Key"
+                  },
+                  {
+                    "component": "Field",
+                    "field": "task_type",
+                    "label": "Task Type"
+                  }
+                ]
+              },
+              {
+                "id": "details",
+                "widgets": [
+                  {
+                    "component": "Field",
+                    "field": "risk_level",
+                    "label": "Risk Level"
+                  },
+                  {
+                    "component": "Field",
+                    "field": "retry_threshold",
+                    "label": "Retry Threshold"
+                  },
+                  {
+                    "component": "Field",
+                    "field": "escalate_to_provider",
+                    "label": "Escalate To Provider"
+                  },
+                  {
+                    "component": "Field",
+                    "field": "block_on_provider_unhealthy",
+                    "label": "Block On Provider Unhealthy"
+                  },
+                  {
+                    "component": "Field",
+                    "field": "status",
+                    "label": "Status"
+                  },
+                  {
+                    "component": "Field",
+                    "field": "metadata_json",
+                    "label": "Metadata Json"
+                  },
+                  {
+                    "component": "Field",
+                    "field": "deleted_at",
+                    "label": "Deleted At"
+                  }
+                ]
+              }
+            ],
+            "type": "split"
+          },
+          "type": "detail"
+        },
+        {
+          "actions": [
+            {
+              "id": "save",
+              "intent": "primary",
+              "type": "submit",
+              "workflow": "aix_escalation_policies.update.current"
+            },
+            {
+              "id": "cancel",
+              "route": "/aix-escalation-policies",
+              "type": "link"
+            }
+          ],
+          "dataSource": "default",
+          "id": "aix_escalation_policies.form",
+          "layout": {
+            "columns": 2,
+            "sections": [
+              {
+                "title": "Primary Information",
+                "widgets": [
+                  {
+                    "component": "Input",
+                    "field": "project_id",
+                    "label": "Project Id"
+                  },
+                  {
+                    "component": "Input",
+                    "field": "policy_key",
+                    "label": "Policy Key",
+                    "props": {
+                      "required": true
+                    }
+                  },
+                  {
+                    "component": "Input",
+                    "field": "task_type",
+                    "label": "Task Type",
+                    "props": {
+                      "required": true
+                    }
+                  },
+                  {
+                    "component": "Input",
+                    "field": "risk_level",
+                    "label": "Risk Level",
+                    "props": {
+                      "required": true
+                    }
+                  },
+                  {
+                    "component": "Input",
+                    "field": "retry_threshold",
+                    "label": "Retry Threshold",
+                    "props": {
+                      "required": true
+                    }
+                  }
+                ]
+              },
+              {
+                "title": "Additional Details",
+                "widgets": [
+                  {
+                    "component": "Input",
+                    "field": "escalate_to_provider",
+                    "label": "Escalate To Provider",
+                    "props": {
+                      "required": true
+                    }
+                  },
+                  {
+                    "component": "Checkbox",
+                    "field": "block_on_provider_unhealthy",
+                    "label": "Block On Provider Unhealthy",
+                    "props": {
+                      "required": true
+                    }
+                  },
+                  {
+                    "component": "Input",
+                    "field": "status",
+                    "label": "Status",
+                    "props": {
+                      "required": true
+                    }
+                  },
+                  {
+                    "component": "Input",
+                    "field": "metadata_json",
+                    "label": "Metadata Json",
+                    "props": {
+                      "required": true
+                    }
+                  },
+                  {
+                    "component": "DateTimePicker",
+                    "field": "deleted_at",
+                    "label": "Deleted At",
+                    "props": {
+                      "type": "datetime-local"
+                    }
+                  }
+                ]
+              }
+            ],
+            "type": "grid"
+          },
+          "type": "form"
+        }
+      ],
+      "workflows": [
+        {
+          "failure": {
+            "toast": "Failed to create aix escalation policies"
+          },
+          "id": "aix_escalation_policies.create.current",
+          "method": "POST",
+          "path": "/api/aix-escalation-policies",
+          "success": {
+            "toast": "Aix Escalation Policies created"
+          },
+          "type": "api"
+        },
+        {
+          "id": "aix_escalation_policies.update.current",
+          "method": "PUT",
+          "path": "/api/aix-escalation-policies/{id}",
+          "success": {
+            "toast": "Aix Escalation Policies updated"
+          },
+          "type": "api"
+        },
+        {
+          "id": "aix_escalation_policies.delete.current",
+          "method": "DELETE",
+          "path": "/api/aix-escalation-policies/{id}",
+          "success": {
+            "toast": "Aix Escalation Policies deleted"
+          },
+          "type": "api"
+        }
+      ]
+    }
+  },
+  "schema": {
+    "additionalProperties": false,
+    "properties": {
+      "block_on_provider_unhealthy": {
+        "title": "Block On Provider Unhealthy",
+        "type": "boolean"
+      },
+      "deleted_at": {
+        "format": "date-time",
+        "title": "Deleted At",
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "escalate_to_provider": {
+        "title": "Escalate To Provider",
+        "type": "string"
+      },
+      "metadata_json": {
+        "title": "Metadata Json",
+        "type": "object"
+      },
+      "policy_key": {
+        "title": "Policy Key",
+        "type": "string"
+      },
+      "project_id": {
+        "title": "Project Id",
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "retry_threshold": {
+        "title": "Retry Threshold",
+        "type": "integer"
+      },
+      "risk_level": {
+        "title": "Risk Level",
+        "type": "string"
+      },
+      "status": {
+        "title": "Status",
+        "type": "string"
+      },
+      "task_type": {
+        "title": "Task Type",
+        "type": "string"
+      }
+    },
+    "type": "object"
+  },
+  "validation_rules": {
+    "_shared": {
+      "deleted_at": {
+        "customMessages": {
+          "format": "Enter a valid deleted at."
+        },
+        "format": "date-time",
+        "message_keys": {
+          "format": "aix_escalation_policies.deleted_at.format_date_time"
+        }
+      },
+      "escalate_to_provider": {
+        "customMessages": {
+          "minLength": "Escalate To Provider must be at least 1 characters.",
+          "required": "Escalate To Provider is required."
+        },
+        "message_keys": {
+          "minLength": "aix_escalation_policies.escalate_to_provider.min_length",
+          "required": "aix_escalation_policies.escalate_to_provider.required"
+        },
+        "minLength": 1,
+        "required": true
+      },
+      "policy_key": {
+        "customMessages": {
+          "minLength": "Policy Key must be at least 1 characters.",
+          "required": "Policy Key is required."
+        },
+        "message_keys": {
+          "minLength": "aix_escalation_policies.policy_key.min_length",
+          "required": "aix_escalation_policies.policy_key.required"
+        },
+        "minLength": 1,
+        "required": true
+      },
+      "risk_level": {
+        "customMessages": {
+          "minLength": "Risk Level must be at least 1 characters.",
+          "required": "Risk Level is required."
+        },
+        "message_keys": {
+          "minLength": "aix_escalation_policies.risk_level.min_length",
+          "required": "aix_escalation_policies.risk_level.required"
+        },
+        "minLength": 1,
+        "required": true
+      },
+      "task_type": {
+        "customMessages": {
+          "minLength": "Task Type must be at least 1 characters.",
+          "required": "Task Type is required."
+        },
+        "message_keys": {
+          "minLength": "aix_escalation_policies.task_type.min_length",
+          "required": "aix_escalation_policies.task_type.required"
+        },
+        "minLength": 1,
+        "required": true
+      }
+    },
+    "create": {
+      "required_fields": [
+        "policy_key",
+        "task_type",
+        "risk_level",
+        "retry_threshold",
+        "escalate_to_provider",
+        "block_on_provider_unhealthy",
+        "status",
+        "metadata_json"
+      ]
+    },
+    "update": {
+      "required_fields": []
+    }
+  },
+  "version": "v1",
+  "workflows": {
+    "create": "aix_escalation_policies.create.current",
+    "delete": "aix_escalation_policies.delete.current",
+    "update": "aix_escalation_policies.update.current"
+  }
+}

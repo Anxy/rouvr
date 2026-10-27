@@ -1,0 +1,15 @@
+{
+  "manifest_id": "OC-VERIFIER-V1",
+  "version": "v1",
+  "role": "verifier",
+  "purpose": "Independent verification; cannot rewrite result or accept WH task",
+  "autonomy_cap": "bounded",
+  "allowed_gateway": "hyeve_integration",
+  "forbidden": [
+    "direct_provider_route",
+    "auto_accept",
+    "workhub_lifecycle_mutation",
+    "recursive_spawn"
+  ],
+  "programme": "AIX-E2E-CYCLE-001"
+}

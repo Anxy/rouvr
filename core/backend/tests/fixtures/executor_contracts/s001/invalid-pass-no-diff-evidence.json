@@ -1,0 +1,4 @@
+{
+  "case": "PASS evidence with no diff_path and diff_hash must reject",
+  "expected_failure_class": "FAIL_EVIDENCE_INVALID"
+}

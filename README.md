@@ -1,6 +1,8 @@
 # Rouvr
 
-**A reliable autonomous colleague.** Delegate work, trust it to follow through, and supervise less over time while staying in control.
+**Rouvr. Make it happen.** Your pack, your ambition.
+
+Rouvr is a reliable autonomous colleague: *think it through, agree the plan, get it moving*, with you in control. Website: [rouvr.ai](https://rouvr.ai).
 
 [![CI](https://github.com/Anxy/rouvr/actions/workflows/ci.yml/badge.svg)](https://github.com/Anxy/rouvr/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
@@ -101,7 +103,9 @@ from backend.rouvr_models import get_provider
 print(get_provider().chat([{"role": "user", "content": "Compile this instruction into a contract: ..."}]))
 ```
 
-## Ecosystem
+## Ecosystem: powered by Hyeve
+
+As the site puts it, Rouvr draws its specialists "from Hyeve, the ecosystem of agents, models, services and connectors beneath it", and stays *model agnostic*.
 
 Rouvr is built by [eBizneeds](https://www.ebizneeds.com) (bootstrapped; India and Australia) on its **Hyeve** platform. In production Rouvr relies on these Hyeve services:
 
@@ -143,6 +147,8 @@ Other limitations:
 - This is dev software. The compose stack isn't hardened.
 
 ## Roadmap
+
+From the website, still **planned** here (not in this repo yet): a *pack of specialists* working in parallel (research, create, build, verify, deliver, operate), a *shared understanding* you can inspect and revise, and actions *through your connected systems*.
 
 Planned, not yet done: see [docs/roadmap.md](docs/roadmap.md). Highlights: full stack verified under `docker compose`, the demo against the live Meta Model API, Temporal-backed demo with real worker kill, real mail readback, auth and leases in WorkHub-lite.
 

@@ -1,5 +1,7 @@
 # Concepts
 
+Rouvr's flow (from [rouvr.ai](https://rouvr.ai)): **Think together → Agree what happens → Put your pack to work**, and a delivery journey of *Agree the goal → Do the work → Check and repair → Deliver → Keep it running*.
+
 ## Contract
 A messy instruction is compiled (by a model, or the stub) into a typed contract: steps, success criteria, side effects, stakeholders, escalation and expiry. The ledger stores it with a content hash; the owner approves that exact hash once, as a bounded autonomy grant.
 

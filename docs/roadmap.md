@@ -18,3 +18,9 @@ Everything below is **planned**, not done.
 ## Later
 - [ ] Business-operations task packs beyond software delivery
 - [ ] Hardened compose / deployment
+
+## Website vision (rouvr.ai), not yet in this repo
+- [ ] "A pack of specialists, chosen for the job": parallel researchers, writers, developers and reviewers under one supervising colleague
+- [ ] "A colleague who understands your world": a shared understanding you can inspect and revise
+- [ ] "Your tools, put to work": authorised actions through connected systems with checked receipts
+- [ ] "A clear view of what needs you": a judgement / in-progress / waiting / ready-for-review view

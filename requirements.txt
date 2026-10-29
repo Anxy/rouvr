@@ -1,5 +1,6 @@
 asyncpg==0.31.0
 bleach
+cryptography==50.0.2
 faker
 fastapi
 haystack-ai==2.25.1

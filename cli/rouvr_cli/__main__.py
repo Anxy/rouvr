@@ -14,10 +14,17 @@ def main(argv=None) -> int:
     sub.add_parser("tasks")
     s = sub.add_parser("show"); s.add_argument("id", type=int)
     sub.add_parser("demo")
+    st = sub.add_parser("start"); st.add_argument("--task-number", type=int, required=True)
+    st.add_argument("--requested-by", required=True)
     a = ap.parse_args(argv)
     if a.cmd == "demo":
         from demo.morning_report import run
         print(run(a.ledger)); return 0
+    if a.cmd == "start":
+        import asyncio
+        from rouvr.starter import run_start
+        print(asyncio.run(run_start(task_number=a.task_number, requested_by=a.requested_by)))
+        return 0
     import httpx
     c = httpx.Client(base_url=a.ledger, timeout=10)
     r = c.get("/v1/tasks") if a.cmd == "tasks" else c.get(f"/v1/tasks/{a.id}")

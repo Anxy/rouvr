@@ -1,0 +1,706 @@
+{
+  "version": 1,
+  "updated": "2026-10-29",
+  "machine": {
+    "states": [
+      "queued",
+      "running",
+      "needs_review",
+      "closeout",
+      "done",
+      "blocked"
+    ],
+    "transitions": [
+      {
+        "from": "queued",
+        "to": "running",
+        "by": "worker",
+        "requires": [
+          "pre_task"
+        ]
+      },
+      {
+        "from": "running",
+        "to": "needs_review",
+        "by": "worker",
+        "requires": [
+          "tests",
+          "evidence"
+        ]
+      },
+      {
+        "from": "needs_review",
+        "to": "closeout",
+        "by": "supervisor",
+        "requires": [
+          "verification"
+        ],
+        "verdict": "approved"
+      },
+      {
+        "from": "needs_review",
+        "to": "running",
+        "by": "supervisor",
+        "requires": [],
+        "verdict": "change_required"
+      },
+      {
+        "from": "closeout",
+        "to": "done",
+        "by": "supervisor",
+        "requires": [
+          "closeout"
+        ]
+      },
+      {
+        "from": "blocked",
+        "to": "queued",
+        "by": "either",
+        "requires": [
+          "note"
+        ]
+      },
+      {
+        "from": "*",
+        "to": "blocked",
+        "by": "either",
+        "requires": [
+          "note"
+        ]
+      }
+    ]
+  },
+  "sprints": [
+    {
+      "id": "S001",
+      "file": "docs/tasks/rouvr/S001-bootstrap-hygiene-base.md",
+      "state": "done",
+      "worker": "muse-go",
+      "supervisor": "muse-go-review",
+      "pre_task": "TaskKinds PLANNING+IMPLEMENTATION; scope scripts/, .github/, ledger/, rouvr/workhub/; hygiene negative probe planned",
+      "tests": "126 passed final (65 at sprint); ledger contract suite green",
+      "evidence": "hygiene clean; gitleaks no leaks; docs/release-notes/r1-history-hygiene.md",
+      "review": {
+        "verdict": "approve",
+        "at": "2026-10-29",
+        "by": "muse-go-review",
+        "ref": "sprint sheet closeout"
+      },
+      "verification": {
+        "at": "2026-10-29",
+        "by": "muse-go-review",
+        "ref": "pytest + hygiene full re-run"
+      },
+      "closeout": {
+        "at": "2026-10-29",
+        "by": "muse-go-review",
+        "ref": "docs/tasks/rouvr/S001-bootstrap-hygiene-base.md \u00a711"
+      },
+      "history": [
+        {
+          "state": "queued",
+          "at": "2026-10-29",
+          "by": "worker",
+          "ref": "implementation plan steps 1,2,5"
+        },
+        {
+          "state": "running",
+          "at": "2026-10-29",
+          "by": "worker",
+          "ref": "pre_task"
+        },
+        {
+          "state": "needs_review",
+          "at": "2026-10-29",
+          "by": "worker",
+          "ref": "tests"
+        },
+        {
+          "state": "closeout",
+          "at": "2026-10-29",
+          "by": "supervisor",
+          "ref": "review+verification"
+        },
+        {
+          "state": "done",
+          "at": "2026-10-29",
+          "by": "supervisor",
+          "ref": "closeout"
+        }
+      ],
+      "cycles": [
+        {
+          "round": 1,
+          "verdict": "approved",
+          "at": "2026-10-29",
+          "by": "muse-go-review",
+          "comment": "",
+          "ref": "review"
+        }
+      ],
+      "depends_on": []
+    },
+    {
+      "id": "S002",
+      "file": "docs/tasks/rouvr/S002-spike-staging.md",
+      "state": "done",
+      "worker": "muse-go",
+      "supervisor": "muse-go-review",
+      "pre_task": "TaskKinds VERIFICATION+IMPLEMENTATION; scope scripts/*spike*, scripts/workhub_readbacks.sh, docs/workhub-fixes.md",
+      "tests": "spike RESUME; readbacks exit 0; 8 stage-shape tests",
+      "evidence": "docs/spikes/muse-resume.md; docs/workhub-fixes.md; stage task #100 probes",
+      "review": {
+        "verdict": "approve",
+        "at": "2026-10-29",
+        "by": "muse-go-review",
+        "ref": "sprint sheet closeout"
+      },
+      "verification": {
+        "at": "2026-10-29",
+        "by": "muse-go-review",
+        "ref": "readbacks re-run"
+      },
+      "closeout": {
+        "at": "2026-10-29",
+        "by": "muse-go-review",
+        "ref": "docs/tasks/rouvr/S002-spike-staging.md \u00a711"
+      },
+      "history": [
+        {
+          "state": "queued",
+          "at": "2026-10-29",
+          "by": "worker",
+          "ref": "implementation plan steps 3,4"
+        },
+        {
+          "state": "running",
+          "at": "2026-10-29",
+          "by": "worker",
+          "ref": "pre_task"
+        },
+        {
+          "state": "needs_review",
+          "at": "2026-10-29",
+          "by": "worker",
+          "ref": "tests"
+        },
+        {
+          "state": "closeout",
+          "at": "2026-10-29",
+          "by": "supervisor",
+          "ref": "review+verification"
+        },
+        {
+          "state": "done",
+          "at": "2026-10-29",
+          "by": "supervisor",
+          "ref": "closeout"
+        }
+      ],
+      "cycles": [
+        {
+          "round": 1,
+          "verdict": "approved",
+          "at": "2026-10-29",
+          "by": "muse-go-review",
+          "comment": "",
+          "ref": "review"
+        }
+      ],
+      "depends_on": []
+    },
+    {
+      "id": "S003",
+      "file": "docs/tasks/rouvr/S003-workflow-ownership.md",
+      "state": "done",
+      "worker": "muse-go",
+      "supervisor": "muse-go-review",
+      "pre_task": "TaskKind IMPLEMENTATION; scope rouvr/workflows.py, starter.py, api.py, lease.py, host.py, cli/",
+      "tests": "2 workflow + 5 ownership tests; double-start probe (id,True)\u2192(id,False)",
+      "evidence": "tests/test_workflow.py; tests/test_r5_ownership.py",
+      "review": {
+        "verdict": "approve",
+        "at": "2026-10-29",
+        "by": "muse-go-review",
+        "ref": "sprint sheet closeout"
+      },
+      "verification": {
+        "at": "2026-10-29",
+        "by": "muse-go-review",
+        "ref": "pytest re-run"
+      },
+      "closeout": {
+        "at": "2026-10-29",
+        "by": "muse-go-review",
+        "ref": "docs/tasks/rouvr/S003-workflow-ownership.md \u00a711"
+      },
+      "history": [
+        {
+          "state": "queued",
+          "at": "2026-10-29",
+          "by": "worker",
+          "ref": "implementation plan steps 6,7"
+        },
+        {
+          "state": "running",
+          "at": "2026-10-29",
+          "by": "worker",
+          "ref": "pre_task"
+        },
+        {
+          "state": "needs_review",
+          "at": "2026-10-29",
+          "by": "worker",
+          "ref": "tests"
+        },
+        {
+          "state": "closeout",
+          "at": "2026-10-29",
+          "by": "supervisor",
+          "ref": "review+verification"
+        },
+        {
+          "state": "done",
+          "at": "2026-10-29",
+          "by": "supervisor",
+          "ref": "closeout"
+        }
+      ],
+      "cycles": [
+        {
+          "round": 1,
+          "verdict": "approved",
+          "at": "2026-10-29",
+          "by": "muse-go-review",
+          "comment": "",
+          "ref": "review"
+        }
+      ],
+      "depends_on": []
+    },
+    {
+      "id": "S004",
+      "file": "docs/tasks/rouvr/S004-build-leg.md",
+      "state": "done",
+      "worker": "muse-go",
+      "supervisor": "muse-go-review",
+      "pre_task": "TaskKind IMPLEMENTATION; scope rouvr/personas.py, execspec.py, muse.py, gitops.py",
+      "tests": "unit suites green; live launcher-ok; PR reuse probe",
+      "evidence": "tests/test_unit.py; tests/test_api_personas.py; live probe output",
+      "review": {
+        "verdict": "approve",
+        "at": "2026-10-29",
+        "by": "muse-go-review",
+        "ref": "sprint sheet closeout"
+      },
+      "verification": {
+        "at": "2026-10-29",
+        "by": "muse-go-review",
+        "ref": "pytest re-run"
+      },
+      "closeout": {
+        "at": "2026-10-29",
+        "by": "muse-go-review",
+        "ref": "docs/tasks/rouvr/S004-build-leg.md \u00a711"
+      },
+      "history": [
+        {
+          "state": "queued",
+          "at": "2026-10-29",
+          "by": "worker",
+          "ref": "implementation plan step 8"
+        },
+        {
+          "state": "running",
+          "at": "2026-10-29",
+          "by": "worker",
+          "ref": "pre_task"
+        },
+        {
+          "state": "needs_review",
+          "at": "2026-10-29",
+          "by": "worker",
+          "ref": "tests"
+        },
+        {
+          "state": "closeout",
+          "at": "2026-10-29",
+          "by": "supervisor",
+          "ref": "review+verification"
+        },
+        {
+          "state": "done",
+          "at": "2026-10-29",
+          "by": "supervisor",
+          "ref": "closeout"
+        }
+      ],
+      "cycles": [
+        {
+          "round": 1,
+          "verdict": "approved",
+          "at": "2026-10-29",
+          "by": "muse-go-review",
+          "comment": "",
+          "ref": "review"
+        }
+      ],
+      "depends_on": []
+    },
+    {
+      "id": "S005",
+      "file": "docs/tasks/rouvr/S005-gate-tests-runner.md",
+      "state": "done",
+      "worker": "muse-go",
+      "supervisor": "muse-go-review",
+      "pre_task": "TaskKind IMPLEMENTATION; scope rouvr/gate.py, hiddentests.py, testrunner.py, cheatscan.py",
+      "tests": "8 gate + 8 hidden/runner/scan tests; container probe passed=True rc=0",
+      "evidence": "tests/test_gate.py; tests/test_r8_hidden.py; testrunner.Dockerfile",
+      "review": {
+        "verdict": "approve",
+        "at": "2026-10-29",
+        "by": "muse-go-review",
+        "ref": "sprint sheet closeout"
+      },
+      "verification": {
+        "at": "2026-10-29",
+        "by": "muse-go-review",
+        "ref": "pytest re-run"
+      },
+      "closeout": {
+        "at": "2026-10-29",
+        "by": "muse-go-review",
+        "ref": "docs/tasks/rouvr/S005-gate-tests-runner.md \u00a711"
+      },
+      "history": [
+        {
+          "state": "queued",
+          "at": "2026-10-29",
+          "by": "worker",
+          "ref": "implementation plan steps 9,10"
+        },
+        {
+          "state": "running",
+          "at": "2026-10-29",
+          "by": "worker",
+          "ref": "pre_task"
+        },
+        {
+          "state": "needs_review",
+          "at": "2026-10-29",
+          "by": "worker",
+          "ref": "tests"
+        },
+        {
+          "state": "closeout",
+          "at": "2026-10-29",
+          "by": "supervisor",
+          "ref": "review+verification"
+        },
+        {
+          "state": "done",
+          "at": "2026-10-29",
+          "by": "supervisor",
+          "ref": "closeout"
+        }
+      ],
+      "cycles": [
+        {
+          "round": 1,
+          "verdict": "approved",
+          "at": "2026-10-29",
+          "by": "muse-go-review",
+          "comment": "",
+          "ref": "review"
+        }
+      ],
+      "depends_on": []
+    },
+    {
+      "id": "S006",
+      "file": "docs/tasks/rouvr/S006-verifier-close.md",
+      "state": "done",
+      "worker": "muse-go",
+      "supervisor": "muse-go-review",
+      "pre_task": "TaskKind IMPLEMENTATION; scope rouvr/activities.py (verify/close), gitops.py, muse.py",
+      "tests": "7 R9 tests (CI, verdict, prompt, walker x3, receipt)",
+      "evidence": "tests/test_r9_close.py",
+      "review": {
+        "verdict": "approve",
+        "at": "2026-10-29",
+        "by": "muse-go-review",
+        "ref": "sprint sheet closeout"
+      },
+      "verification": {
+        "at": "2026-10-29",
+        "by": "muse-go-review",
+        "ref": "pytest re-run"
+      },
+      "closeout": {
+        "at": "2026-10-29",
+        "by": "muse-go-review",
+        "ref": "docs/tasks/rouvr/S006-verifier-close.md \u00a711"
+      },
+      "history": [
+        {
+          "state": "queued",
+          "at": "2026-10-29",
+          "by": "worker",
+          "ref": "implementation plan step 11"
+        },
+        {
+          "state": "running",
+          "at": "2026-10-29",
+          "by": "worker",
+          "ref": "pre_task"
+        },
+        {
+          "state": "needs_review",
+          "at": "2026-10-29",
+          "by": "worker",
+          "ref": "tests"
+        },
+        {
+          "state": "closeout",
+          "at": "2026-10-29",
+          "by": "supervisor",
+          "ref": "review+verification"
+        },
+        {
+          "state": "done",
+          "at": "2026-10-29",
+          "by": "supervisor",
+          "ref": "closeout"
+        }
+      ],
+      "cycles": [
+        {
+          "round": 1,
+          "verdict": "approved",
+          "at": "2026-10-29",
+          "by": "muse-go-review",
+          "comment": "",
+          "ref": "review"
+        }
+      ],
+      "depends_on": []
+    },
+    {
+      "id": "S007",
+      "file": "docs/tasks/rouvr/S007-rehearsal-a2.md",
+      "state": "done",
+      "worker": "muse-go",
+      "supervisor": "muse-go-review",
+      "pre_task": "TaskKinds VERIFICATION+PLANNING; scope rouvr/worker.py, scripts/r10_rehearsal.sh, docs/r10-runs/",
+      "tests": "rehearsal PASS; 126 passed + 2 skipped; hygiene clean (1961); gitleaks clean",
+      "evidence": "docs/r10-runs/20261029T175518/ (PR #3, receipt dd4cca06\u2026)",
+      "review": {
+        "verdict": "approve",
+        "at": "2026-10-29",
+        "by": "muse-go-review",
+        "ref": "sprint sheet closeout"
+      },
+      "verification": {
+        "at": "2026-10-29",
+        "by": "muse-go-review",
+        "ref": "workflow result + history dump re-check"
+      },
+      "closeout": {
+        "at": "2026-10-29",
+        "by": "muse-go-review",
+        "ref": "docs/tasks/rouvr/S007-rehearsal-a2.md \u00a711"
+      },
+      "history": [
+        {
+          "state": "queued",
+          "at": "2026-10-29",
+          "by": "worker",
+          "ref": "implementation plan step 12"
+        },
+        {
+          "state": "running",
+          "at": "2026-10-29",
+          "by": "worker",
+          "ref": "pre_task"
+        },
+        {
+          "state": "needs_review",
+          "at": "2026-10-29",
+          "by": "worker",
+          "ref": "tests"
+        },
+        {
+          "state": "closeout",
+          "at": "2026-10-29",
+          "by": "supervisor",
+          "ref": "review+verification"
+        },
+        {
+          "state": "done",
+          "at": "2026-10-29",
+          "by": "supervisor",
+          "ref": "closeout"
+        }
+      ],
+      "cycles": [
+        {
+          "round": 1,
+          "verdict": "approved",
+          "at": "2026-10-29",
+          "by": "muse-go-review",
+          "comment": "",
+          "ref": "review"
+        }
+      ],
+      "depends_on": []
+    },
+    {
+      "id": "S008",
+      "file": "docs/tasks/rouvr/S008-stage-promotion.md",
+      "state": "blocked",
+      "worker": null,
+      "supervisor": null,
+      "note": "Probed 29-Oct: grant impossible from this host (tenant mismatch; service tokens 401 on auth admin). Human runbook: docs/a2-gates.md human steps 1-2.",
+      "history": [
+        {
+          "state": "blocked",
+          "at": "2026-10-29",
+          "by": "supervisor",
+          "ref": "docs/a2-gates.md"
+        },
+        {
+          "state": "blocked",
+          "at": "2026-10-29",
+          "by": "supervisor",
+          "ref": "block"
+        }
+      ],
+      "cycles": [],
+      "depends_on": []
+    },
+    {
+      "id": "S009",
+      "file": "docs/tasks/rouvr/S009-aix-backport.md",
+      "state": "queued",
+      "worker": null,
+      "supervisor": null,
+      "history": [
+        {
+          "state": "queued",
+          "at": "2026-10-29",
+          "by": "worker",
+          "ref": "docs/a2-gates.md gate 4; depends on S008 done"
+        }
+      ],
+      "cycles": [],
+      "depends_on": [
+        "S008"
+      ]
+    },
+    {
+      "id": "S010",
+      "file": "docs/tasks/rouvr/S010-p2-receipts.md",
+      "state": "done",
+      "worker": "coder-1",
+      "supervisor": null,
+      "history": [
+        {
+          "state": "queued",
+          "at": "2026-10-29",
+          "by": "worker",
+          "ref": "docs/ROUVR-MASTER-SPRINT.md \u00a76 P2"
+        },
+        {
+          "state": "running",
+          "at": "2026-10-29",
+          "by": "worker",
+          "ref": "claim"
+        },
+        {
+          "state": "blocked",
+          "at": "2026-10-29",
+          "by": "supervisor",
+          "ref": "block"
+        },
+        {
+          "state": "queued",
+          "at": "2026-10-29",
+          "by": "supervisor",
+          "ref": "resume"
+        },
+        {
+          "state": "running",
+          "at": "2026-10-29",
+          "by": "worker",
+          "ref": "claim"
+        },
+        {
+          "state": "needs_review",
+          "at": "2026-10-29",
+          "by": "worker",
+          "ref": "tests"
+        },
+        {
+          "state": "running",
+          "at": "2026-10-29",
+          "by": "supervisor",
+          "ref": "review"
+        },
+        {
+          "state": "needs_review",
+          "at": "2026-10-29",
+          "by": "worker",
+          "ref": "tests"
+        },
+        {
+          "state": "closeout",
+          "at": "2026-10-29",
+          "by": "supervisor",
+          "ref": "review"
+        },
+        {
+          "state": "done",
+          "at": "2026-10-29",
+          "by": "supervisor",
+          "ref": "closeout"
+        }
+      ],
+      "cycles": [
+        {
+          "round": 1,
+          "verdict": "change_required",
+          "at": "2026-10-29",
+          "by": "supervisor-1",
+          "comment": "1) BLOCKING undeclared dependency: rouvr/receipts.py:22-24 imports cryptography, which is absent from requirements.txt and core/backend/requirements*.txt; pip metadata shows Required-by empty (nothing declared pulls it; venv has 50.0.2 only as an undeclared install). CI runs make setup (pip install -r requirements.txt) then make test-public, so a clean env fails importing rouvr.activities/rouvr.receipts and collecting tests/test_receipts.py+tests/test_r9_close.py (supervisor proved via import-block simulation: ModuleNotFoundError). This violates S010 sheet S3 'existing dependency only - no new packages'. Fix: declare cryptography pinned in requirements.txt in repo pin style (installed: 50.0.2) or use an already-declared dependency, and show clean-env import + pytest evidence. 2) Bounded scope: new files rouvr/receipts.py and tests/test_receipts.py are outside sprint sheet S5 ('files in S5 only': rouvr/activities.py, rouvr/config.py, rouvr/workflows.py, rouvr/starter.py, tests/test_r9_close.py). Fold the helper into rouvr/activities.py and the receipt tests into tests/test_r9_close.py, or record an approved scope amendment on the sheet. 3) Operator path: .env.example contains no RECEIPT_SIGNING_KEY_PATH/RECEIPT_KEY_ID (0 matches) although docs/configuration.md:11-12 documents both and refers readers to .env.example; add both entries. Note: AC-1..AC-4 all pass functionally in the current venv (supervisor re-runs: 31 receipt/workflow tests, 87 in tests/, 152 passed+2 skipped public suite, hygiene clean, lifecycle valid, plus an independent 13-check probe covering wrong-key, tampered payload/digest/signature, unknown key_id, rotation pool, 0644/0640/0604/0777 refusal, missing key); rework is packaging/scope only, then resubmit.",
+          "ref": "review"
+        },
+        {
+          "round": 2,
+          "verdict": "approved",
+          "at": "2026-10-29",
+          "by": "supervisor-1",
+          "comment": "",
+          "ref": "review"
+        }
+      ],
+      "depends_on": [],
+      "claimed_at": "2026-10-29",
+      "pre_task": "TaskKind IMPLEMENTATION; scope per sprint sheet \u00a75",
+      "note": "claim released; sheets first, lane after",
+      "tests": ".venv/bin/python -m pytest tests/test_receipts.py tests/test_r9_close.py tests/test_workflow.py -v: 31 passed; .venv/bin/python -m pytest tests/ -q: 87 passed; bash scripts/hygiene.sh: clean (1974 files); python3 tools/validate_sprint_lifecycle.py: lifecycle valid (10 sprints)",
+      "evidence": "requirements.txt cryptography==50.0.2 (venv 50.0.2); docs/tasks/rouvr/S010-p2-receipts.md S5 amendment 2026-10-29 (rouvr/receipts.py+tests/test_receipts.py); .env.example RECEIPT_SIGNING_KEY_PATH+RECEIPT_KEY_ID matching docs/configuration.md; rework cycle 1 fixes only",
+      "review": {
+        "verdict": "approve",
+        "at": "2026-10-29",
+        "by": "supervisor-1",
+        "ref": "review"
+      },
+      "verification": "supervisor-1 re-ran: .venv/bin/python -m pytest tests/test_receipts.py tests/test_r9_close.py tests/test_workflow.py -v: 31 passed; .venv/bin/python -m pytest tests/ -q: 87 passed; bash scripts/hygiene.sh: clean (1974 files); python3 tools/validate_sprint_lifecycle.py: lifecycle valid (10 sprints); clean venv pip install -r requirements.txt + import rouvr.receipts OK + 20 receipt tests passed; independent probe 10/10 (verify/wrong-key/tamper/rotation/unknown-keyid/0644+0640+0604 refused/0600 ok/missing-key). Cycle-1 fixes verified: requirements.txt cryptography==50.0.2; S010 sheet S5 amendment 2026-10-29 lists rouvr/receipts.py+tests/test_receipts.py; .env.example RECEIPT_SIGNING_KEY_PATH+RECEIPT_KEY_ID match docs/configuration.md",
+      "closeout": {
+        "at": "2026-10-29",
+        "by": "supervisor-1",
+        "ref": "docs/tasks/rouvr/S010-p2-receipts.md \u00a711"
+      }
+    }
+  ]
+}

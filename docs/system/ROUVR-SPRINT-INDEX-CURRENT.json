@@ -1,0 +1,166 @@
+{
+  "generated_at": "2026-10-29T13:15:30.675305+00:00",
+  "counts": {
+    "PASS": 7,
+    "BLOCKED": 1,
+    "QUEUED": 2
+  },
+  "sprints": [
+    {
+      "commit": "ccc53b9+uncommitted",
+      "confidence": "high",
+      "goal": "Pinned refs, R1 gates, package base, ledger contract suite green.",
+      "id": "S001",
+      "known_gaps": [
+        "Stage arm of the contract suite needs the attempt-scope grant."
+      ],
+      "sprint_file": "docs/tasks/rouvr/S001-bootstrap-hygiene-base.md",
+      "status": "PASS",
+      "tasks": [
+        "1.1 Pin refs, confirm paths/Temporal",
+        "1.2 R1 scrub + gates",
+        "1.3 Package base + ledger parity"
+      ],
+      "title": "Bootstrap, hygiene gates, package base + ledger parity"
+    },
+    {
+      "commit": "ccc53b9+uncommitted",
+      "confidence": "high",
+      "goal": "RESUME verdict with hashes; staging routes/bodies confirmed, client realigned.",
+      "id": "S002",
+      "known_gaps": [
+        "workhub:attempt:open grant missing (human gate)."
+      ],
+      "sprint_file": "docs/tasks/rouvr/S002-spike-staging.md",
+      "status": "PASS",
+      "tasks": [
+        "2.1 R2 resume spike",
+        "2.2 A1 confirm + readbacks"
+      ],
+      "title": "R2 resume spike + A1 staging confirmation"
+    },
+    {
+      "commit": "ccc53b9+uncommitted",
+      "confidence": "high",
+      "goal": "Durable build loop with bounded rework and renew-first same-attempt resume.",
+      "id": "S003",
+      "known_gaps": [],
+      "sprint_file": "docs/tasks/rouvr/S003-workflow-ownership.md",
+      "status": "PASS",
+      "tasks": [
+        "3.1 Workflow + start path",
+        "3.2 Ownership + fencing"
+      ],
+      "title": "R4 TaskWorkflow + R5 lease/fencing"
+    },
+    {
+      "commit": "ccc53b9+uncommitted",
+      "confidence": "high",
+      "goal": "Builder turn live: personas, execspec, launcher, one PR per attempt.",
+      "id": "S004",
+      "known_gaps": [
+        "Headless MCP unverified; file transports stand (accepted)."
+      ],
+      "sprint_file": "docs/tasks/rouvr/S004-build-leg.md",
+      "status": "PASS",
+      "tasks": [
+        "4.1 Personas + execspec + binding",
+        "4.2 Launcher + gitops + builder turn"
+      ],
+      "title": "R6 build leg (personas, launcher, gitops)"
+    },
+    {
+      "commit": "ccc53b9+uncommitted",
+      "confidence": "high",
+      "goal": "Builder-independent test evidence: gate, hidden suite, clean-room runner, cheat-scan.",
+      "id": "S005",
+      "known_gaps": [],
+      "sprint_file": "docs/tasks/rouvr/S005-gate-tests-runner.md",
+      "status": "PASS",
+      "tasks": [
+        "5.1 Submit gate",
+        "5.2 Hidden tests + runner + cheat-scan"
+      ],
+      "title": "R7 submit gate + R8 hidden tests, runner, cheat-scan"
+    },
+    {
+      "commit": "ccc53b9+uncommitted",
+      "confidence": "high",
+      "goal": "Independent verification and system-only close with receipt digest.",
+      "id": "S006",
+      "known_gaps": [
+        "ed25519 receipt signing deferred to P2 (shortcut marker in code)."
+      ],
+      "sprint_file": "docs/tasks/rouvr/S006-verifier-close.md",
+      "status": "PASS",
+      "tasks": [
+        "6.1 Verifier",
+        "6.2 Close + receipt"
+      ],
+      "title": "R9 verifier + close"
+    },
+    {
+      "commit": "ccc53b9+uncommitted",
+      "confidence": "high",
+      "goal": "Scripted kill/resume rehearsal to recorded PASS; A2 gates filed.",
+      "id": "S007",
+      "known_gaps": [
+        "A2 gates 1-4 need humans: grant, credential, stage run, back-port."
+      ],
+      "sprint_file": "docs/tasks/rouvr/S007-rehearsal-a2.md",
+      "status": "PASS",
+      "tasks": [
+        "7.1 Rehearsal to PASS",
+        "7.2 A2 gates"
+      ],
+      "title": "R10 rehearsal + record + A2 gates"
+    },
+    {
+      "id": "S008",
+      "sprint_file": "docs/tasks/rouvr/S008-stage-promotion.md",
+      "title": "Stage promotion (A2, human-gated)",
+      "status": "BLOCKED",
+      "commit": "ccc53b9+uncommitted",
+      "goal": "Same rehearsal on staging with two real credentials.",
+      "tasks": [
+        "8.1 Grants + credentials",
+        "8.2 Stage operands + happy path",
+        "8.3 Stage R10 rehearsal"
+      ],
+      "confidence": "medium",
+      "known_gaps": [
+        "workhub:attempt:open grant + verifier credential need a staging admin."
+      ]
+    },
+    {
+      "id": "S009",
+      "sprint_file": "docs/tasks/rouvr/S009-aix-backport.md",
+      "title": "hyeve-lane back-port (A2)",
+      "status": "QUEUED",
+      "commit": "ccc53b9+uncommitted",
+      "goal": "Retire the direct launcher; hyeve-lane consumes Rouvr.",
+      "tasks": [
+        "9.1 Dependency bump + launcher retirement",
+        "9.2 Lane-host R10 against real WorkHub"
+      ],
+      "confidence": "medium",
+      "known_gaps": [
+        "Depends on S008 done."
+      ]
+    },
+    {
+      "id": "S010",
+      "sprint_file": "docs/tasks/rouvr/S010-p2-receipts.md",
+      "title": "P2 receipt signing",
+      "status": "QUEUED",
+      "commit": "ccc53b9+uncommitted",
+      "goal": "ed25519-signed receipts replacing the unsigned digest.",
+      "tasks": [
+        "10.1 Signing + verification",
+        "10.2 Rotation + operator path"
+      ],
+      "confidence": "high",
+      "known_gaps": []
+    }
+  ]
+}

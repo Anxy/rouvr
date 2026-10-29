@@ -8,4 +8,4 @@
 | `failure_injection/silent_delivery.sh` | The primary sink returns OK but delivers nothing | The verifier readback fails, the fallback sink is used, then `done` |
 | `failure_injection/revoked_key.sh` | The model credential is unavailable | The task parks as `blocked` before claim, with an escalation evidence row |
 
-These cases are covered by `demo/test_morning_report.py`. Delivery here is a file outbox, and the default model is the offline stub. Set `ROUVR_MODEL_PROVIDER=meta` and `META_MODEL_API_KEY` to use Llama.
+These cases are covered by `demo/test_morning_report.py`. Delivery here is a file outbox, and the default model is the offline stub. Set `ROUVR_MODEL_PROVIDER=meta` and `META_MODEL_API_KEY` to use the Meta Model API.

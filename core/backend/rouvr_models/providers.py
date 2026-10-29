@@ -11,8 +11,8 @@ import urllib.request
 from dataclasses import dataclass
 
 _PRESETS = {
-    # Meta Model API (Llama API), OpenAI-compatible surface.
-    "meta": ("META_MODEL_API_BASE_URL", "https://api.llama.com/compat/v1", "META_MODEL_API_KEY", "META_MODEL_NAME", "Llama-4-Maverick-17B-128E-Instruct-FP8"),
+    # Meta Model API — OpenAI-compatible surface; endpoint+model from env only.
+    "meta": ("META_MODEL_API_BASE_URL", "", "META_MODEL_API_KEY", "META_MODEL_NAME", ""),
     # Open weights served locally (Ollama / vLLM / llama.cpp server).
     "ollama": ("OLLAMA_BASE_URL", "http://localhost:11434/v1", None, "OLLAMA_MODEL", "llama3.1"),
     "openrouter": ("OPENROUTER_BASE_URL", "https://openrouter.ai/api/v1", "OPENROUTER_API_KEY", "OPENROUTER_DEFAULT_MODEL", "meta-llama/llama-3.1-70b-instruct"),
@@ -50,4 +50,7 @@ def get_provider(name: str | None = None, env: dict | None = None) -> ModelProvi
     key = env.get(key_var) if key_var else None
     if key_var and not key:
         raise RuntimeError(f"{key_var} is not set (required for provider {name!r})")
-    return ModelProvider(name, env.get(url_var) or url_default, env.get(model_var) or model_default, key)
+    base_url, model = env.get(url_var) or url_default, env.get(model_var) or model_default
+    if not base_url:
+        raise RuntimeError(f"{url_var} is not set (required for provider {name!r})")
+    return ModelProvider(name, base_url, model, key)

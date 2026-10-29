@@ -14,9 +14,9 @@ class TestTenantIsolation:
         )
         gate = TenantIsolationGate()
         gate.register_tenant(TenantConfigV1(tenant_id="acg", name="ACG Corp"))
-        gate.register_tenant(TenantConfigV1(tenant_id="vmg", name="VMG Inc"))
+        gate.register_tenant(TenantConfigV1(tenant_id="tenant-a", name="Tenant A"))
 
-        result = gate.check_tenant_access(tenant_id="acg", requesting_tenant_id="vmg")
+        result = gate.check_tenant_access(tenant_id="acg", requesting_tenant_id="tenant-a")
         assert result.allowed is False
         assert "cross-tenant" in result.reason
 
@@ -35,11 +35,11 @@ class TestTenantIsolation:
         )
         gate = TenantIsolationGate()
         gate.register_tenant(TenantConfigV1(tenant_id="acg", name="ACG"))
-        gate.register_tenant(TenantConfigV1(tenant_id="vmg", name="VMG"))
+        gate.register_tenant(TenantConfigV1(tenant_id="tenant-a", name="Tenant A"))
         gate.register_project(ProjectConfigV1(project_id="p-1", tenant_id="acg", name="Project A"))
 
         assert gate.check_project_access(project_id="p-1", tenant_id="acg").allowed is True
-        assert gate.check_project_access(project_id="p-1", tenant_id="vmg").allowed is False
+        assert gate.check_project_access(project_id="p-1", tenant_id="tenant-a").allowed is False
 
     def test_capability_denied_at_tenant_level(self):
         from backend.aix_core.runtime.enterprise.tenant_isolation import (

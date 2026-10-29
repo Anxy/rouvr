@@ -17,3 +17,11 @@ jobs:
       - run: make setup PY=python
       - run: cp .env.example .env
       - run: make test-public
+  hygiene:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - run: bash scripts/hygiene.sh
+      - uses: gitleaks/gitleaks-action@v2

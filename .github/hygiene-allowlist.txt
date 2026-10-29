@@ -1,0 +1,10 @@
+# Approved mentions of scrubbed private strings (R1).
+# Exact repo-relative paths, or "<dir>/*" to cover a directory. Extend only by PR.
+scripts/hygiene.sh
+docs/rouvr-roadmap.md
+docs/rouvr-system-design-v2.md
+docs/workhub-fixes.md
+docs/a2-gates.md
+docs/implementation-plan.md
+docs/tasks/*
+docs/release-notes/*

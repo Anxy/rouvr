@@ -1,0 +1,16 @@
+#!/usr/bin/env bash
+# Global `rouvr` CLI — run from any folder.
+# Install once:  ln -s /path/to/rouvr/bin/rouvr ~/.local/bin/rouvr
+# The Rouvr stack always runs from the checkout; the supervisor muse
+# session opens in YOUR current folder.
+set -euo pipefail
+ROOT="${ROUVR_ROOT:-}"
+if [ -z "$ROOT" ]; then
+  SELF="$(readlink -f "${BASH_SOURCE[0]}")"
+  for cand in "$(dirname "$(dirname "$SELF")")" "$HOME/Repository/hackathon/rouvr" "$HOME/Repository/rouvr"; do
+    if [ -x "$cand/scripts/rouvr" ]; then ROOT="$cand"; break; fi
+  done
+fi
+[ -n "$ROOT" ] && [ -x "$ROOT/scripts/rouvr" ] || { echo "rouvr checkout not found (set ROUVR_ROOT)" >&2; exit 1; }
+export ROUVR_SUPERVISOR_WORKSPACE="${ROUVR_SUPERVISOR_WORKSPACE:-$PWD}"
+exec "$ROOT/scripts/rouvr" "$@"

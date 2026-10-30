@@ -1,0 +1,65 @@
+Completing activity as failed ({'activity_id': '6', 'activity_type': 'sign_receipt', 'attempt': 1, 'namespace': 'default', 'task_queue': 'rouvr-orchestrator', 'workflow_id': 'rouvr-task-r10-20261030T124142-1-b4da6e1cd2511e68', 'workflow_run_id': 'fa0aed37-5ad6-425d-89b1-9f546a0bf757', 'workflow_type': 'TaskWorkflow'})
+Traceback (most recent call last):
+  File "/home/vpsr/Repository/hackathon/rouvr/rouvr/receipts.py", line 47, in load_private_key
+    mode = path.stat().st_mode
+           ^^^^^^^^^^^
+  File "/usr/lib/python3.12/pathlib.py", line 842, in stat
+    return os.stat(self, follow_symlinks=follow_symlinks)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+FileNotFoundError: [Errno 2] No such file or directory: '/srv/rouvr/keys/receipt_ed25519.pem'
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "/home/vpsr/Repository/hackathon/rouvr/rouvr/activities.py", line 41, in inner
+    return await fn(*a, **kw)
+           ^^^^^^^^^^^^^^^^^^
+  File "/home/vpsr/Repository/hackathon/rouvr/rouvr/activities.py", line 266, in sign_receipt
+    signed = sign_links(links, load_private_key(s.receipt_key_path), s.receipt_key_id)
+                               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/vpsr/Repository/hackathon/rouvr/rouvr/receipts.py", line 49, in load_private_key
+    raise RouvrError(Code.EVIDENCE, "receipt signing key missing") from e
+rouvr.errors.RouvrError: E_EVIDENCE: receipt signing key missing
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "/home/vpsr/Repository/hackathon/rouvr/.venv/lib/python3.12/site-packages/temporalio/worker/_activity.py", line 318, in _handle_start_activity_task
+    result = await self._execute_activity(
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/vpsr/Repository/hackathon/rouvr/.venv/lib/python3.12/site-packages/temporalio/worker/_activity.py", line 669, in _execute_activity
+    return await impl.execute_activity(input)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/vpsr/Repository/hackathon/rouvr/.venv/lib/python3.12/site-packages/temporalio/worker/_activity.py", line 864, in execute_activity
+    return await input.fn(*input.args)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/vpsr/Repository/hackathon/rouvr/rouvr/activities.py", line 43, in inner
+    raise e.to_temporal() from e
+temporalio.exceptions.ApplicationError: E_EVIDENCE: receipt signing key missing
+Completing activity as failed ({'activity_id': '7', 'activity_type': 'mark_blocked', 'attempt': 1, 'namespace': 'default', 'task_queue': 'rouvr-orchestrator', 'workflow_id': 'rouvr-task-r10-20261030T124142-1-b4da6e1cd2511e68', 'workflow_run_id': 'fa0aed37-5ad6-425d-89b1-9f546a0bf757', 'workflow_type': 'TaskWorkflow'})
+Traceback (most recent call last):
+  File "/home/vpsr/Repository/hackathon/rouvr/rouvr/activities.py", line 41, in inner
+    return await fn(*a, **kw)
+           ^^^^^^^^^^^^^^^^^^
+  File "/home/vpsr/Repository/hackathon/rouvr/rouvr/activities.py", line 250, in mark_blocked
+    return await self._close_to(wf.task_id, "blocked", reason, ("block", wf.task_id, reason))
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/vpsr/Repository/hackathon/rouvr/rouvr/activities.py", line 236, in _close_to
+    raise RouvrError(Code.EVIDENCE, f"no transition {cur!r} -> {to_state!r}")
+rouvr.errors.RouvrError: E_EVIDENCE: no transition 'done' -> 'blocked'
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "/home/vpsr/Repository/hackathon/rouvr/.venv/lib/python3.12/site-packages/temporalio/worker/_activity.py", line 318, in _handle_start_activity_task
+    result = await self._execute_activity(
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/vpsr/Repository/hackathon/rouvr/.venv/lib/python3.12/site-packages/temporalio/worker/_activity.py", line 669, in _execute_activity
+    return await impl.execute_activity(input)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/vpsr/Repository/hackathon/rouvr/.venv/lib/python3.12/site-packages/temporalio/worker/_activity.py", line 864, in execute_activity
+    return await input.fn(*input.args)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/vpsr/Repository/hackathon/rouvr/rouvr/activities.py", line 43, in inner
+    raise e.to_temporal() from e
+temporalio.exceptions.ApplicationError: E_EVIDENCE: no transition 'done' -> 'blocked'

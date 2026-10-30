@@ -1,0 +1,17 @@
+{
+  "schemaVersion": 1,
+  "name": "rouvr-workhub",
+  "displayName": "Rouvr WorkHub",
+  "version": "0.1.0",
+  "description": "Deliver tasks to WorkHub and start the Rouvr coder/reviewer loop from any Muse session in this project. No separate MCP setup: this plugin bundles the server.",
+  "compat": {"source": "native", "manifestDir": ".muse-plugin"},
+  "capabilities": {
+    "skills": [],
+    "commands": [],
+    "hooks": [],
+    "mcpServers": [
+      {"id": "rouvr-workhub", "transport": "stdio", "command": ["bash", "mcp/run.sh"]}
+    ],
+    "reminders": []
+  }
+}

@@ -1,0 +1,150 @@
+#!/usr/bin/env bash
+# Single command to launch the whole Rouvr stack and use it:
+#   ./scripts/rouvr            # start everything, then open the supervisor muse chat
+#   ./scripts/rouvr --no-chat  # start everything only (no supervisor session)
+#   ./scripts/rouvr status     # health of every piece
+#   ./scripts/rouvr stop       # stop workers/MCP/ledger (Temporal stack stays; `down` stops it too)
+#   ./scripts/rouvr down       # stop everything including the Docker Temporal stack
+#
+# Stack: Temporal (Docker, 7233) + ledger WorkHub (8221) + MCP front door (8231)
+# + 4 background workers (orch/build/test/verify). Coder/reviewer turns open as
+# interactive muse chat windows (ROUVR_LAUNCH_WINDOWS=0 for headless).
+set -euo pipefail
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+OPS=/tmp/rouvr-supervisor
+OVERRIDE=/tmp/rouvr-override.yml
+cd "$ROOT"
+
+write_override() {
+  cat > "$OVERRIDE" <<'EOF'
+services:
+  db:
+    ports: !override ["5433:5432"]
+  redis:
+    ports: !override ["6380:6379"]
+  temporal:
+    ports: !override ["7233:7233"]
+  temporal-ui:
+    ports: !override ["8081:8080"]
+  ledger:
+    ports: !override ["8221:8221"]
+EOF
+}
+
+write_operands() {
+  mkdir -p "$OPS/personas" "$OPS/specs/supervisor" "$OPS/workspaces" "$OPS/evidence" "$OPS/hidden-tests" "$OPS/logs"
+  local ws="$HOME/Repository/hackathon/.secrets/rouvr/personas"
+  [ -f "$OPS/personas/tenants.yaml" ] || cat > "$OPS/personas/tenants.yaml" <<EOF
+tenants:
+  supervisor:
+    personas:
+      builder-1: {role: builder, principal: svc-sup-builder, muse_model: "", credential_file: "$ws/builder-1.json", github_app: supervisor}
+      verifier-1: {role: verifier, principal: svc-sup-verifier, muse_model: "", credential_file: "$ws/verifier-1.json"}
+EOF
+  [ -f "$OPS/specs/supervisor/scratch.yaml" ] || cat > "$OPS/specs/supervisor/scratch.yaml" <<'EOF'
+repo: ebiz-backend-developer/rouvr-r10-scratch
+base_branch: main
+test_command: ["python", "-m", "pytest", "-q"]
+timeout_s: 900
+EOF
+  cat > "$OPS/env.sh" <<'EOF'
+export WORKHUB_BACKEND=ledger WORKHUB_BASE_URL=http://127.0.0.1:8221 ROUVR_TENANT_ID=supervisor ROUVR_PROJECT_ID=scratch PERSONA_SOURCE=yaml PERSONA_REGISTRY_PATH=/tmp/rouvr-supervisor/personas/tenants.yaml SPEC_ROOT=/tmp/rouvr-supervisor/specs WORKSPACE_ROOT=/tmp/rouvr-supervisor/workspaces EVIDENCE_ROOT=/tmp/rouvr-supervisor/evidence HIDDEN_TESTS_ROOT=/tmp/rouvr-supervisor/hidden-tests TEMPORAL_ADDRESS=127.0.0.1:7233 TEMPORAL_NAMESPACE=default ORCHESTRATOR_TOKEN=ledger LEASE_TTL_S=180 HEARTBEAT_S=30 MAX_REWORK=2 MUSE_BIN=muse
+EOF
+}
+
+load_env() {
+  write_operands
+  set -a; . "$OPS/env.sh"; set +a
+  export PYTHONPATH="$ROOT"
+  export META_MODEL_API_KEY="${META_MODEL_API_KEY:-$(grep -E '^META_MODEL_API_KEY=' .env | cut -d= -f2-)}"
+  export GH_TOKEN="${GH_TOKEN:-$(gh auth token 2>/dev/null || true)}"
+  export ROUVR_LAUNCH_WINDOWS="${ROUVR_LAUNCH_WINDOWS:-1}"
+}
+
+up() {
+  write_override; load_env
+  echo "[rouvr] Temporal stack (Docker)..."
+  docker compose -p rouvr -f demo/docker-compose.yml -f "$OVERRIDE" up -d db redis temporal >/dev/null
+  for _ in $(seq 1 30); do
+    .venv/bin/python -c "
+import asyncio
+from temporalio.client import Client
+asyncio.run(Client.connect('127.0.0.1:7233', namespace='default'))" 2>/dev/null && break; sleep 2
+  done
+  echo "[rouvr] ledger WorkHub (8221)..."
+  curl -sf http://127.0.0.1:8221/health >/dev/null 2>&1 || \
+    setsid -f env ROUVR_LEDGER_DATABASE_URL="sqlite:///$OPS/ledger.db" .venv/bin/python -c "
+from ledger.app import make_app
+import os, uvicorn
+uvicorn.run(make_app(os.environ['ROUVR_LEDGER_DATABASE_URL']), host='127.0.0.1', port=8221, log_level='warning')
+" >>"$OPS/logs/ledger.log" 2>&1
+  echo "[rouvr] WorkHub MCP plugin (bundled; no manual MCP setup)..."
+  if ! muse plugins list --json 2>/dev/null | grep -q '"rouvr-workhub"'; then
+    muse plugins install "$ROOT/plugin" --scope user --json >/dev/null 2>&1 || \
+      echo "[rouvr] WARN: plugin install failed; run 'muse plugins install $ROOT/plugin --scope user' once"
+  fi
+  muse plugins approve rouvr-workhub --json >/dev/null 2>&1 || true
+  echo "[rouvr] workers + MCP (8231)..."
+  for q in orch build test verify; do
+    pgrep -f "rouvr[.]worker $q" >/dev/null || setsid -f .venv/bin/python -m rouvr.worker "$q" >>"$OPS/logs/$q.log" 2>&1
+  done
+  pgrep -f "rouvr[.]mcp_server" >/dev/null || setsid -f .venv/bin/python -m rouvr.mcp_server >>"$OPS/logs/mcp.log" 2>&1
+  sleep 5
+  status
+  cat <<'EOF'
+
+Use Rouvr:
+  The WorkHub MCP tools are bundled via the rouvr-workhub Muse plugin
+  (auto-installed above) — no manual MCP setup. The supervisor muse
+  session opens automatically below (SUPERVISOR.md persona); chat normally:
+       "Create a task to <change> with criteria <...> and start it."
+     The supervisor delivers it to WorkHub via MCP; coder/reviewer muse chat
+     windows open on your screen and loop until the task is done.
+  Watch:  ./scripts/rouvr status   |   tasks: curl -s http://127.0.0.1:8221/v1/tasks
+EOF
+  if [ "$CHAT" = "1" ] && [ -t 0 ]; then
+    local ws="${ROUVR_SUPERVISOR_WORKSPACE:-$ROOT}"
+    echo "[rouvr] opening supervisor muse session in $ws (exit the chat to return; stack keeps running)..."
+    exec muse --workspace "$ws" "You are the Rouvr supervisor. Read $ROOT/SUPERVISOR.md now and follow it for the whole session. The full stack is already running: ledger WorkHub, Temporal workers, and your bundled rouvr-workhub MCP tools. Greet the user briefly and ask what task to deliver."
+  fi
+}
+
+status() {
+  echo "temporal: $(.venv/bin/python -c "
+import asyncio
+from temporalio.client import Client
+try:
+    asyncio.run(Client.connect('127.0.0.1:7233', namespace='default')); print('up')
+except Exception: print('DOWN')" 2>/dev/null)"
+  echo "ledger:   $(curl -s http://127.0.0.1:8221/health 2>/dev/null || echo DOWN)"
+  echo "mcp:      http://127.0.0.1:8231/mcp ($(pgrep -fc 'rouvr[.]mcp_server' || echo 0) proc)"
+  echo "workers:  $(pgrep -fc 'rouvr[.]worker' || echo 0)/4 queues"
+  echo "tasks:    $(curl -s http://127.0.0.1:8221/v1/tasks 2>/dev/null | .venv/bin/python -c "
+import json, sys
+try: print([(t['id'], t['state']) for t in json.load(sys.stdin)['items']])
+except Exception: print('n/a')" 2>/dev/null)"
+}
+
+stop() {
+  for p in $(pgrep -f 'rouvr[.]worker' || true) $(pgrep -f 'rouvr[.]mcp_server' || true); do kill "$p" 2>/dev/null || true; done
+  fuser -k 8221/tcp 2>/dev/null || true
+  echo "[rouvr] workers/MCP/ledger stopped (Temporal stack left running; './scripts/rouvr down' stops it)"
+}
+
+down() {
+  stop
+  write_override
+  docker compose -p rouvr -f demo/docker-compose.yml -f "$OVERRIDE" down >/dev/null 2>&1 || true
+  echo "[rouvr] Docker Temporal stack stopped"
+}
+
+CHAT=1
+[ "${2:-}" = "--no-chat" ] && CHAT=0
+case "${1:-up}" in
+  up) up ;;
+  --no-chat) CHAT=0; up ;;
+  status) load_env >/dev/null 2>&1 || true; status ;;
+  stop) stop ;;
+  down) down ;;
+  *) echo "usage: ./scripts/rouvr [--no-chat|status|stop|down]" >&2; exit 2 ;;
+esac

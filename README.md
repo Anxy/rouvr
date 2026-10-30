@@ -66,7 +66,7 @@ flowchart LR
 | `workers/` | The Meta Model API worker (compile / narrate / judge, stub adapter), the Node SDK worker, and pointers to the Muse and Codex adapters |
 | `ledger/` | A slim WorkHub-lite: SQL tables for tasks, contracts, evidence and receipts, plus a small FastAPI app. Uses Postgres or SQLite. |
 | `demo/` | Compose (Postgres, Redis, Temporal + UI, ledger), the morning-report ops task, and failure-injection scripts |
-| `cli/` | `python -m cli.rouvr_cli` (tasks / show / demo), plus the VS Code chat extension |
+| `cli/` | `python -m cli.rouvr_cli` (tasks / show / demo; the ledger client used by the R10 rehearsal), plus the VS Code chat extension. The user-facing launcher is `bin/rouvr` (stack + supervisor session); `rouvr/` is the self-contained delivery loop and imports nothing from `core/` or `lane/` |
 | `docs/` | Short design notes |
 | `web/` | The project website |
 

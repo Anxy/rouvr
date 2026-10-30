@@ -32,9 +32,38 @@ class MuseTurn:
     last_message: str
 
 
+def chat_command(title: str, cwd: Path, prompt_file: Path, model: str,
+                 bin_path: str = "muse") -> list[str] | None:
+    """Argv opening an interactive muse chat session in a new terminal window.
+
+    Returns None when no display/terminal is available (caller falls back to
+    headless exec). The chat is seeded with a short pointer to the prompt file
+    (full prompts/diffs are too long for argv) and runs with the real HOME so
+    the user's muse login applies. Completion = the user finishes the task
+    in chat and exits; the workflow then reads submit.json/verdict.json."""
+    import shlex
+    import shutil
+    if not os.environ.get("DISPLAY"):
+        return None
+    seed = (f"Read the task instructions in {prompt_file} and complete them in this "
+            f"workspace. Follow the submission instructions in that file exactly, then exit.")
+    muse = f"{shlex.quote(bin_path)} --workspace {shlex.quote(str(cwd))}"
+    if model:
+        muse += f" --model {shlex.quote(model)}"
+    muse += f" {shlex.quote(seed)}"
+    script = f"cd {shlex.quote(str(cwd))} && exec {muse}"
+    for term, args in (("gnome-terminal", ["--wait", "--title", title, "--", "bash", "-c", script]),
+                       ("kitty", ["--title", title, "bash", "-c", script]),
+                       ("xterm", ["-title", title, "-e", "bash", "-c", script])):
+        if shutil.which(term):
+            return [term, *args]
+    return None
+
+
 class MuseLauncher:
-    def __init__(self, bin_path: str = "muse", kill_grace_s: float = 10.0) -> None:
-        self.bin, self.grace = bin_path, kill_grace_s
+    def __init__(self, bin_path: str = "muse", kill_grace_s: float = 10.0,
+                 launch_windows: bool = False) -> None:
+        self.bin, self.grace, self.launch_windows = bin_path, kill_grace_s, launch_windows
 
     def argv(self, prompt_file: Path, model: str, cwd: Path, session_id: str) -> list[str]:
         argv = [self.bin, "exec", FLAGS["json"], FLAGS["provider"], PROVIDER, FLAGS["session"], session_id,
@@ -48,6 +77,10 @@ class MuseLauncher:
         sid = resume or str(uuid.uuid4())  # resume => same sid (R2); else fresh sid per leg
         prompt_file = cwd.parent / f".rouvr-prompt-{sid}.md"   # outside the repo worktree
         prompt_file.write_text(prompt)
+        if self.launch_windows:
+            chat = chat_command(f"Rouvr muse {sid[:8]}", cwd, prompt_file, model, self.bin)
+            if chat is not None:
+                return await self._run_chat(chat, sid, cwd, env, timeout_s, cancel)
         proc = await asyncio.create_subprocess_exec(
             *self.argv(prompt_file, model, cwd, sid), cwd=str(cwd),
             env={"PATH": os.environ.get("PATH", ""), "HOME": str(cwd), **env},
@@ -101,6 +134,34 @@ class MuseLauncher:
             raise RouvrError(Code.CONTRACT, "muse produced no session_id")
         return MuseTurn(session_id=session_id, exit_code=rc, events=events, last_message=last)
 
+    async def _run_chat(self, chat: list[str], sid: str, cwd: Path, env: dict[str, str],
+                        timeout_s: int, cancel: asyncio.Event | None) -> MuseTurn:
+        """Interactive window mode: a human-visible muse chat does the turn.
+
+        shortcut: interactive muse cannot take our minted --session-id, so a
+        rework turn opens a fresh chat whose prompt carries the reviewer notes
+        (workspace + branch persist context). Upgrade when muse gains a
+        session-id flag for interactive starts."""
+        proc = await asyncio.create_subprocess_exec(
+            *chat, cwd=str(cwd), env={**os.environ, **env},
+            stdout=asyncio.subprocess.DEVNULL, stderr=asyncio.subprocess.DEVNULL,
+            start_new_session=True)
+        waiters = {asyncio.ensure_future(proc.wait())}
+        cancel_t = asyncio.ensure_future(cancel.wait()) if cancel else None
+        if cancel_t:
+            waiters.add(cancel_t)
+        try:
+            done, _ = await asyncio.wait(waiters, timeout=timeout_s, return_when=asyncio.FIRST_COMPLETED)
+            if proc.returncode is None:
+                await self._kill(proc)
+                raise RouvrError(Code.CANCELLED if cancel_t in done else Code.DOWNSTREAM,
+                                 "muse chat cancelled" if cancel_t in done else "muse chat timed out",
+                                 details={"session_id": sid})
+        finally:
+            if cancel_t:
+                cancel_t.cancel()
+        return MuseTurn(session_id=sid, exit_code=proc.returncode or 0, events=0, last_message="")
+
     async def _kill(self, proc: asyncio.subprocess.Process) -> None:
         if proc.returncode is not None:
             return
@@ -117,14 +178,19 @@ def criterion_lines(criteria: list) -> list[str]:
     return [f"- {c['id']}: {c['text']}" if isinstance(c, dict) else f"- {c}" for c in criteria]
 
 
-def build_task_prompt(task: dict, spec_repo: str, branch: str, rework_notes: str) -> str:
+def build_task_prompt(task: dict, spec_repo: str, branch: str, rework_notes: str,
+                      peer_messages: list[str] | None = None) -> str:
     parts = [f"Task {task.get('number', task.get('id'))}: {task.get('title', '')}", "",
              str(task.get("description") or ""), "", "Acceptance criteria:"]
     parts += criterion_lines(task.get("acceptance_criteria") or [])
     parts += ["", f"Repository {spec_repo}, work on branch {branch}. Commit and push; do not merge.",
               "Run the project's tests before finishing.",
               'When done, write submit.json in the workspace root: {"pr_url": "<PR url>", '
-              '"claims": [{"criterion_id": "<id>"}, ...]} listing EVERY criterion id above — no submission, no credit.']
+              '"claims": [{"criterion_id": "<id>"}, ...]} listing EVERY criterion id above — no submission, no credit.',
+              'If you need clarification or must flag something for the reviewer, also write '
+              'message-verifier.json in the workspace root: {"text": "<message>"}.']
+    if peer_messages:
+        parts += ["", "Messages from other agents:"] + [f"- {m}" for m in peer_messages]
     if rework_notes:
         parts += ["", "Reviewer requested changes:", rework_notes]
     return "\n".join(parts)
@@ -134,14 +200,18 @@ VERDICT_FILE = "verdict.json"
 VERDICTS = ("approve", "request_changes", "reject")
 
 
-def build_verifier_prompt(task: dict, diff: str, tests_summary: str) -> str:
+def build_verifier_prompt(task: dict, diff: str, tests_summary: str,
+                          peer_messages: list[str] | None = None) -> str:
     """Criteria + diff + R8 summary. The builder's report is never included."""
     parts = [f"Review task {task.get('number', task.get('id'))}: {task.get('title', '')}", "",
              "Acceptance criteria:"]
     parts += criterion_lines(task.get("acceptance_criteria") or [])
+    if peer_messages:
+        parts += ["", "Messages from the builder:"] + [f"- {m}" for m in peer_messages]
     parts += ["", f"Test runs: {tests_summary}", "", "PR diff:", diff[:12000],
               "", 'Write verdict.json in the working directory: {"verdict": "approve|request_changes|reject",',
-              '"notes": "<one paragraph>"}. Approve only if every criterion is met by the diff and tests.']
+              '"notes": "<one paragraph>"}. Approve only if every criterion is met by the diff and tests.',
+              'To reply to the builder, also write message-builder.json: {"text": "<message>"}.']
     return "\n".join(parts)
 
 

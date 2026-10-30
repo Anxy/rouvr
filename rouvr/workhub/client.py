@@ -15,21 +15,30 @@ from rouvr.workhub import routes as R
 
 class TokenSource:
     """Fetches + caches a service token (POST /v1/auth/service-tokens). Credentials come from the
-    persona file on the host, never from workflow inputs."""
+    persona file on the host, never from workflow inputs.
 
-    def __init__(self, http: httpx.AsyncClient, client_id: str, client_secret: str) -> None:
-        self._http, self._id, self._secret = http, client_id, client_secret
+    Mint shape is the stage-proven one (lane/tools/wh_direct.py::service_login):
+    {credential_id, client_secret, audience} + X-Hyeve-Tenant-Id header → {access_token}.
+    The auth service lives on a different host than WorkHub, so auth_base is explicit."""
+
+    def __init__(self, http: httpx.AsyncClient, credential_id: str, client_secret: str,
+                 *, auth_base: str, tenant: str, audience: str) -> None:
+        self._http, self._id, self._secret = http, credential_id, client_secret
+        self._auth_base, self._tenant, self._audience = auth_base.rstrip("/"), tenant, audience
         self._token: str | None = None
         self._exp = 0.0
 
     async def get(self) -> str:
         if self._token and time.time() < self._exp - 60:
             return self._token
-        r = await self._http.post(R.AUTH_SERVICE_TOKEN, json={"client_id": self._id, "client_secret": self._secret})
+        r = await self._http.post(self._auth_base + R.AUTH_SERVICE_TOKEN,
+                                  json={"credential_id": self._id, "client_secret": self._secret,
+                                        "audience": self._audience},
+                                  headers={"X-Hyeve-Tenant-Id": self._tenant})
         if r.status_code != 200:
             raise from_http(r.status_code, _json(r))
         body = r.json()
-        self._token, self._exp = body["token"], time.time() + int(body.get("expires_in", 900))
+        self._token, self._exp = body["access_token"], time.time() + int(body.get("expires_in", 900))
         return self._token
 
 

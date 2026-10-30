@@ -45,6 +45,7 @@ class Settings:
     aix_mapping_path: Path = Path("/srv/rouvr/personas/aix_mapping.json")  # Rouvr-defined, see personas.py
     start_api_token_file: Path = Path("/srv/rouvr/start_api.token")
     workhub_backend: str = "stage"      # "stage" | "ledger" (R10 rehearsal runs the local ledger)
+    launch_windows: bool = False         # ROUVR_LAUNCH_WINDOWS=1: interactive muse chat per turn in a new terminal window
     spec_root: Path = Path("/srv/rouvr/specs")
 
     @staticmethod
@@ -76,6 +77,7 @@ class Settings:
             hidden_tests_root=Path(_env("HIDDEN_TESTS_ROOT", "/srv/rouvr/hidden-tests")),
             runner_image=_env("RUNNER_IMAGE", "rouvr-runner:py313-p9"),
             workhub_backend=_env("WORKHUB_BACKEND", "stage"),
+            launch_windows=_bool("ROUVR_LAUNCH_WINDOWS", False),
             spec_root=Path(_env("SPEC_ROOT", "/srv/rouvr/specs")),
         )
         if s.heartbeat_s * 3 > s.lease_ttl_s + 30:

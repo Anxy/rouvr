@@ -9,6 +9,15 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 R10_ROOT="${R10_ROOT:-/tmp/rouvr-r10}"
 R10_TENANT="r10-$(date +%Y%m%dT%H%M%S)"  # unique tenant per run: workflow ids are REJECT_DUPLICATE
+BACKEND="${WORKHUB_BACKEND:-ledger}"
+if [ "$BACKEND" != "ledger" ]; then
+  # shortcut: stage rehearsal not wired in this script; it only knows the local
+  # ledger. Refuse rather than silently run ledger and report it as stage.
+  # Upgrade: implement stage operands (scratch task, two credential files,
+  # WORKHUB_BASE_URL) once the A2 grant lands — see docs/a2-gates.md.
+  echo "FAIL: WORKHUB_BACKEND=$BACKEND unsupported by r10_rehearsal.sh (ledger only); see docs/a2-gates.md" >&2
+  exit 2
+fi
 REPO="${R10_REPO:-ebiz-backend-developer/rouvr-r10-scratch}"
 LEDGER_PORT="${R10_LEDGER_PORT:-8221}"
 : "${META_MODEL_API_KEY:?set META_MODEL_API_KEY}"

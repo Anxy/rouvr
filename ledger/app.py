@@ -18,7 +18,8 @@ from sqlalchemy import create_engine, text
 DB_URL = os.environ.get("ROUVR_LEDGER_DATABASE_URL", "sqlite:///./.rouvr/ledger.db")
 TRANSITIONS = {
     "open": {"claimed", "blocked"},
-    "claimed": {"done", "failed", "blocked", "open"},
+    "claimed": {"done", "failed", "blocked", "open", "needs_review"},
+    "needs_review": {"done", "blocked", "claimed"},
     "blocked": {"open"},
     "failed": {"open"},
     "done": set(),
@@ -177,6 +178,10 @@ def make_app(db_url: str = DB_URL) -> FastAPI:
                             "ON CONFLICT(task_id) DO UPDATE SET holder=:h, lease_epoch=:e, expires_at=:x, updated_at=:t"),
                       {"i": tid, "h": principal, "e": epoch, "x": _expiry(ttl_s), "t": _now()})
             a = row(c, "SELECT * FROM assignments WHERE task_id=:i AND attempt_no=:n", i=tid, n=attempt_no)
+            # Worker pickup is supervisor-visible: open/needs_review -> claimed.
+            c.execute(text("UPDATE tasks SET state='claimed', updated_at=:t "
+                           "WHERE id=:i AND state IN ('open','needs_review','claimed')"),
+                      {"i": tid, "t": _now()})
             _remember(c, tid, key, "claim", a)
             lease = row(c, "SELECT * FROM leases WHERE task_id=:i", i=tid)
             return {"replayed": False, "assignment": a, "lease_epoch": epoch, "lease": lease}

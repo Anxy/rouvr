@@ -29,6 +29,7 @@ from rouvr.host import Host
 from rouvr.ids import handoff_fence
 from rouvr.lease import (LeaseKeeper, claim_assignment_and_lease, open_or_reuse_attempt, resume_or_claim,
                          run_fenced)
+from rouvr.messages import MESSAGE_TYPE, messages_for, read_message_file
 from rouvr.muse import build_task_prompt, build_verifier_prompt, read_verdict
 from rouvr.receipts import build_links, load_private_key, sign_links
 
@@ -115,9 +116,15 @@ class Activities:
             if e.get("session_id"):
                 state["session_id"] = str(e["session_id"])
 
-        turn = await self.h.muse.run(prompt=build_task_prompt(task, spec.repo, branch, inp.rework_notes),
-                                     model=persona.muse_model, cwd=ws, env=env, timeout_s=spec.timeout_s,
-                                     resume=resume, on_event=on_event)
+        peer = messages_for(await wh.list_evidence(wf.task_id), "builder")
+        turn = await self.h.muse.run(
+            prompt=build_task_prompt(task, spec.repo, branch, inp.rework_notes, peer),
+            model=persona.muse_model, cwd=ws, env=env, timeout_s=spec.timeout_s,
+            resume=resume, on_event=on_event)
+        if (msg := read_message_file(ws, "verifier")):
+            ev.append(await wh.attach_evidence_exact(
+                wf.task_id, MESSAGE_TYPE, f"{fence}:msg-verifier",
+                {"from": "builder", "to": "verifier", "text": msg}))
         ev.append(await wh.attach_evidence_exact(wf.task_id, "muse_session", fence,
                                                  {"session_id": turn.session_id, "events": turn.events}))
         pr_url, head = await ensure_pr(ws, spec.repo, spec.base_branch, branch,
@@ -177,6 +184,9 @@ class Activities:
         s, h = self.h.settings, self.h
         _, verifier = h.personas.role_pair(wf.tenant_id)  # SELF_REVIEW re-checked at the verify claim
         wh = self.h.workhub_for(verifier)  # verifier-identity reads + writes; builder never touches these
+        # Supervisor-visible sync: entering review moves the task to needs_review.
+        await self._close_to(wf.task_id, "needs_review", "verify entered",
+                             ("state", wf.task_id, built.attempt_id))
         task = await wh.get_task(wf.task_id)
         spec = await h.exec_specs.get(wf.tenant_id, task)
         rows = await wh.list_evidence(wf.task_id)
@@ -206,8 +216,13 @@ class Activities:
         vdir = ws.parent / f"{ws.name}__verify"
         vdir.mkdir(parents=True, exist_ok=True)
         creds = verifier.credentials()
-        await h.muse.run(prompt=build_verifier_prompt(task, diff, tests.summary), model=verifier.muse_model,
+        await h.muse.run(prompt=build_verifier_prompt(task, diff, tests.summary,
+                                                      messages_for(rows, "verifier")),
+                         model=verifier.muse_model,
                          cwd=vdir, env={"META_API_KEY": creds.get("meta_api_key", "")}, timeout_s=spec.timeout_s)
+        if (msg := read_message_file(vdir, "builder")):
+            await wh.attach_evidence_exact(wf.task_id, MESSAGE_TYPE, f"{fence}:msg-builder",
+                                           {"from": "verifier", "to": "builder", "text": msg})
         try:
             verdict, notes = read_verdict(vdir)
         except RouvrError as e:  # unreadable verdict fails closed: block + escalate, never approve
@@ -222,7 +237,7 @@ class Activities:
     _HOPS = {"queued": "running", "running": "needs_review", "needs_review": "done",
               "submitted_for_review": "done", "blocked": "queued", "waiting_on_human": "running",
               "needs_enrichment": "running", "needs_human_intervention": "running",
-              "execution_failed": "running", "open": "claimed", "claimed": "done"}
+              "execution_failed": "running", "open": "claimed", "claimed": "needs_review"}
 
     async def _close_to(self, task_id: str, to_state: str, reason: str, key: tuple) -> CloseResult:
         wh = self.h.workhub_for(None)  # closer principal (canary closeout used the coordinator JWT)

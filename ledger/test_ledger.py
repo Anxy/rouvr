@@ -25,3 +25,20 @@ def test_illegal_transition_rejected(tmp_path):
     c = _client(tmp_path)
     tid = c.post("/v1/tasks", json={"title": "x", "intent": "y"}).json()["id"]
     assert c.post(f"/v1/tasks/{tid}/transition", json={"to": "done", "idempotency_key": "a"}).status_code == 409
+
+
+def test_claim_moves_task_to_claimed_and_review_cycle(tmp_path):
+    c = _client(tmp_path)
+    tid = c.post("/v1/tasks", json={"title": "x", "intent": "y"}).json()["id"]
+    r = c.post(f"/v1/tasks/{tid}/assignments/claim",
+               json={"key": "claim-1", "principal": "svc-b", "attempt_no": 1})
+    assert r.status_code == 200
+    assert c.get(f"/v1/tasks/{tid}").json()["state"] == "claimed"
+    assert c.post(f"/v1/tasks/{tid}/transition",
+                  json={"to": "needs_review", "idempotency_key": "nr1"}).status_code == 200
+    assert c.get(f"/v1/tasks/{tid}").json()["state"] == "needs_review"
+    # rework: claiming the next attempt returns the task to claimed
+    r = c.post(f"/v1/tasks/{tid}/assignments/claim",
+               json={"key": "claim-2", "principal": "svc-b", "attempt_no": 2})
+    assert r.status_code == 200
+    assert c.get(f"/v1/tasks/{tid}").json()["state"] == "claimed"

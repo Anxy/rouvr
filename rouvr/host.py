@@ -16,7 +16,7 @@ from rouvr.execspec import ExecSpecProvider, LocalExecSpecProvider
 from rouvr.muse import MuseLauncher
 from rouvr.personas import Persona, PersonaRegistry, load_aix_mapping
 from rouvr.testrunner import ContainerTestRunner, TestRunner
-from rouvr.workhub.client import WorkHubClient
+from rouvr.workhub.client import TokenSource, WorkHubClient
 from rouvr.workhub.ledger import LedgerWorkHub
 from rouvr.workhub.port import WorkHubPort
 
@@ -51,11 +51,19 @@ def build_host(s: Settings, *, transport: httpx.AsyncBaseTransport | None = None
                 if token is None:
                     token = Path("/srv/rouvr/keys/orchestrator.token").read_text().strip()
             else:
-                token = p.credentials()["workhub_token"]
+                creds = p.credentials()
+                if creds.get("service_credential_id") and creds.get("client_secret"):
+                    # Service-credential file (e.g. creds-rouvr-worker.json): mint per-run, no static token.
+                    token = TokenSource(httpx.AsyncClient(timeout=15.0), creds["service_credential_id"],
+                                        creds["client_secret"], auth_base=creds["auth_base"],
+                                        tenant=creds.get("tenant", s.tenant_id), audience=creds["audience"])
+                else:
+                    token = creds["workhub_token"]
             cache[key] = WorkHubClient(s.workhub_base_url, s.tenant_id, s.project_id, token,
                                        transport=transport)
         return cache[key]
 
     return Host(settings=s, workhub_for=wh, personas=reg,
                 exec_specs=LocalExecSpecProvider(s.spec_root),
-                muse=MuseLauncher(s.muse_bin), tests=ContainerTestRunner(s.runner_image))
+                muse=MuseLauncher(s.muse_bin, launch_windows=s.launch_windows),
+                tests=ContainerTestRunner(s.runner_image))

@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "updated": "2026-10-29",
+  "updated": "2026-10-30",
   "machine": {
     "states": [
       "queued",
@@ -557,10 +557,10 @@
     {
       "id": "S008",
       "file": "docs/tasks/rouvr/S008-stage-promotion.md",
-      "state": "blocked",
-      "worker": null,
+      "state": "done",
+      "worker": "coder-1",
       "supervisor": null,
-      "note": "Probed 29-Oct: grant impossible from this host (tenant mismatch; service tokens 401 on auth admin). Human runbook: docs/a2-gates.md human steps 1-2.",
+      "note": "User approved local-ledger substitution for external stage (option 1, 2026-10-30); R10 rehearsal PASS docs/r10-runs/20261030T1247",
       "history": [
         {
           "state": "blocked",
@@ -573,16 +573,77 @@
           "at": "2026-10-29",
           "by": "supervisor",
           "ref": "block"
+        },
+        {
+          "state": "blocked",
+          "at": "2026-10-30",
+          "by": "supervisor",
+          "ref": "block"
+        },
+        {
+          "state": "queued",
+          "at": "2026-10-30",
+          "by": "supervisor-1",
+          "ref": "resume"
+        },
+        {
+          "state": "running",
+          "at": "2026-10-30",
+          "by": "worker",
+          "ref": "claim"
+        },
+        {
+          "state": "needs_review",
+          "at": "2026-10-30",
+          "by": "worker",
+          "ref": "tests"
+        },
+        {
+          "state": "closeout",
+          "at": "2026-10-30",
+          "by": "supervisor",
+          "ref": "review"
+        },
+        {
+          "state": "done",
+          "at": "2026-10-30",
+          "by": "supervisor",
+          "ref": "closeout"
         }
       ],
-      "cycles": [],
-      "depends_on": []
+      "cycles": [
+        {
+          "round": 1,
+          "verdict": "approved",
+          "at": "2026-10-30",
+          "by": "supervisor-1",
+          "comment": "",
+          "ref": "review"
+        }
+      ],
+      "depends_on": [],
+      "claimed_at": "2026-10-30",
+      "pre_task": "TaskKinds VERIFICATION; local ledger backend per user option 1; scripts/r10_rehearsal.sh ledger run",
+      "tests": "r10_rehearsal.sh exit 0; PRs=1 handoff=1 attempt1_rows=1 max_assign_attempt=2 state=done; pytest 93 passed",
+      "evidence": "docs/r10-runs/20261030T1247/ (PR #3 rouvr-r10-scratch, assign_task attempt 2 after kill -9)",
+      "review": {
+        "verdict": "approve",
+        "at": "2026-10-30",
+        "by": "supervisor-1",
+        "ref": "review"
+      },
+      "verification": "transcript README re-read; ledger task state done; evidence kinds temporal_handoff,execution_spec,muse_session,pr_record,test_run,submit_attempt,verifier_report",
+      "closeout": {
+        "at": "2026-10-30",
+        "by": "supervisor-1",
+        "ref": "docs/tasks/rouvr/S008-stage-promotion.md \u00a711"
+      }
     },
     {
       "id": "S009",
       "file": "docs/tasks/rouvr/S009-aix-backport.md",
-      "state": "queued",
-      "worker": null,
+      "state": "done",
+      "worker": "coder-1",
       "supervisor": null,
       "history": [
         {
@@ -590,12 +651,61 @@
           "at": "2026-10-29",
           "by": "worker",
           "ref": "docs/a2-gates.md gate 4; depends on S008 done"
+        },
+        {
+          "state": "running",
+          "at": "2026-10-30",
+          "by": "worker",
+          "ref": "claim"
+        },
+        {
+          "state": "needs_review",
+          "at": "2026-10-30",
+          "by": "worker",
+          "ref": "tests"
+        },
+        {
+          "state": "closeout",
+          "at": "2026-10-30",
+          "by": "supervisor",
+          "ref": "review"
+        },
+        {
+          "state": "done",
+          "at": "2026-10-30",
+          "by": "supervisor",
+          "ref": "closeout"
         }
       ],
-      "cycles": [],
+      "cycles": [
+        {
+          "round": 1,
+          "verdict": "approved",
+          "at": "2026-10-30",
+          "by": "supervisor-1",
+          "comment": "",
+          "ref": "review"
+        }
+      ],
       "depends_on": [
         "S008"
-      ]
+      ],
+      "claimed_at": "2026-10-30",
+      "pre_task": "TaskKind IMPLEMENTATION; hyeve-lane lanes/temporal + tools/rouvr_lane_worker.py; local ledger backend per user option 1",
+      "tests": "lane suites 176 passed / 24 pre-existing dispatch failures (baseline-identical), 5 skipped; rouvr 93 passed; negative probe TaskLoop absent",
+      "evidence": "hyeve-lane diff (workflows.py 2849->1863, ROUVR_PIN c342e20, tools/rouvr_lane_worker.py boot probe); docs/r10-runs/20261030T1247",
+      "review": {
+        "verdict": "approve",
+        "at": "2026-10-30",
+        "by": "supervisor-1",
+        "ref": "review"
+      },
+      "verification": "grep 0 TaskLoop refs; lane suite counts match baseline; rouvr suite re-run",
+      "closeout": {
+        "at": "2026-10-30",
+        "by": "supervisor-1",
+        "ref": "docs/tasks/rouvr/S009-aix-backport.md \u00a711"
+      }
     },
     {
       "id": "S010",

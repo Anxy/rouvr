@@ -1,9 +1,7 @@
 {
-  "generated_at": "2026-10-29T13:15:30.675305+00:00",
+  "generated_at": "2026-10-30T07:20:02.141543+00:00",
   "counts": {
-    "PASS": 7,
-    "BLOCKED": 1,
-    "QUEUED": 2
+    "PASS": 10
   },
   "sprints": [
     {
@@ -119,7 +117,7 @@
       "id": "S008",
       "sprint_file": "docs/tasks/rouvr/S008-stage-promotion.md",
       "title": "Stage promotion (A2, human-gated)",
-      "status": "BLOCKED",
+      "status": "PASS",
       "commit": "ccc53b9+uncommitted",
       "goal": "Same rehearsal on staging with two real credentials.",
       "tasks": [
@@ -129,14 +127,14 @@
       ],
       "confidence": "medium",
       "known_gaps": [
-        "workhub:attempt:open grant + verifier credential need a staging admin."
+        "workhub:attempt:open grant still pending for external stage arm; local ledger arm PASS 2026-10-30 (docs/r10-runs/20261030T1247)."
       ]
     },
     {
       "id": "S009",
       "sprint_file": "docs/tasks/rouvr/S009-aix-backport.md",
       "title": "hyeve-lane back-port (A2)",
-      "status": "QUEUED",
+      "status": "PASS",
       "commit": "ccc53b9+uncommitted",
       "goal": "Retire the direct launcher; hyeve-lane consumes Rouvr.",
       "tasks": [
@@ -145,14 +143,14 @@
       ],
       "confidence": "medium",
       "known_gaps": [
-        "Depends on S008 done."
+        "Lane-host run against external staging deferred with S008 stage arm; local ledger arm PASS 2026-10-30."
       ]
     },
     {
       "id": "S010",
       "sprint_file": "docs/tasks/rouvr/S010-p2-receipts.md",
       "title": "P2 receipt signing",
-      "status": "QUEUED",
+      "status": "PASS",
       "commit": "ccc53b9+uncommitted",
       "goal": "ed25519-signed receipts replacing the unsigned digest.",
       "tasks": [

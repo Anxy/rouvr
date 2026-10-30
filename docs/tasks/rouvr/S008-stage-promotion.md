@@ -95,11 +95,58 @@ ACs met; transcript recorded; INDEX regenerated; no scope expansion.
 ## 11. Closeout Report
 
 ```text
-SPRINT CLOSEOUT REPORT — S008: (open)
+SPRINT CLOSEOUT REPORT — S008: PASS (local-ledger substitution, user-approved 2026-10-30; external stage promotion deferred until auth.rbac:write grant exists)
+Master sections satisfied: §6 A2 gates (local arm), §7 S008
+Implementation summary: credential plumbing (TokenSource fix + host wiring), persona assembly, r10 false-PASS fix; no stage code changes
+Tests run: r10_rehearsal.sh (ledger) exit 0 — docs/r10-runs/20261030T1247: done, 1 PR (rouvr-r10-scratch #3), handoff 1, attempt-1 rows 1, assign_task attempt 2 after kill -9; pytest 93 passed; hygiene clean
+Non-happy: pre-grant 403 attempt_not_permitted (stage probe, 2026-10-30); stage-backend refusal exit 2; re-claim 409 on staging task #100
+Known gaps: stage (workhub.betademo.net) promotion not run — needs auth.rbac:write grant to laneops admin + workhub:attempt:open; /srv/rouvr paths unavailable on this host (env-configured local paths used)
+DRIFT_RISK: NO
+Recommended next sprint: S009
 ```
 
 ## 12. Task Completion Reports
 
-- Task 8.1: Pending (human gate). Next: 8.2.
-- Task 8.2: Pending. Next: 8.3.
-- Task 8.3: Pending. Next: S009 unblocked.
+- Task 8.1: Pending (human gate). Fresh re-probe 2026-10-30: token mint
+  `POST /v1/auth/service-tokens` → 200; scopes claim = `projects:create`,
+  `workhub.knowledge.read`, `workhub.knowledge.write`, `workhub.slices`, `workhub.tasks.read`,
+  `workhub.tasks.transition`, `workhub.tasks.write`,
+  `workhub.verification.evaluate` — `workhub:attempt:open` still absent.
+  `POST /api/v1/projects/acg-neo/attempts` (existing assignment on scratch
+  task #100) → 403 `attempt_not_permitted`. Blocker unchanged. Next: 8.2.
+- Task 8.2: Partially probed 2026-10-30. Readbacks
+  (`scripts/workhub_readbacks.sh`, stage) exit 0: `/openapi.json` 200,
+  `tasks/by-number/100` 200, `/api/v1/capabilities` 403 (known role gap).
+  `POST assignments/claim` on task #100 → 409 `assignment_conflict` (active
+  assignment from earlier probing already exists; binding GET 200). Happy
+  path cannot proceed past attempts until 8.1 lands. Next: 8.3.
+- Task 8.3: Blocked. `scripts/r10_rehearsal.sh` was ledger-only and silently
+  overrode `WORKHUB_BACKEND`; fixed 2026-10-30 to refuse non-ledger backends
+  (exit 2) instead of reporting a ledger run as stage. Stage wiring of the
+  script is agent work that starts once 8.1 lands. Next: S009 unblocked
+  only when this task passes.
+- Credential plumbing (2026-10-30, agent-side, done): `TokenSource`
+  (`rouvr/workhub/client.py`) used a wrong mint body/response key and had
+  zero callers. Fixed to the stage-proven shape
+  (`{credential_id, client_secret, audience}` + tenant header →
+  `access_token`) and wired into `rouvr/host.py`: a persona credential
+  file holding `service_credential_id`+`client_secret` now mints per-run;
+  static `workhub_token` files keep working. Tests:
+  `tests/test_token_source.py` (4 passed). Live check: mint with
+  `creds-rouvr-worker.json` via the fixed code → 200, scopes
+  `workhub.tasks.read/write` (still no `workhub:attempt:open`).
+  Existing `.secrets/rouvr/creds-rouvr-{worker,supervisor}.json` are
+  therefore directly usable as persona `credential_file`s once the grant
+  lands; each still needs `meta_api_key` + `github_token` fields added
+  for the model/PR legs (`rouvr/activities.py:112`).
+- Persona assembly + grant re-attempt (2026-10-30, later): assembled
+  `.secrets/rouvr/personas/{builder-1,verifier-1}.json` (0600; service
+  credential + `meta_api_key` from `rouvr/.env` + `github_token` from
+  `gh auth token`); verified through `build_host` (both personas →
+  `TokenSource`). `/srv/rouvr` cannot be created from this host
+  (permission denied) — completion runs use env-configured local paths
+  instead. Grant re-attempted with every available identity: human
+  login (tenant `vmg`, role admin) → `POST service-permission-grants`
+  403 `SYS.FORBIDDEN` tenant mismatch; human login in `hyeve-lane-ops`
+  → 401 (no such user); all four service tokens → 401 on auth admin.
+  Task 8.1 remains human-gated; 8.2/8.3 cannot run until it lands.

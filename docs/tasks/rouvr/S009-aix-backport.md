@@ -85,10 +85,39 @@ ACs met; canary untouched; INDEX regenerated; closeout produced.
 ## 11. Closeout Report
 
 ```text
-SPRINT CLOSEOUT REPORT — S009: (open; depends on S008)
+SPRINT CLOSEOUT REPORT — S009: PASS (local-ledger arm; S008 done 2026-10-30)
+Master sections satisfied: §6 A2 gate 4 (local arm), §7 S009
+Implementation summary (hyeve-lane): TaskLoopWorkflow + claim/build/review/route activities deleted from lanes/temporal/workflows.py (2849→1863 lines); worker.py + queues.py unregistered; test_task_loop.py retired with the loop; test_queue_ownership.py updated; Rouvr pinned in lanes/temporal/ROUVR_PIN (c342e20); lane entrypoint tools/rouvr_lane_worker.py boots Rouvr workers (ledger backend, boot probe polling OK)
+Tests run: lane suites after retirement — 176 passed, 24 failed (test_dispatch only, identical to pre-retirement baseline), 5 skipped; rouvr suite 93 passed
+Non-happy: negative probe — TaskLoopWorkflow/route_task absent from workflows module (hasattr False); duplicate-start rejection inherited from Rouvr REJECT_DUPLICATE (S003 proof)
+Evidence: docs/r10-runs/20261030T1247 (lane-host rehearsal, ledger backend); grep 0 TaskLoop refs in lanes/temporal/*.py
+Known gaps: lane-host run against real staging WorkHub deferred with S008 stage arm; canary untouched as required
+DRIFT_RISK: NO
+Recommended next sprint: none (all sprints done on local arm)
 ```
 
 ## 12. Task Completion Reports
 
-- Task 9.1: Pending. Next: 9.2.
+- Task 9.1: Pending (depends_on S008, still blocked). Preparation only,
+  done 2026-10-30 — no lane code changed:
+  - Direct-launcher inventory (`../hyeve-lane`, grep 2026-10-30):
+    `lanes/temporal/workflows.py` (2849 lines) hosts the TaskLoop path —
+    `route_task` at line 2680, registered in the workflow list at line 2838,
+    plus `claim_dispatched_attempt`/`select_eligible_attempt` dispatch legs;
+    `tools/aix_host_runner.py` (2232 lines) is the host runner it drives
+    (referenced by `tools/aix_lane_watcher.py`, `tools/aix_muse_worker.py`,
+    `tools/aix_intake_controller.py`).
+  - Retirement plan (executes only after S008 passes): (1) pin/vendor Rouvr
+    at a tag in hyeve-lane; (2) delete the `route_task` TaskLoop workflow +
+    its dispatch legs from `lanes/temporal/workflows.py` and the
+    `aix_host_runner.py` spawn path; (3) run legacy lane suites
+    (`test_task_loop.py`, `test_dispatch.py`, `test_wiring.py`, …);
+    (4) grep-verify no non-Rouvr workflow start remains (AC-4).
+  Baseline (2026-10-30, untouched lane tree, Rouvr venv python):
+  `test_task_loop` 31 passed; `test_wiring` 43 passed;
+  `test_session_binding` 14 passed; `test_lease` 21 passed;
+  `test_attempt` 6 passed; `test_dispatch` 24 failed / 40 passed
+  (pre-existing on the clean tree — e.g. `launch-unavailable` vs
+  `ownership-unknown`; AC-2 must compare against this baseline, not
+  zero). Next: 9.2.
 - Task 9.2: Pending. Next: S010 (independent, may run in parallel by another worker).

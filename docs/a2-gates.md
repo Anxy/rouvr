@@ -20,6 +20,16 @@ copy-paste; everything after it is agent work again.
 Net: grants are same-tenant operations. We hold no `hyeve-lane-ops` human/admin
 identity, so neither gate can be cleared from this host.
 
+**Fresh re-probe 2026-10-30 (blocker unchanged):** token mint
+`POST /v1/auth/service-tokens` → 200; the token's scopes claim still lacks
+`workhub:attempt:open`; `POST /api/v1/projects/acg-neo/attempts` with the
+existing assignment on scratch task #100 → 403 `attempt_not_permitted`.
+Readbacks (`scripts/workhub_readbacks.sh` against stage) exit 0
+(`/openapi.json` 200, `tasks/by-number/100` 200, capabilities 403 as known).
+`POST assignments/claim` on task #100 → 409 `assignment_conflict` (an active
+assignment from earlier probing already exists; binding GET 200) — revoke or
+reuse it when the grant lands.
+
 ## Human step 1 — attempt-open scope grant (≈2 min, hyeve-lane-ops admin)
 
 As a `hyeve-lane-ops` admin, against `https://auth.betademo.net` (tenant
@@ -49,9 +59,15 @@ returns 2xx instead of 403.
 
 ## Agent steps after the human steps (no further gates)
 
-3. **Stage R10 green.** `WORKHUB_BACKEND=stage bash scripts/r10_rehearsal.sh`
-   with a scratch staging task + both credentials. Asserts: done + 1 PR +
-   activity retry on attempt 1. (S008 closeout.)
+3. **Stage R10 green.** First wire the stage operands into
+   `scripts/r10_rehearsal.sh` (agent work, unblocked by the grant): as of
+   2026-10-30 the script is ledger-only and *refuses* non-ledger backends
+   (exit 2) rather than silently running the ledger as "stage". Then
+   `WORKHUB_BACKEND=stage bash scripts/r10_rehearsal.sh` with a scratch
+   staging task + both credentials. Asserts: done + 1 PR + activity retry
+   on attempt 1. (S008 closeout.) Note: `/srv/rouvr/{personas,specs}` do
+   not exist on this host yet — create them (0600 credential files) as
+   part of this step.
 4. **Back-port (S009).** Bump hyeve-lane to the Rouvr modules (or vendor at a
    tag), retire the TaskLoop direct launcher, canary untouched until (3) passes.
 

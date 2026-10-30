@@ -10,6 +10,8 @@ from __future__ import annotations
 
 import asyncio
 import functools
+import json
+import os
 import tempfile
 from pathlib import Path
 
@@ -110,15 +112,20 @@ class Activities:
         ws = await prepare_workspace(s.workspace_root, spec.repo, spec.base_branch, branch)
         creds = persona.credentials()
         # META_API_KEY: verified name headless `muse` honors (R6 probe; MUSE_API_KEY is ignored).
-        env = {"META_API_KEY": creds.get("meta_api_key", ""), "GH_TOKEN": creds.get("github_token", "")}
+        # No git credential for the coder: it commits locally; push/PR happen only
+        # after a supervisor grant (user is asked by the supervisor, nobody else).
+        env = {"META_API_KEY": creds.get("meta_api_key", ""), "GH_TOKEN": ""}
 
         def on_event(e: dict) -> None:
             if e.get("session_id"):
                 state["session_id"] = str(e["session_id"])
 
         peer = messages_for(await wh.list_evidence(wf.task_id), "builder")
+        prompt = build_task_prompt(task, spec.repo, branch, inp.rework_notes, peer)
+        if persona.instructions:
+            prompt = f"{persona.instructions}\n\n---\n\n{prompt}"
         turn = await self.h.muse.run(
-            prompt=build_task_prompt(task, spec.repo, branch, inp.rework_notes, peer),
+            prompt=prompt,
             model=persona.muse_model, cwd=ws, env=env, timeout_s=spec.timeout_s,
             resume=resume, on_event=on_event)
         if (msg := read_message_file(ws, "verifier")):
@@ -127,8 +134,15 @@ class Activities:
                 {"from": "builder", "to": "verifier", "text": msg}))
         ev.append(await wh.attach_evidence_exact(wf.task_id, "muse_session", fence,
                                                  {"session_id": turn.session_id, "events": turn.events}))
+        if turn.session_id:
+            ev.append(await wh.attach_evidence_exact(
+                wf.task_id, "peer_session", f"{fence}:peer",
+                {"role": "builder", "session_id": turn.session_id, "workspace": str(ws)}))
+        grant = await self._await_git_grant(wf.task_id, fence, branch, state, ev, wh)
+        await self._push_branch(ws, branch, grant)
         pr_url, head = await ensure_pr(ws, spec.repo, spec.base_branch, branch,
-                                       f"[Rouvr] {task.get('title', wf.task_id)}", env)
+                                       f"[Rouvr] {task.get('title', wf.task_id)}",
+                                       {"GH_TOKEN": grant})
         ev.append(await wh.attach_evidence_exact(wf.task_id, "pr_record", fence,
                                                  {"url": pr_url, "head_sha": head, "branch": branch}))
         # No record_result here: one result per attempt, written by run_tests as
@@ -137,6 +151,51 @@ class Activities:
         return AssignResult(attempt_id=lease.attempt_id, lease_epoch=lease.lease_epoch,
                             muse_session_id=turn.session_id, branch=branch, pr_url=pr_url, head_sha=head,
                             evidence_ids=ev)
+
+    def _git_grant(self, task_id: str) -> str:
+        """Supervisor-written grant file (0600, never in WorkHub): {github_token}."""
+        p = self.h.settings.workspace_root / f".git-grant-{task_id}.json"
+        try:
+            if p.stat().st_mode & 0o077:
+                return ""
+            return str(json.loads(p.read_text()).get("github_token") or "")
+        except (OSError, ValueError):
+            return ""
+
+    async def _await_git_grant(self, task_id: str, fence: str, branch: str,
+                               state: dict, ev: list, wh) -> str:
+        """No credential, no push: request one from the supervisor and wait.
+
+        The coder never holds a git credential and never talks to the user;
+        the request lands as WorkHub evidence, the supervisor polls it, asks
+        the user, and writes the grant file. Heartbeats keep the lease alive."""
+        if (token := self._git_grant(task_id)):
+            return token
+        ev.append(await wh.attach_evidence_exact(
+            task_id, "credential_request", f"{fence}:git-grant",
+            {"from": "builder", "to": "supervisor",
+             "reason": "git credential needed to push branch and open PR", "branch": branch}))
+        for _ in range(90):  # ~30 min at 20 s, inside the 1800 s activity timeout
+            await asyncio.sleep(20)
+            activity.heartbeat(state)
+            if (token := self._git_grant(task_id)):
+                return token
+        raise RouvrError(Code.DOWNSTREAM, "awaiting supervisor git credential grant",
+                         details={"task_id": task_id})
+
+    async def _push_branch(self, ws, branch: str, token: str) -> None:
+        env = {**os.environ, "GH_TOKEN": token} if token else dict(os.environ)
+        # Push auth comes only from the granted token (gh credential helper
+        # serves GH_TOKEN), never the host's stored git credentials.
+        args = ["git"] + (["-c", "credential.helper=!gh auth git-credential"] if token else []) \
+            + ["push", "origin", branch]
+        proc = await asyncio.create_subprocess_exec(
+            *args, cwd=str(ws), env=env,
+            stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
+        _, err = await proc.communicate()
+        if proc.returncode != 0:
+            raise RouvrError(Code.DOWNSTREAM,
+                             f"git push failed: {err.decode(errors='replace')[:200]}")
 
     @activity.defn(name="run_tests")
     @_wrap
@@ -191,14 +250,19 @@ class Activities:
         spec = await h.exec_specs.get(wf.tenant_id, task)
         rows = await wh.list_evidence(wf.task_id)
         ws = workspace_path(s.workspace_root, built.branch)
-        pr_branch, ci = await pr_facts(built.pr_url, {"GH_TOKEN": verifier.credentials().get("github_token", "")})
+        pr_branch, ci = await pr_facts(built.pr_url, {"GH_TOKEN": self._git_grant(wf.task_id)})
         facts = GateEvidence(
             expected_branch=built.branch, pr_url=built.pr_url, pr_head_branch=pr_branch, ci_status=ci,
             criteria=tuple(c["id"] if isinstance(c, dict) else str(c)
                            for c in task.get("acceptance_criteria") or []),
             evidence_refs=frozenset({tests.evidence_id, f"testrun:{tests.run_id}"}),
             prior_submits=count_prior_submits(rows))
-        gv = evaluate(read_submission_file(ws), facts)
+        submission = read_submission_file(ws)
+        if submission and not submission.get("__malformed__"):
+            # The system creates the PR after the coder turn (supervisor grant
+            # flow): its URL is authoritative, the coder cannot know it.
+            submission["pr_url"] = built.pr_url
+        gv = evaluate(submission, facts)
         fence = f"{built.attempt_id}:verify"
         if gv.verdict in ("blocked", "failed"):
             ev = await wh.attach_evidence_exact(wf.task_id, "verifier_report", fence,
@@ -216,10 +280,17 @@ class Activities:
         vdir = ws.parent / f"{ws.name}__verify"
         vdir.mkdir(parents=True, exist_ok=True)
         creds = verifier.credentials()
-        await h.muse.run(prompt=build_verifier_prompt(task, diff, tests.summary,
-                                                      messages_for(rows, "verifier")),
+        vprompt = build_verifier_prompt(task, diff, tests.summary,
+                                        messages_for(rows, "verifier"))
+        if verifier.instructions:
+            vprompt = f"{verifier.instructions}\n\n---\n\n{vprompt}"
+        vturn = await h.muse.run(prompt=vprompt,
                          model=verifier.muse_model,
                          cwd=vdir, env={"META_API_KEY": creds.get("meta_api_key", "")}, timeout_s=spec.timeout_s)
+        if vturn.session_id:
+            await wh.attach_evidence_exact(wf.task_id, "peer_session", f"{fence}:peer",
+                                           {"role": "verifier", "session_id": vturn.session_id,
+                                            "workspace": str(vdir)})
         if (msg := read_message_file(vdir, "builder")):
             await wh.attach_evidence_exact(wf.task_id, MESSAGE_TYPE, f"{fence}:msg-builder",
                                            {"from": "verifier", "to": "builder", "text": msg})

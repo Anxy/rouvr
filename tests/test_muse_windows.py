@@ -11,7 +11,7 @@ def test_chat_command_gnome_terminal(monkeypatch, tmp_path):
     argv = chat_command("Rouvr muse abc", tmp_path, tmp_path / "p.md", "", "muse")
     assert argv[0] == "gnome-terminal" and "--wait" in argv and "Rouvr muse abc" in argv
     joined = " ".join(argv)
-    assert "--workspace" in joined and "p.md" in joined  # seeded chat, real session
+    assert "--workspace" in joined and "--yolo" in joined and "p.md" in joined  # seeded chat, real session
 
 
 def test_chat_command_no_display_falls_back(monkeypatch, tmp_path):
@@ -21,3 +21,12 @@ def test_chat_command_no_display_falls_back(monkeypatch, tmp_path):
 
 def test_launcher_defaults_windows_off():
     assert MuseLauncher("muse").launch_windows is False
+
+
+def test_discover_session_id(tmp_path):
+    from rouvr.muse import discover_session_id
+    day = tmp_path / "2026" / "10" / "30" / "sess-uuid-1"
+    day.mkdir(parents=True)
+    (day / "session.jsonl").write_text('{"x":"\\"workspace_root\\":\\"/ws/one\\"}"')
+    assert discover_session_id(Path("/ws/one"), tmp_path) == "sess-uuid-1"
+    assert discover_session_id(Path("/ws/other"), tmp_path) == ""

@@ -32,6 +32,36 @@ class MuseTurn:
     last_message: str
 
 
+def sessions_root() -> Path:
+    xdg = os.environ.get("XDG_DATA_HOME") or str(Path.home() / ".local" / "share")
+    return Path(xdg) / "muse" / "sessions"
+
+
+def discover_session_id(cwd: Path, root: Path | None = None) -> str:
+    """Newest muse session whose log names cwd as workspace_root, else ''.
+
+    Interactive muse mints its own UUID; the session store
+    (~/.local/share/muse/sessions/YYYY/MM/DD/<uuid>/session.jsonl) is the
+    only place it is observable, and it is the address native
+    `muse session-message send --target` needs."""
+    root = root or sessions_root()
+    if not root.exists():
+        return ""
+    needle = str(cwd).encode()  # logs escape quotes; the raw path is the stable marker
+    days = sorted(root.glob("*/*/*"), reverse=True)[:2]
+    candidates = sorted((d for day in days for d in day.iterdir() if d.is_dir()),
+                        key=lambda d: d.stat().st_mtime, reverse=True)
+    for d in candidates[:12]:
+        log = d / "session.jsonl"
+        try:
+            with log.open("rb") as fh:
+                if needle in fh.read(2_000_000):
+                    return d.name
+        except OSError:
+            continue
+    return ""
+
+
 def chat_command(title: str, cwd: Path, prompt_file: Path, model: str,
                  bin_path: str = "muse") -> list[str] | None:
     """Argv opening an interactive muse chat session in a new terminal window.
@@ -47,7 +77,9 @@ def chat_command(title: str, cwd: Path, prompt_file: Path, model: str,
         return None
     seed = (f"Read the task instructions in {prompt_file} and complete them in this "
             f"workspace. Follow the submission instructions in that file exactly, then exit.")
-    muse = f"{shlex.quote(bin_path)} --workspace {shlex.quote(str(cwd))}"
+    # --yolo: no trust prompt, no approval/continue dialogs — the persona
+    # window starts and runs unattended in its governed workspace.
+    muse = f"{shlex.quote(bin_path)} --yolo --workspace {shlex.quote(str(cwd))}"
     if model:
         muse += f" --model {shlex.quote(model)}"
     muse += f" {shlex.quote(seed)}"
@@ -146,6 +178,28 @@ class MuseLauncher:
             *chat, cwd=str(cwd), env={**os.environ, **env},
             stdout=asyncio.subprocess.DEVNULL, stderr=asyncio.subprocess.DEVNULL,
             start_new_session=True)
+        # Native-messaging address: discover the chat's real session UUID.
+        for _ in range(30):
+            if proc.returncode is not None:
+                break
+            found = discover_session_id(cwd)
+            if found:
+                sid = found
+                break
+            await asyncio.sleep(2)
+        # Automatic completion: the turn is done when its output file lands
+        # (submit.json / verdict.json); close the window so the workflow
+        # proceeds without any human interaction.
+        async def _watch_output() -> None:
+            while proc.returncode is None:
+                if (cwd / "submit.json").exists() or (cwd / "verdict.json").exists():
+                    await asyncio.sleep(15)  # grace: let the agent finish its final reply
+                    if proc.returncode is None:
+                        await self._kill(proc)
+                    return
+                await asyncio.sleep(5)
+
+        watcher = asyncio.ensure_future(_watch_output())
         waiters = {asyncio.ensure_future(proc.wait())}
         cancel_t = asyncio.ensure_future(cancel.wait()) if cancel else None
         if cancel_t:
@@ -158,9 +212,10 @@ class MuseLauncher:
                                  "muse chat cancelled" if cancel_t in done else "muse chat timed out",
                                  details={"session_id": sid})
         finally:
+            watcher.cancel()
             if cancel_t:
                 cancel_t.cancel()
-        return MuseTurn(session_id=sid, exit_code=proc.returncode or 0, events=0, last_message="")
+        return MuseTurn(session_id=sid, exit_code=0, events=0, last_message="")
 
     async def _kill(self, proc: asyncio.subprocess.Process) -> None:
         if proc.returncode is not None:
@@ -183,10 +238,12 @@ def build_task_prompt(task: dict, spec_repo: str, branch: str, rework_notes: str
     parts = [f"Task {task.get('number', task.get('id'))}: {task.get('title', '')}", "",
              str(task.get("description") or ""), "", "Acceptance criteria:"]
     parts += criterion_lines(task.get("acceptance_criteria") or [])
-    parts += ["", f"Repository {spec_repo}, work on branch {branch}. Commit and push; do not merge.",
+    parts += ["", f"Repository {spec_repo}, work on branch {branch}. Commit locally; do NOT push and "
+              "do not use any git credential — the supervisor grants one and the system pushes; do not merge.",
               "Run the project's tests before finishing.",
-              'When done, write submit.json in the workspace root: {"pr_url": "<PR url>", '
-              '"claims": [{"criterion_id": "<id>"}, ...]} listing EVERY criterion id above — no submission, no credit.',
+              'When done, write submit.json in the workspace root: {"pr_url": "", '
+              '"claims": [{"criterion_id": "<id>"}, ...]} listing EVERY criterion id above — no submission, no credit. '
+              'Leave pr_url empty: the system opens the PR after your turn and fills it in.',
               'If you need clarification or must flag something for the reviewer, also write '
               'message-verifier.json in the workspace root: {"text": "<message>"}.']
     if peer_messages:

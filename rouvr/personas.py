@@ -23,6 +23,9 @@ from rouvr.errors import Code, RouvrError
 Role = Literal["builder", "verifier"]
 
 
+_INSTRUCTION_ALIAS = {"builder": "coder", "verifier": "reviewer"}
+
+
 @dataclass(frozen=True)
 class Persona:
     name: str
@@ -31,6 +34,7 @@ class Persona:
     muse_model: str
     credential_file: Path
     github_app: str | None = None
+    instructions: str = ""
 
     def credentials(self) -> dict:
         # AIX-hardened: refuse creds files readable beyond the owner. Never log the result.
@@ -50,17 +54,29 @@ class Persona:
 
 
 class PersonaRegistry:
-    def __init__(self, data: dict) -> None:
+    def __init__(self, data: dict, base_dir: Path | None = None) -> None:
         self._t: dict[str, dict[str, Persona]] = {}
         for tenant, td in (data.get("tenants") or {}).items():
             self._t[tenant] = {n: Persona(name=n, role=p["role"], principal=p["principal"],
                                           muse_model=p["muse_model"], credential_file=Path(p["credential_file"]),
-                                          github_app=p.get("github_app"))
+                                          github_app=p.get("github_app"),
+                                          instructions=self._load_instructions(base_dir, n, p["role"]))
                                for n, p in (td.get("personas") or {}).items()}
+
+    @staticmethod
+    def _load_instructions(base_dir: Path | None, name: str, role: str) -> str:
+        """Persona MD beside the registry: <name>.md, else coder.md/reviewer.md."""
+        if base_dir is None:
+            return ""
+        for candidate in (f"{name}.md", f"{_INSTRUCTION_ALIAS.get(role, role)}.md"):
+            p = base_dir / candidate
+            if p.exists():
+                return p.read_text()
+        return ""
 
     @classmethod
     def load(cls, path: Path) -> "PersonaRegistry":
-        return cls(yaml.safe_load(path.read_text()) or {})
+        return cls(yaml.safe_load(path.read_text()) or {}, base_dir=path.parent)
 
     def get(self, tenant: str, name: str, role: Role) -> Persona:
         p = self._t.get(tenant, {}).get(name)

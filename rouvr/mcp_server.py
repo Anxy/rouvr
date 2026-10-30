@@ -25,7 +25,21 @@ mcp = MCPServer("rouvr-workhub", instructions=(
 
 
 def _ledger() -> httpx.Client:
-    return httpx.Client(base_url=LEDGER, timeout=15)
+    token = os.environ.get("ROUVR_LEDGER_TOKEN", "")
+    headers = {"X-Rouvr-Token": token} if token else {}
+    return httpx.Client(base_url=LEDGER, timeout=15, headers=headers)
+
+
+def _prose_warnings(description: str, criteria: list[str]) -> list[str]:
+    """S013: instructions living only in prose get skipped by agents;
+    criteria are what is enforced. Warn, never block."""
+    hints = ("note for", "message", "tell the", "leave a", "inform", "let the reviewer",
+             "let the coder")
+    desc, crit = description.lower(), " ".join(criteria).lower()
+    if any(h in desc for h in hints) and not any(h in crit for h in hints):
+        return ["instruction in description is not an acceptance criterion; "
+                "agents may skip it — promote it to a criterion if it must happen"]
+    return []
 
 
 @mcp.tool()
@@ -36,14 +50,50 @@ def workhub_create_task(title: str, description: str, acceptance_criteria: list[
         c.post(f"/v1/tasks/{t['id']}/contracts", json={
             "project_id": PROJECT, "description": description,
             "acceptance_criteria": acceptance_criteria}).raise_for_status()
-        return c.get(f"/v1/tasks/{t['id']}").raise_for_status().json()
+        task = c.get(f"/v1/tasks/{t['id']}").raise_for_status().json()
+        if (w := _prose_warnings(description, acceptance_criteria)):
+            task["warnings"] = w
+        return task
+
+
+def _annotate(task: dict) -> dict:
+    """S012: age + stuck flag (display only) from latest activity time."""
+    from datetime import datetime, timezone
+    stamps = [task.get("updated_at") or ""] + \
+             [e.get("created_at") or "" for e in task.get("evidence") or []]
+    last = max(stamps) if stamps else ""
+    try:
+        age = (datetime.now(timezone.utc) -
+               datetime.fromisoformat(last.replace("Z", "+00:00"))).total_seconds()
+    except ValueError:
+        age = -1
+    task["last_activity_age_s"] = int(age) if age >= 0 else None
+    threshold = float(os.environ.get("ROUVR_STUCK_S", "1800"))
+    task["stuck"] = bool(task.get("state") in ("open", "claimed", "needs_review")
+                         and age > threshold)
+    return task
 
 
 @mcp.tool()
-def workhub_list_tasks() -> list:
-    """List WorkHub tasks with their states."""
+def workhub_list_tasks() -> dict:
+    """List WorkHub tasks with states, stuck flags, and a
+    waiting_on_supervisor rollup (blocked tasks, credential requests)."""
     with _ledger() as c:
-        return c.get("/v1/tasks").raise_for_status().json()
+        data = c.get("/v1/tasks").raise_for_status().json()
+        items = [_annotate(dict(t)) for t in data.get("items", [])]
+        waiting = [{"task_id": t["id"], "reason": "blocked"}
+                   for t in items if t.get("state") == "blocked"]
+        for t in items:
+            if t.get("state") in ("open", "claimed", "needs_review"):
+                d = c.get(f"/v1/tasks/{t['id']}").raise_for_status().json()
+                kinds = [e.get("kind") for e in d.get("evidence") or []]
+                if "credential_request" in kinds and \
+                        kinds.index("credential_request") > (kinds.index("pr_record")
+                                                             if "pr_record" in kinds else -1):
+                    waiting.append({"task_id": t["id"], "reason": "awaiting_git_credential"})
+        data["items"] = items
+        data["waiting_on_supervisor"] = waiting
+        return data
 
 
 _PROGRESS = {"credential_request": "awaiting_git_credential",
@@ -59,10 +109,34 @@ def workhub_show_task(task_id: int) -> dict:
     and `progress` names the live leg from the latest worker evidence."""
     with _ledger() as c:
         task = c.get(f"/v1/tasks/{task_id}").raise_for_status().json()
+    import json as _json
+    for e in task.get("evidence") or []:  # S013: decoded payloads, no double-parse
+        body = e.get("body")
+        if isinstance(body, str):
+            try:
+                body = _json.loads(body)
+            except ValueError:
+                pass
+        if isinstance(body, dict):
+            e["body"] = body
+            if isinstance(body.get("payload"), dict):
+                e["payload"] = body["payload"]
     kinds = [e.get("kind") for e in task.get("evidence") or []]
+    # S015: cost visibility derived from existing evidence (no new storage)
+    from datetime import datetime
+    try:
+        _elapsed = (datetime.fromisoformat((task.get("updated_at") or "").replace("Z", "+00:00"))
+                    - datetime.fromisoformat((task.get("created_at") or "").replace("Z", "+00:00"))
+                    ).total_seconds()
+    except ValueError:
+        _elapsed = -1
+    task["summary"] = {"elapsed_s": int(_elapsed) if _elapsed >= 0 else None,
+                       "windows": kinds.count("peer_session"),
+                       "submits": kinds.count("submit_attempt"),
+                       "messages": kinds.count("agent_message")}
     task["progress"] = (task.get("state") if task.get("state") in ("done", "blocked")
                         else next((_PROGRESS[k] for k in reversed(kinds) if k in _PROGRESS), "queued"))
-    return task
+    return _annotate(task)
 
 
 @mcp.tool()
@@ -278,5 +352,21 @@ if __name__ == "__main__":
     else:
         import threading
         threading.Thread(target=_auto_reap_loop, daemon=True).start()
-        mcp.run(transport="streamable-http", host="127.0.0.1",
-                port=int(os.environ.get("ROUVR_MCP_PORT", "8231")))
+        _token = os.environ.get("ROUVR_LEDGER_TOKEN", "")
+        if _token:  # S011: same shared token guards the MCP port
+            import uvicorn
+            from starlette.middleware.base import BaseHTTPMiddleware
+            from starlette.responses import JSONResponse
+
+            async def _auth(request, call_next):
+                if request.headers.get("x-rouvr-token") != _token:
+                    return JSONResponse({"detail": "unauthorized"}, status_code=401)
+                return await call_next(request)
+
+            _app = mcp.streamable_http_app()
+            _app.add_middleware(BaseHTTPMiddleware, dispatch=_auth)
+            uvicorn.run(_app, host="127.0.0.1",
+                        port=int(os.environ.get("ROUVR_MCP_PORT", "8231")), log_level="warning")
+        else:
+            mcp.run(transport="streamable-http", host="127.0.0.1",
+                    port=int(os.environ.get("ROUVR_MCP_PORT", "8231")))

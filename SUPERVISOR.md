@@ -16,6 +16,12 @@ You deliver work; you never write task code yourself.
 - `workhub_peer_sessions(task_id)` — live muse session addresses of the personas; `workhub_message_agent(task_id, to_role, text)` — native `muse session-message` to a live chat (reports unavailable where external ingress is closed; then use `workhub_post_message`).
 - `workhub_show_task(task_id)` / `workhub_list_tasks()` — poll state and
   evidence; report PR URL, verdicts and rework rounds to the user.
+  `workhub_list_tasks()` also returns `waiting_on_supervisor` (blocked
+  tasks, pending credential requests) and a `stuck` flag per task
+  (no activity for 30 min) — check the rollup first; a stuck task's
+  workflow is likely dead even though its state looks in-flight.
+  `workhub_show_task` includes a `summary` (elapsed time, windows,
+  submits, messages) and decoded evidence `payload` objects.
 
 ## Rules
 

@@ -5,6 +5,7 @@ tests/test_ledger_contract.py."""
 from __future__ import annotations
 
 import json
+import os
 import uuid
 
 import httpx
@@ -17,7 +18,10 @@ from rouvr.workhub.client import canonical_task
 class LedgerWorkHub:
     def __init__(self, base_url: str, *, transport: httpx.AsyncBaseTransport | None = None,
                  timeout_s: float = 15.0) -> None:
-        self._http = httpx.AsyncClient(base_url=base_url, timeout=timeout_s, transport=transport)
+        token = os.environ.get("ROUVR_LEDGER_TOKEN", "")
+        headers = {"X-Rouvr-Token": token} if token else {}
+        self._http = httpx.AsyncClient(base_url=base_url, timeout=timeout_s, transport=transport,
+                                       headers=headers)
 
     async def aclose(self) -> None:
         await self._http.aclose()
@@ -96,20 +100,27 @@ class LedgerWorkHub:
                         "payload": body.get("payload")})
         return out
 
+    async def _lookup_fence(self, task_id: str, evidence_type: str, fence: str) -> str:
+        try:
+            from urllib.parse import quote
+            r = await self._call("GET", f"/v1/tasks/{task_id}/evidence/lookup"
+                                        f"?kind={quote(evidence_type, safe='')}"
+                                        f"&fence={quote(fence, safe='')}")
+            return str(r["id"])
+        except RouvrError as e:
+            if e.code is Code.CONTRACT:  # 404: not written yet
+                return ""
+            raise
+
     async def attach_evidence_exact(self, task_id: str, evidence_type: str, fence: str, payload: dict) -> str:
-        # Ledger has no server-side fence key: dedupe here so the observable
-        # contract matches stage (409 duplicate fence => same readback row).
-        matches = [i for i in await self.list_evidence(task_id)
-                   if i["type"] == evidence_type and i["fence"] == fence]
-        if len(matches) == 1:
-            return matches[0]["id"]
-        if not matches:
-            await self.attach_evidence(task_id, evidence_type, fence, payload)
-            matches = [i for i in await self.list_evidence(task_id)
-                       if i["type"] == evidence_type and i["fence"] == fence]
-        if len(matches) != 1:
-            raise RouvrError(Code.EVIDENCE, f"expected 1 {evidence_type}/{fence}, found {len(matches)}")
-        return matches[0]["id"]
+        # S014: server-side fence lookup (one query); observable contract
+        # matches stage (duplicate fence => same readback row).
+        if (hit := await self._lookup_fence(task_id, evidence_type, fence)):
+            return hit
+        await self.attach_evidence(task_id, evidence_type, fence, payload)
+        if (hit := await self._lookup_fence(task_id, evidence_type, fence)):
+            return hit
+        raise RouvrError(Code.EVIDENCE, f"expected 1 {evidence_type}/{fence}, found 0")
 
     async def record_result(self, task_id: str, attempt_id: str, epoch: int, result: dict) -> dict:
         verdict = result.get("verdict") or result.get("status") or "recorded"

@@ -78,3 +78,33 @@ def test_mcp_agent_messages_roundtrip(monkeypatch, ledger_url):
     assert ms.workhub_read_messages(1, "reviewer") == [
         {"from": "coder", "to": "reviewer", "text": "used punct param name from criteria"}]
     assert len(ms.workhub_read_messages(1)) == 2
+
+
+def test_annotate_stuck_only_for_stale_nonterminal():
+    from datetime import datetime, timedelta, timezone
+    from rouvr.mcp_server import _annotate
+    old = (datetime.now(timezone.utc) - timedelta(hours=2)).isoformat()
+    fresh = datetime.now(timezone.utc).isoformat()
+    assert _annotate({"state": "claimed", "updated_at": old, "evidence": []})["stuck"] is True
+    assert _annotate({"state": "done", "updated_at": old, "evidence": []})["stuck"] is False
+    assert _annotate({"state": "claimed", "updated_at": fresh, "evidence": []})["stuck"] is False
+
+
+def test_prose_warning_only_for_unpromoted_instructions():
+    from rouvr.mcp_server import _prose_warnings
+    assert _prose_warnings("Add f. Also leave a note for the reviewer.", ["f works"])
+    assert _prose_warnings("Add f.", ["f works"]) == []
+    assert _prose_warnings("Add f and message the reviewer.", ["message sent to reviewer"]) == []
+
+
+def test_show_task_decodes_evidence(monkeypatch, ledger_url):
+    monkeypatch.setenv("WORKHUB_BASE_URL", ledger_url)
+    import importlib
+    import rouvr.mcp_server as ms
+    importlib.reload(ms)
+    t = ms.workhub_create_task("decode-me", "d", ["c1"])
+    ms.workhub_post_message(t["id"], "coder", "reviewer", "hello")
+    shown = ms.workhub_show_task(t["id"])
+    msg = [e for e in shown["evidence"] if e.get("kind") == "agent_message"][0]
+    assert msg["payload"] == {"from": "coder", "to": "reviewer", "text": "hello"}
+    assert shown["stuck"] is False

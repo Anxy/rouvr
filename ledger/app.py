@@ -39,12 +39,28 @@ def make_app(db_url: str = DB_URL) -> FastAPI:
     if db_url.startswith("sqlite:///./"):
         Path(db_url[len("sqlite:///"):]).parent.mkdir(parents=True, exist_ok=True)
     eng = create_engine(db_url)
+    if db_url.startswith("sqlite"):  # S014: WAL — parallel workers write evidence
+        with eng.connect() as c:
+            c.execute(text("PRAGMA journal_mode=WAL"))
+            c.commit()
     with eng.begin() as c:
         for stmt in (Path(__file__).with_name("schema.sql").read_text().split(";")):
             body = "\n".join(l for l in stmt.splitlines() if not l.strip().startswith("--"))
             if body.strip():
                 c.execute(text(body))
     app = FastAPI(title="Rouvr ledger")
+
+    # Optional shared-token auth (S011): when ROUVR_LEDGER_TOKEN is set,
+    # every /v1 call must carry it. Unset = open (unit tests, first run).
+    _token = os.environ.get("ROUVR_LEDGER_TOKEN", "")
+
+    @app.middleware("http")
+    async def _auth(request, call_next):
+        if _token and request.url.path.startswith("/v1") \
+                and request.headers.get("x-rouvr-token") != _token:
+            from fastapi.responses import JSONResponse
+            return JSONResponse({"detail": "unauthorized"}, status_code=401)
+        return await call_next(request)
 
     def row(c, sql, **kw):
         r = c.execute(text(sql), kw).mappings().first()
@@ -94,6 +110,21 @@ def make_app(db_url: str = DB_URL) -> FastAPI:
             c.execute(text("INSERT INTO contracts(task_id,body,sha256,created_at) VALUES(:i,:b,:h,:n)"),
                       {"i": tid, "b": s, "h": h, "n": _now()})
             return row(c, "SELECT * FROM contracts WHERE task_id=:i AND sha256=:h", i=tid, h=h)
+
+    @app.get("/v1/tasks/{tid}/evidence/lookup")
+    def lookup_evidence(tid: int, kind: str, fence: str):
+        """S014: single-row fence lookup (replaces client list-and-scan)."""
+        with eng.begin() as c:
+            task_or_404(c, tid)
+            for r in c.execute(text("SELECT * FROM evidence WHERE task_id=:i AND kind=:k ORDER BY id"),
+                               {"i": tid, "k": kind}).mappings():
+                try:
+                    body = json.loads(r["body"])
+                except ValueError:
+                    continue
+                if isinstance(body, dict) and body.get("fence") == fence:
+                    return dict(r)
+            raise HTTPException(404, "evidence not found")
 
     @app.post("/v1/tasks/{tid}/evidence")
     def add_evidence(tid: int, body: dict):

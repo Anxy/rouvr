@@ -15,4 +15,9 @@ fi
 export WORKHUB_BASE_URL="${WORKHUB_BASE_URL:-http://127.0.0.1:8221}"
 export ROUVR_MCP_TRANSPORT=stdio
 export PYTHONPATH="$ROOT"
-exec "$ROOT/.venv/bin/python" -m rouvr.mcp_server
+# Restart loop (S012): if the server dies (stack restart, crash), bring it
+# back so the supervisor session regains its tools without a new chat.
+while true; do
+  "$ROOT/.venv/bin/python" -m rouvr.mcp_server || true
+  sleep 2
+done

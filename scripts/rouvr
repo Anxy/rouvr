@@ -50,8 +50,12 @@ base_branch: main
 test_command: ["python", "-m", "pytest", "-q"]
 timeout_s: 900
 EOF
+  if [ ! -f "$OPS/api-token" ]; then
+    (umask 077; head -c 32 /dev/urandom | od -An -tx1 | tr -d ' \n' > "$OPS/api-token")
+  fi
   cat > "$OPS/env.sh" <<'EOF'
 export WORKHUB_BACKEND=ledger WORKHUB_BASE_URL=http://127.0.0.1:8221 ROUVR_TENANT_ID=supervisor ROUVR_PROJECT_ID=scratch PERSONA_SOURCE=yaml PERSONA_REGISTRY_PATH=/tmp/rouvr-supervisor/personas/tenants.yaml SPEC_ROOT=/tmp/rouvr-supervisor/specs WORKSPACE_ROOT=/tmp/rouvr-supervisor/workspaces EVIDENCE_ROOT=/tmp/rouvr-supervisor/evidence HIDDEN_TESTS_ROOT=/tmp/rouvr-supervisor/hidden-tests TEMPORAL_ADDRESS=127.0.0.1:7233 TEMPORAL_NAMESPACE=default ORCHESTRATOR_TOKEN=ledger LEASE_TTL_S=180 HEARTBEAT_S=30 MAX_REWORK=2 MUSE_BIN=muse
+export ROUVR_LEDGER_TOKEN="$(cat /tmp/rouvr-supervisor/api-token)"
 EOF
 }
 
@@ -91,6 +95,10 @@ uvicorn.run(make_app(os.environ['ROUVR_LEDGER_DATABASE_URL']), host='127.0.0.1',
   for q in orch build test verify; do
     pgrep -f "rouvr[.]worker $q" >/dev/null || setsid -f .venv/bin/python -m rouvr.worker "$q" >>"$OPS/logs/$q.log" 2>&1
   done
+  sleep 2  # S012: second pass — a worker dying during start matches pgrep once, then is gone
+  for q in orch build test verify; do
+    pgrep -f "rouvr[.]worker $q" >/dev/null || setsid -f .venv/bin/python -m rouvr.worker "$q" >>"$OPS/logs/$q.log" 2>&1
+  done
   # Port check, not pgrep: a dying MCP still matches pgrep and would make
   # us skip the start, leaving no server once it exits.
   curl -s -m 2 http://127.0.0.1:8231/mcp >/dev/null 2>&1 || setsid -f .venv/bin/python -m rouvr.mcp_server >>"$OPS/logs/mcp.log" 2>&1
@@ -124,7 +132,7 @@ except Exception: print('DOWN')" 2>/dev/null)"
   echo "ledger:   $(curl -s http://127.0.0.1:8221/health 2>/dev/null || echo DOWN)"
   echo "mcp:      http://127.0.0.1:8231/mcp ($(pgrep -fc 'rouvr[.]mcp_server' || echo 0) proc)"
   echo "workers:  $(pgrep -fc 'rouvr[.]worker' || echo 0)/4 queues"
-  echo "tasks:    $(curl -s http://127.0.0.1:8221/v1/tasks 2>/dev/null | .venv/bin/python -c "
+  echo "tasks:    $(curl -s -H "X-Rouvr-Token: ${ROUVR_LEDGER_TOKEN:-}" http://127.0.0.1:8221/v1/tasks 2>/dev/null | .venv/bin/python -c "
 import json, sys
 try: print([(t['id'], t['state']) for t in json.load(sys.stdin)['items']])
 except Exception: print('n/a')" 2>/dev/null)"

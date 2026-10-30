@@ -49,7 +49,7 @@ def workhub_list_tasks() -> list:
 _PROGRESS = {"credential_request": "awaiting_git_credential",
              "temporal_handoff": "claimed", "execution_spec": "building",
              "muse_session": "building", "pr_record": "testing", "test_run": "verifying",
-             "submit_attempt": "verifying", "verifier_report": "verifying"}
+             "submit_attempt": "verifying", "reviewer_report": "verifying"}
 
 
 @mcp.tool()
@@ -67,7 +67,7 @@ def workhub_show_task(task_id: int) -> dict:
 
 @mcp.tool()
 def workhub_post_message(task_id: int, from_role: str, to_role: str, text: str) -> dict:
-    """Post an agent-to-agent message on a task (roles: supervisor|builder|verifier).
+    """Post an agent-to-agent message on a task (roles: supervisor|coder|reviewer).
     Persona agents also exchange messages inside their turns via message-<to>.json
     files; everything lands as agent_message evidence the next turn reads."""
     import time
@@ -129,7 +129,7 @@ def _live_peers(task_id: int, task: dict) -> list[dict]:
     peers = _peer_sessions(task)
     root = Path(os.environ.get("WORKSPACE_ROOT", "/tmp/rouvr-supervisor/workspaces"))
     known = {p["session_id"] for p in peers}
-    for role, suffix in (("builder", f"rouvr__{task_id}__a1"), ("verifier", f"rouvr__{task_id}__a1__verify")):
+    for role, suffix in (("coder", f"rouvr__{task_id}__a1"), ("reviewer", f"rouvr__{task_id}__a1__verify")):
         ws = root / suffix
         if ws.exists():
             sid = discover_session_id(ws)
@@ -170,24 +170,38 @@ def workhub_message_agent(task_id: int, to_role: str, text: str) -> dict:
 
 
 def _parse_windows(ps_text: str) -> list[dict]:
-    """Live persona windows from `ps` output: gnome-terminal --wait processes
-    whose argv carries a rouvr__<task>__ workspace."""
+    """Live persona windows from `ps` output: any process whose argv carries
+    a rouvr__<task>__ workspace (the gnome-terminal client, its bash, or the
+    muse chat itself — killing the muse pid closes its window)."""
     import re
-    out = []
+    out, seen = [], set()
     for line in ps_text.splitlines():
-        if "gnome-terminal" not in line or "--wait" not in line:
-            continue
+        if "gnome-terminal-server" in line:
+            continue  # shared server hosts every window; never a reap target
         m = re.search(r"(?P<ws>/\S*?/rouvr__(?P<tid>\d+)__\S*?)(?:\s|&&|')", line)
         pid = re.match(r"\s*\S+\s+(?P<pid>\d+)", line)
-        if m and pid:
+        if not m or not pid:
+            continue
+        # Anchor on the real window executables (ps aux COMMAND is field 11):
+        # a shell/grep merely mentioning the workspace path is not a window.
+        parts = line.split(None, 10)
+        cmd = parts[10] if len(parts) > 10 else ""
+        if not (re.search(r"(?<![\w\"=])(?:\S*/)?(?:muse|muse-bin\S*|gnome-terminal)(?:\s|$)", cmd)
+                or re.match(r"(?:\S*/)?bash -c cd ", cmd)):
+            continue
+        if int(pid.group("pid")) not in seen:
+            seen.add(int(pid.group("pid")))
             out.append({"pid": int(pid.group("pid")), "workspace": m.group("ws"),
                         "task_id": int(m.group("tid"))})
     return out
 
 
 def _stale_windows(windows: list[dict], states: dict[int, str]) -> list[dict]:
-    """Windows whose task reached a terminal state — supervisor reaps these."""
-    return [w for w in windows if states.get(w["task_id"]) in ("done", "blocked")]
+    """Windows not in use: task done/blocked, or task no longer in WorkHub
+    (orphaned window). Only called with states from a successful ledger
+    fetch, so 'unknown' never means 'ledger unreachable'."""
+    return [w for w in windows
+            if states.get(w["task_id"], "unknown") in ("done", "blocked", "unknown")]
 
 
 def _live_windows() -> tuple[list[dict], dict[int, str]]:
@@ -210,10 +224,9 @@ def workhub_agent_windows() -> list:
     return wins
 
 
-@mcp.tool()
-def workhub_reap_windows() -> dict:
-    """Supervisor lifecycle duty: close persona windows whose task is
-    done/blocked. Windows of in-flight tasks are never touched."""
+def _reap_stale() -> dict:
+    """Close every window not in use. Windows of in-flight tasks are
+    never touched. Used by the MCP tool, the CLI, and the auto-reaper."""
     import os
     import signal
     wins, states = _live_windows()
@@ -225,6 +238,29 @@ def workhub_reap_windows() -> dict:
         except ProcessLookupError:
             pass
     return {"killed": killed, "kept": [w for w in wins if w not in killed]}
+
+
+def _auto_reap_loop() -> None:
+    """Background reaper (HTTP server only): sweep stale windows every
+    ROUVR_WINDOW_REAP_S seconds (default 30; 0 disables)."""
+    import time
+    interval = float(os.environ.get("ROUVR_WINDOW_REAP_S", "30"))
+    while interval > 0:
+        time.sleep(interval)
+        try:
+            out = _reap_stale()
+            if out["killed"]:
+                print(f"[rouvr] auto-reaped windows: {out['killed']}", flush=True)
+        except Exception:
+            pass  # ledger/Temporal hiccup: skip this sweep, never kill blind
+
+
+@mcp.tool()
+def workhub_reap_windows() -> dict:
+    """Supervisor lifecycle duty: close persona windows whose task is
+    done/blocked or no longer exists. Windows of in-flight tasks are
+    never touched. Also runs automatically in the background."""
+    return _reap_stale()
 
 
 @mcp.tool()
@@ -240,5 +276,7 @@ if __name__ == "__main__":
     if os.environ.get("ROUVR_MCP_TRANSPORT") == "stdio":  # plugin-bundled mode
         mcp.run(transport="stdio")
     else:
+        import threading
+        threading.Thread(target=_auto_reap_loop, daemon=True).start()
         mcp.run(transport="streamable-http", host="127.0.0.1",
                 port=int(os.environ.get("ROUVR_MCP_PORT", "8231")))

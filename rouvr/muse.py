@@ -91,10 +91,36 @@ def chat_command(title: str, cwd: Path, prompt_file: Path, model: str,
     import shutil
     if not os.environ.get("DISPLAY"):
         return None
+    # Inline received messages into the seed: the seed is the first user
+    # message shown in the window, so peers' messages are visible there
+    # deterministically (no reliance on the model echoing them).
+    shown = []
+    try:
+        lines = prompt_file.read_text(errors="ignore").splitlines()
+        in_msgs = False
+        for ln in lines:
+            if ln.startswith("Messages from "):
+                in_msgs = True
+                continue
+            if in_msgs:
+                if ln.startswith("- ") and ": " in ln[2:]:
+                    sender, text = ln[2:].split(": ", 1)
+                    shown.append(f"Message from {sender} : {text}")
+                elif ln.strip():
+                    break
+    except OSError:
+        pass
     seed = (f"You are the Rouvr {role}. Read {prompt_file} now and follow it for the whole session. "
             f"The full stack is already running: WorkHub, Temporal workers, and the submit gate. "
             f"Your window closes automatically once your output file is written. "
-            f"Greet the supervisor briefly as the {role.lower()} ready for this task, then complete it.")
+            f"Greet the supervisor briefly as the {role.lower()} ready for this task. "
+            f"If the instructions list messages from other agents, display each one in your "
+            f"first reply as 'Message from <sender> : <text>' so it is visible in this window. "
+            f"When you send a message, first say it here as a plain chat message "
+            f"(normal assistant text, never only inside a JSON file) as "
+            f"'Message to <recipient> : <text>'. Then complete the task.")
+    if shown:
+        seed += " Messages shown in this window: " + " | ".join(shown)[:600]
     # --yolo: no trust prompt, no approval/continue dialogs — the persona
     # window starts and runs unattended in its governed workspace.
     muse = f"{shlex.quote(bin_path)} --yolo --workspace {shlex.quote(str(cwd))}"
@@ -264,9 +290,12 @@ def build_task_prompt(task: dict, spec_repo: str, branch: str, rework_notes: str
               '"claims": [{"criterion_id": "<id>"}, ...]} listing EVERY criterion id above — no submission, no credit. '
               'Leave pr_url empty: the system opens the PR after your turn and fills it in.',
               'If you need clarification or must flag something for the reviewer, also write '
-              'message-verifier.json in the workspace root: {"text": "<message>"}.']
+              'message-reviewer.json in the workspace root: {"text": "<message>"}. '
+              'Before writing any file, say it as a plain chat message (normal text, not JSON): Message to reviewer : <message>']
     if peer_messages:
-        parts += ["", "Messages from other agents:"] + [f"- {m}" for m in peer_messages]
+        parts += ["", "Messages from other agents — show each in this chat as "
+                  "'Message from <sender> : <text>' as plain chat text before starting work:"] + \
+                 [f"- {m}" for m in peer_messages]
     if rework_notes:
         parts += ["", "Reviewer requested changes:", rework_notes]
     return "\n".join(parts)
@@ -276,26 +305,29 @@ VERDICT_FILE = "verdict.json"
 VERDICTS = ("approve", "request_changes", "reject")
 
 
-def build_verifier_prompt(task: dict, diff: str, tests_summary: str,
+def build_reviewer_prompt(task: dict, diff: str, tests_summary: str,
                           peer_messages: list[str] | None = None) -> str:
-    """Criteria + diff + R8 summary. The builder's report is never included."""
+    """Criteria + diff + R8 summary. The coder's report is never included."""
     parts = [f"Review task {task.get('number', task.get('id'))}: {task.get('title', '')}", "",
              "Acceptance criteria:"]
     parts += criterion_lines(task.get("acceptance_criteria") or [])
     if peer_messages:
-        parts += ["", "Messages from the builder:"] + [f"- {m}" for m in peer_messages]
+        parts += ["", "Messages from the coder — show each in this chat as "
+                  "'Message from coder : <text>' as plain chat text before starting work:"] + \
+                 [f"- {m}" for m in peer_messages]
     parts += ["", f"Test runs: {tests_summary}", "", "PR diff:", diff[:12000],
               "", 'Write verdict.json in the working directory: {"verdict": "approve|request_changes|reject",',
               '"notes": "<one paragraph>"}. Approve only if every criterion is met by the diff and tests.',
-              'To reply to the builder, also write message-builder.json: {"text": "<message>"}.']
+              'To reply to the coder, also write message-coder.json: {"text": "<message>"}. '
+              'Before writing any file, say it as a plain chat message (normal text, not JSON): Message to coder : <message>']
     return "\n".join(parts)
 
 
 def read_verdict(cwd: Path) -> tuple[str, str]:
-    """(verdict, notes). Raises CONTRACT when the verifier output is unusable (fail closed)."""
+    """(verdict, notes). Raises CONTRACT when the reviewer output is unusable (fail closed)."""
     path = cwd / VERDICT_FILE
     if not path.exists():
-        raise RouvrError(Code.CONTRACT, "verifier wrote no verdict.json")
+        raise RouvrError(Code.CONTRACT, "reviewer wrote no verdict.json")
     try:
         data = json.loads(path.read_text())
     except ValueError as e:

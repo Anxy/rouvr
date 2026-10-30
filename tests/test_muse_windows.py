@@ -34,11 +34,22 @@ def test_discover_session_id(tmp_path):
 
 def test_ready_line_from_persona_prompts():
     from rouvr.muse import ready_line
-    coder = "# Persona: Coder (builder)\n\n---\n\nTask 14: Add a helper\n\ndetails"
-    reviewer = "# Persona: Reviewer (verifier)\n\n---\n\nReview task 14: Add a helper\n\ncriteria"
+    coder = "# Persona: Coder (coder)\n\n---\n\nTask 14: Add a helper\n\ndetails"
+    reviewer = "# Persona: Reviewer (reviewer)\n\n---\n\nReview task 14: Add a helper\n\ncriteria"
     assert ready_line(coder) == "Coder ready. Working on task 14: Add a helper"
     assert ready_line(reviewer) == "Reviewer ready. Reviewing task 14: Add a helper"
     assert ready_line("plain prompt") == "Agent ready."
+
+
+def test_chat_seed_inlines_received_messages(monkeypatch, tmp_path):
+    monkeypatch.setenv("DISPLAY", ":0")
+    monkeypatch.setattr("shutil.which", lambda t: "/usr/bin/" + t)
+    p = tmp_path / "p.md"
+    p.write_text("Task 1: X\n\nMessages from other agents — show each:\n"
+                 "- supervisor: please demo the encore\n- coder: noted\n\nOther section\n")
+    joined = " ".join(chat_command("t", tmp_path, p, "", "muse", role="Coder"))
+    assert "Message from supervisor : please demo the encore" in joined
+    assert "Message from coder : noted" in joined
 
 
 def test_chat_seed_is_supervisor_style(monkeypatch, tmp_path):
@@ -49,3 +60,4 @@ def test_chat_seed_is_supervisor_style(monkeypatch, tmp_path):
     assert "You are the Rouvr Coder." in joined
     assert "say exactly" not in joined
     assert "Greet the supervisor briefly" in joined
+    assert "Message from <sender>" in joined

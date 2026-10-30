@@ -37,6 +37,25 @@ async def test_mcp_tools_registered():
                      "workhub_reap_windows", "rouvr_start_task"]
 
 
+def test_parse_windows_matches_muse_and_terminal_not_server():
+    from rouvr.mcp_server import _parse_windows
+    ps = ("vpsr 111 0.0 0.1 100 100 ? Ssl 10:00 0:01 /usr/libexec/gnome-terminal-server\n"
+          "vpsr 222 0.0 0.1 100 100 ? Sl 10:00 0:01 muse-bin --yolo --workspace /tmp/w/rouvr__7__a1 seed text\n"
+          "vpsr 333 0.0 0.1 100 100 ? Sl 10:00 0:01 gnome-terminal --wait -- bash -c cd /tmp/w/rouvr__8__a1 && exec muse\n"
+          "vpsr 444 0.0 0.1 100 100 ? Sl 10:00 0:01 muse-bin --workspace /home/user/project chat\n"
+          "vpsr 555 0.0 0.1 100 100 ? Sl 10:00 0:01 /bin/bash -c grep rouvr__7__a1 /tmp/x; sleep 1\n")
+    wins = _parse_windows(ps)
+    assert [(w["pid"], w["task_id"]) for w in wins] == [(222, 7), (333, 8)]
+
+
+def test_stale_windows_terminal_and_orphan_only():
+    from rouvr.mcp_server import _stale_windows
+    wins = [{"pid": 1, "task_id": 1}, {"pid": 2, "task_id": 2}, {"pid": 3, "task_id": 3},
+            {"pid": 4, "task_id": 4}, {"pid": 5, "task_id": 5}]
+    states = {1: "done", 2: "blocked", 3: "claimed", 4: "needs_review"}  # 5 = gone from WorkHub
+    assert [w["pid"] for w in _stale_windows(wins, states)] == [1, 2, 5]
+
+
 def test_mcp_create_and_show(monkeypatch, ledger_url):
     monkeypatch.setenv("WORKHUB_BASE_URL", ledger_url)
     import importlib
@@ -54,8 +73,8 @@ def test_mcp_agent_messages_roundtrip(monkeypatch, ledger_url):
     import rouvr.mcp_server as ms
     importlib.reload(ms)
     ms.workhub_create_task("t2", "d", ["c1"])
-    ms.workhub_post_message(1, "builder", "verifier", "used punct param name from criteria")
-    ms.workhub_post_message(1, "verifier", "builder", "please also cover empty name")
-    assert ms.workhub_read_messages(1, "verifier") == [
-        {"from": "builder", "to": "verifier", "text": "used punct param name from criteria"}]
+    ms.workhub_post_message(1, "coder", "reviewer", "used punct param name from criteria")
+    ms.workhub_post_message(1, "reviewer", "coder", "please also cover empty name")
+    assert ms.workhub_read_messages(1, "reviewer") == [
+        {"from": "coder", "to": "reviewer", "text": "used punct param name from criteria"}]
     assert len(ms.workhub_read_messages(1)) == 2

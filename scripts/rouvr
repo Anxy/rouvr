@@ -38,8 +38,8 @@ write_operands() {
 tenants:
   supervisor:
     personas:
-      builder-1: {role: builder, principal: svc-sup-builder, muse_model: "", credential_file: "$ws/builder-1.json", github_app: supervisor}
-      verifier-1: {role: verifier, principal: svc-sup-verifier, muse_model: "", credential_file: "$ws/verifier-1.json"}
+      coder-1: {role: coder, principal: svc-sup-coder, muse_model: "", credential_file: "$ws/coder-1.json", github_app: supervisor}
+      reviewer-1: {role: reviewer, principal: svc-sup-reviewer, muse_model: "", credential_file: "$ws/reviewer-1.json"}
 EOF
   for md in coder.md reviewer.md; do
     [ -f "$OPS/personas/$md" ] || cp "$ROOT/personas/$md" "$OPS/personas/$md"
@@ -91,7 +91,9 @@ uvicorn.run(make_app(os.environ['ROUVR_LEDGER_DATABASE_URL']), host='127.0.0.1',
   for q in orch build test verify; do
     pgrep -f "rouvr[.]worker $q" >/dev/null || setsid -f .venv/bin/python -m rouvr.worker "$q" >>"$OPS/logs/$q.log" 2>&1
   done
-  pgrep -f "rouvr[.]mcp_server" >/dev/null || setsid -f .venv/bin/python -m rouvr.mcp_server >>"$OPS/logs/mcp.log" 2>&1
+  # Port check, not pgrep: a dying MCP still matches pgrep and would make
+  # us skip the start, leaving no server once it exits.
+  curl -s -m 2 http://127.0.0.1:8231/mcp >/dev/null 2>&1 || setsid -f .venv/bin/python -m rouvr.mcp_server >>"$OPS/logs/mcp.log" 2>&1
   sleep 5
   status
   cat <<'EOF'
@@ -141,13 +143,23 @@ down() {
   echo "[rouvr] Docker Temporal stack stopped"
 }
 
+reap() {  # kill persona windows whose task is done/blocked/gone (auto-runs every 30s in MCP too)
+  load_env >/dev/null 2>&1 || true
+  .venv/bin/python -c "
+from rouvr.mcp_server import _reap_stale
+out = _reap_stale()
+print(f\"killed {len(out['killed'])} stale window(s): {out['killed']}\")
+print(f\"kept {len(out['kept'])} in-flight window(s): {out['kept']}\")"
+}
+
 CHAT=1
 [ "${2:-}" = "--no-chat" ] && CHAT=0
 case "${1:-up}" in
   up) up ;;
   --no-chat) CHAT=0; up ;;
   status) load_env >/dev/null 2>&1 || true; status ;;
+  reap) reap ;;
   stop) stop ;;
   down) down ;;
-  *) echo "usage: ./scripts/rouvr [--no-chat|status|stop|down]" >&2; exit 2 ;;
+  *) echo "usage: ./scripts/rouvr [--no-chat|status|reap|stop|down]" >&2; exit 2 ;;
 esac

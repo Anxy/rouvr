@@ -12,7 +12,7 @@ import os
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
 from sqlalchemy import create_engine, text
 
 DB_URL = os.environ.get("ROUVR_LEDGER_DATABASE_URL", "sqlite:///./.rouvr/ledger.db")
@@ -50,17 +50,52 @@ def make_app(db_url: str = DB_URL) -> FastAPI:
                 c.execute(text(body))
     app = FastAPI(title="Rouvr ledger")
 
-    # Optional shared-token auth (S011): when ROUVR_LEDGER_TOKEN is set,
-    # every /v1 call must carry it. Unset = open (unit tests, first run).
+    # Add created_by to pre-S016 databases (schema.sql covers fresh ones
+    # only via CREATE TABLE; existing tables need the column explicitly).
+    with eng.begin() as c:
+        cols = [r[1] for r in c.execute(text("PRAGMA table_info(tasks)"))]
+        if cols and "created_by" not in cols:
+            c.execute(text("ALTER TABLE tasks ADD COLUMN created_by TEXT NOT NULL DEFAULT 'supervisor'"))
+
+    # Token auth (S011 + S016): the shared stack token authenticates as
+    # "supervisor" (stack/worker identity, sees all). A per-user token
+    # authenticates as that user and is scoped to their own tasks.
+    # Unset shared token = open dev mode (identity supervisor).
     _token = os.environ.get("ROUVR_LEDGER_TOKEN", "")
 
     @app.middleware("http")
     async def _auth(request, call_next):
-        if _token and request.url.path.startswith("/v1") \
-                and request.headers.get("x-rouvr-token") != _token:
+        request.state.user = "supervisor"
+        if _token and request.url.path.startswith("/v1"):
             from fastapi.responses import JSONResponse
-            return JSONResponse({"detail": "unauthorized"}, status_code=401)
+            hdr = request.headers.get("x-rouvr-token", "")
+            if hdr == _token:
+                pass  # stack identity
+            elif hdr:
+                h = hashlib.sha256(hdr.encode()).hexdigest()
+                with eng.connect() as c:
+                    u = c.execute(text("SELECT username, disabled FROM users WHERE token_hash=:h"),
+                                  {"h": h}).mappings().first()
+                if not u or u["disabled"]:
+                    return JSONResponse({"detail": "unauthorized"}, status_code=401)
+                request.state.user = u["username"]
+            else:
+                return JSONResponse({"detail": "unauthorized"}, status_code=401)
         return await call_next(request)
+
+    def _identity(request) -> str:
+        return getattr(request.state, "user", "supervisor")
+
+    def _own_or_stack(c, tid, identity):
+        """403 for a user touching another user's task (S016)."""
+        t = task_or_404(c, tid)
+        if identity != "supervisor" and (t.get("created_by") or "supervisor") != identity:
+            raise HTTPException(403, f"task owned by {t.get('created_by') or 'supervisor'}")
+        return t
+
+    def _stack_only(identity):
+        if identity != "supervisor":
+            raise HTTPException(403, "worker-only operation")
 
     def row(c, sql, **kw):
         r = c.execute(text(sql), kw).mappings().first()
@@ -76,34 +111,72 @@ def make_app(db_url: str = DB_URL) -> FastAPI:
     def health():
         return {"status": "ok", "service": "rouvr-ledger"}
 
+    @app.post("/v1/users")
+    def create_user(body: dict, request: Request):
+        _stack_only(_identity(request))
+        name = str(body.get("username") or "").strip()
+        if not name or not body.get("token_hash"):
+            raise HTTPException(422, "username and token_hash are required")
+        with eng.begin() as c:
+            c.execute(text("INSERT INTO users(username,display_name,token_hash,created_at)"
+                           " VALUES(:u,:d,:h,:n) ON CONFLICT(username) DO UPDATE SET"
+                           " token_hash=:h, display_name=:d, disabled=0"),
+                      {"u": name, "d": body.get("display_name", ""), "h": body["token_hash"],
+                       "n": _now()})
+            return row(c, "SELECT username, display_name, disabled, created_at FROM users WHERE username=:u", u=name)
+
+    @app.get("/v1/users")
+    def list_users(request: Request):
+        _stack_only(_identity(request))
+        with eng.begin() as c:
+            return {"items": [dict(r) for r in c.execute(
+                text("SELECT username, display_name, disabled, created_at FROM users ORDER BY username")).mappings()]}
+
+    @app.post("/v1/users/{username}/disable")
+    def disable_user(username: str, request: Request):
+        _stack_only(_identity(request))
+        with eng.begin() as c:
+            c.execute(text("UPDATE users SET disabled=1 WHERE username=:u"), {"u": username})
+            return {"disabled": username}
+
     @app.post("/v1/tasks")
-    def create_task(body: dict):
+    def create_task(body: dict, request: Request):
         with eng.begin() as c:
             n = _now()
-            c.execute(text("INSERT INTO tasks(title,intent,state,created_at,updated_at) VALUES(:t,:i,'open',:n,:n)"),
-                      {"t": body.get("title", ""), "i": body.get("intent", ""), "n": n})
+            c.execute(text("INSERT INTO tasks(title,intent,state,created_at,updated_at,created_by)"
+                           " VALUES(:t,:i,'open',:n,:n,:by)"),
+                      {"t": body.get("title", ""), "i": body.get("intent", ""), "n": n,
+                       "by": _identity(request)})
             return row(c, "SELECT * FROM tasks ORDER BY id DESC LIMIT 1")
 
     @app.get("/v1/tasks")
-    def list_tasks(state: str | None = None):
+    def list_tasks(request: Request, state: str | None = None):
+        ident = _identity(request)
         with eng.begin() as c:
-            q = "SELECT * FROM tasks" + (" WHERE state=:s" if state else "") + " ORDER BY id"
-            return {"items": [dict(r) for r in c.execute(text(q), {"s": state}).mappings()]}
+            q, kw = "SELECT * FROM tasks", {}
+            conds = []
+            if state:
+                conds.append("state=:s"); kw["s"] = state
+            if ident != "supervisor":  # S016: users see their own tasks by default
+                conds.append("created_by=:by"); kw["by"] = ident
+            if conds:
+                q += " WHERE " + " AND ".join(conds)
+            return {"items": [dict(r) for r in c.execute(text(q + " ORDER BY id"), kw).mappings()]}
 
     @app.get("/v1/tasks/{tid}")
-    def get_task(tid: int):
+    def get_task(tid: int, request: Request):
         with eng.begin() as c:
-            t = task_or_404(c, tid)
+            t = _own_or_stack(c, tid, _identity(request))
             t["contracts"] = [dict(r) for r in c.execute(text("SELECT * FROM contracts WHERE task_id=:i ORDER BY id"), {"i": tid}).mappings()]
             t["evidence"] = [dict(r) for r in c.execute(text("SELECT * FROM evidence WHERE task_id=:i ORDER BY id"), {"i": tid}).mappings()]
             t["receipts"] = [dict(r) for r in c.execute(text("SELECT * FROM receipts WHERE task_id=:i ORDER BY id"), {"i": tid}).mappings()]
             return t
 
     @app.post("/v1/tasks/{tid}/contracts")
-    def add_contract(tid: int, body: dict):
+    def add_contract(tid: int, body: dict, request: Request):
         s, h = _canon(body)
         with eng.begin() as c:
-            task_or_404(c, tid)
+            _own_or_stack(c, tid, _identity(request))
             existing = row(c, "SELECT * FROM contracts WHERE task_id=:i AND sha256=:h", i=tid, h=h)
             if existing:
                 return existing
@@ -112,7 +185,8 @@ def make_app(db_url: str = DB_URL) -> FastAPI:
             return row(c, "SELECT * FROM contracts WHERE task_id=:i AND sha256=:h", i=tid, h=h)
 
     @app.get("/v1/tasks/{tid}/evidence/lookup")
-    def lookup_evidence(tid: int, kind: str, fence: str):
+    def lookup_evidence(tid: int, kind: str, fence: str, request: Request):
+        _stack_only(_identity(request))
         """S014: single-row fence lookup (replaces client list-and-scan)."""
         with eng.begin() as c:
             task_or_404(c, tid)
@@ -127,16 +201,17 @@ def make_app(db_url: str = DB_URL) -> FastAPI:
             raise HTTPException(404, "evidence not found")
 
     @app.post("/v1/tasks/{tid}/evidence")
-    def add_evidence(tid: int, body: dict):
+    def add_evidence(tid: int, body: dict, request: Request):
         s, h = _canon(body.get("body", {}))
         with eng.begin() as c:
-            task_or_404(c, tid)
+            _own_or_stack(c, tid, _identity(request))
             c.execute(text("INSERT INTO evidence(task_id,kind,body,sha256,created_at) VALUES(:i,:k,:b,:h,:n)"),
                       {"i": tid, "k": body.get("kind", "note"), "b": s, "h": h, "n": _now()})
             return row(c, "SELECT * FROM evidence WHERE task_id=:i ORDER BY id DESC LIMIT 1", i=tid)
 
     @app.post("/v1/tasks/{tid}/transition")
-    def transition(tid: int, body: dict):
+    def transition(tid: int, body: dict, request: Request):
+        _stack_only(_identity(request))
         """Idempotent state change. Requires idempotency_key; replays return the first receipt.
         Moving to 'done' requires a contract and at least one evidence row."""
         key = body.get("idempotency_key")
@@ -178,7 +253,8 @@ def make_app(db_url: str = DB_URL) -> FastAPI:
                   {"i": tid, "k": key, "a": action, "b": s, "n": _now()})
 
     @app.get("/v1/tasks/{tid}/binding")
-    def get_binding(tid: int):
+    def get_binding(tid: int, request: Request):
+        _stack_only(_identity(request))
         with eng.begin() as c:
             task_or_404(c, tid)
             a = row(c, "SELECT * FROM assignments WHERE task_id=:i AND status='active' ORDER BY id DESC LIMIT 1", i=tid)
@@ -187,7 +263,8 @@ def make_app(db_url: str = DB_URL) -> FastAPI:
             return {"assignment": a, "lease": row(c, "SELECT * FROM leases WHERE task_id=:i", i=tid)}
 
     @app.post("/v1/tasks/{tid}/assignments/claim")
-    def claim_assignment(tid: int, body: dict):
+    def claim_assignment(tid: int, body: dict, request: Request):
+        _stack_only(_identity(request))
         key, principal = body.get("key"), body.get("principal", "")
         attempt_no, ttl_s = int(body.get("attempt_no", 1)), int(body.get("ttl_s", 120))
         if not key or not principal:
@@ -218,7 +295,8 @@ def make_app(db_url: str = DB_URL) -> FastAPI:
             return {"replayed": False, "assignment": a, "lease_epoch": epoch, "lease": lease}
 
     @app.post("/v1/tasks/{tid}/leases/renew")
-    def renew_lease(tid: int, body: dict):
+    def renew_lease(tid: int, body: dict, request: Request):
+        _stack_only(_identity(request))
         key, holder = body.get("key"), body.get("holder", "")
         expected, ttl_s = body.get("expected_lease_epoch"), int(body.get("ttl_s", 120))
         if not key or not holder or expected is None:
@@ -241,7 +319,8 @@ def make_app(db_url: str = DB_URL) -> FastAPI:
             return {"replayed": False, "lease": lease}
 
     @app.post("/v1/tasks/{tid}/assignments/reclaim")
-    def reclaim_assignment(tid: int, body: dict):
+    def reclaim_assignment(tid: int, body: dict, request: Request):
+        _stack_only(_identity(request))
         key = body.get("key")
         if not key:
             raise HTTPException(422, "key is required")
@@ -260,7 +339,8 @@ def make_app(db_url: str = DB_URL) -> FastAPI:
             return {"replayed": False, **out}
 
     @app.post("/v1/tasks/{tid}/attempts")
-    def open_attempt(tid: int, body: dict):
+    def open_attempt(tid: int, body: dict, request: Request):
+        _stack_only(_identity(request))
         key, attempt_no, epoch = body.get("key"), body.get("attempt_no"), body.get("lease_epoch")
         if not key or attempt_no is None or epoch is None:
             raise HTTPException(422, "key, attempt_no and lease_epoch are required")
@@ -281,7 +361,8 @@ def make_app(db_url: str = DB_URL) -> FastAPI:
             return {"replayed": False, "attempt": a}
 
     @app.post("/v1/tasks/{tid}/results")
-    def record_result(tid: int, body: dict):
+    def record_result(tid: int, body: dict, request: Request):
+        _stack_only(_identity(request))
         key, attempt_id, epoch = body.get("key"), body.get("attempt_id"), body.get("lease_epoch")
         verdict, result = body.get("verdict", ""), body.get("result", {})
         if not key or attempt_id is None or epoch is None or not verdict:

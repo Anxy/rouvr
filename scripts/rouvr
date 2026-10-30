@@ -118,11 +118,18 @@ EOF
   if [ "$CHAT" = "1" ] && [ -t 0 ]; then
     local ws="${ROUVR_SUPERVISOR_WORKSPACE:-$ROOT}"
     echo "[rouvr] opening supervisor muse session in $ws (exit the chat to return; stack keeps running)..."
+    if [ -n "${ROUVR_ACTIVE_USER:-}" ]; then
+      # Only the supervisor session carries the user token; workers/MCP
+      # keep the stack identity (S016 AC-5).
+      exec env ROUVR_LEDGER_TOKEN="$ROUVR_PROFILE_TOKEN" ROUVR_USER="$ROUVR_ACTIVE_USER" \
+        muse --workspace "$ws" "You are the Rouvr supervisor, supervising as user '$ROUVR_ACTIVE_USER'. Read $ROOT/SUPERVISOR.md now and follow it for the whole session. The full stack is already running: ledger WorkHub, Temporal workers, and your bundled rouvr-workhub MCP tools. Greet the user briefly and ask what task to deliver."
+    fi
     exec muse --workspace "$ws" "You are the Rouvr supervisor. Read $ROOT/SUPERVISOR.md now and follow it for the whole session. The full stack is already running: ledger WorkHub, Temporal workers, and your bundled rouvr-workhub MCP tools. Greet the user briefly and ask what task to deliver."
   fi
 }
 
 status() {
+  echo "user:     ${ROUVR_ACTIVE_USER:-stack (supervisor)}"
   echo "temporal: $(.venv/bin/python -c "
 import asyncio
 from temporalio.client import Client
@@ -159,6 +166,48 @@ out = _reap_stale()
 print(f\"killed {len(out['killed'])} stale window(s): {out['killed']}\")
 print(f\"kept {len(out['kept'])} in-flight window(s): {out['kept']}\")"
 }
+
+# ---- S016 user profiles -------------------------------------------------
+CONF="${XDG_CONFIG_HOME:-$HOME/.config}/rouvr"
+if [ "${1:-}" = "user" ]; then
+  case "${2:-}" in
+    add) shift 2; exec "$ROOT/scripts/seed-user" "$@" ;;
+    list)
+      for f in "$CONF"/users/*.json; do
+        [ -e "$f" ] || continue
+        n="$(basename "$f" .json)"
+        [ -f "$CONF/default-user" ] && [ "$(cat "$CONF/default-user")" = "$n" ] && echo "$n (default)" || echo "$n"
+      done ;;
+    use) [ -n "${3:-}" ] || { echo "usage: rouvr user use <username>" >&2; exit 2; }
+         mkdir -p "$CONF"; printf %s "$3" > "$CONF/default-user"; echo "default user: $3" ;;
+    *) echo "usage: rouvr user add|list|use <username>" >&2; exit 2 ;;
+  esac
+  exit 0
+fi
+
+# Optional leading --user <name>: select that profile for this launch.
+ARGS=()
+while [ $# -gt 0 ]; do
+  if [ "$1" = "--user" ]; then ROUVR_ACTIVE_USER="${2:-}"; shift 2; else ARGS+=("$1"); shift; fi
+done
+set -- "${ARGS[@]:-}"
+if [ -z "${ROUVR_ACTIVE_USER:-}" ] && [ -f "$CONF/default-user" ]; then
+  ROUVR_ACTIVE_USER="$(cat "$CONF/default-user")"
+fi
+if [ -n "${ROUVR_ACTIVE_USER:-}" ]; then
+  PF="$CONF/users/$ROUVR_ACTIVE_USER.json"
+  if [ ! -f "$PF" ]; then
+    if [ -t 0 ]; then
+      printf "No profile for '%s'. Create it now? [Y/n] " "$ROUVR_ACTIVE_USER"
+      read -r ans; case "$ans" in n|N) exit 2;; *) "$ROOT/scripts/seed-user" "$ROUVR_ACTIVE_USER";; esac
+    else
+      echo "no profile for '$ROUVR_ACTIVE_USER'; run: rouvr user add $ROUVR_ACTIVE_USER" >&2; exit 2
+    fi
+  fi
+  [ "$(stat -c %a "$PF")" = "600" ] || { echo "profile $PF must be mode 600 (chmod 600)" >&2; exit 2; }
+  ROUVR_PROFILE_TOKEN="$("$ROOT/.venv/bin/python" -c "import json,sys; print(json.load(open(sys.argv[1]))['token'])" "$PF")"
+  export ROUVR_ACTIVE_USER
+fi
 
 CHAT=1
 [ "${2:-}" = "--no-chat" ] && CHAT=0

@@ -33,6 +33,14 @@ CREATE TABLE IF NOT EXISTS receipts (
   body            TEXT NOT NULL,
   created_at      TEXT NOT NULL
 );
+-- S016: local user registry. Only the token hash is stored server-side.
+CREATE TABLE IF NOT EXISTS users (
+  username    TEXT PRIMARY KEY,
+  display_name TEXT NOT NULL DEFAULT '',
+  token_hash  TEXT NOT NULL,
+  disabled    INTEGER NOT NULL DEFAULT 0,
+  created_at  TEXT NOT NULL
+);
 -- R3 parity: assignment / lease / attempt / result (WorkHub-lite shape).
 CREATE TABLE IF NOT EXISTS assignments (
   id          INTEGER PRIMARY KEY,

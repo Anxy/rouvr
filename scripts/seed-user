@@ -1,0 +1,48 @@
+#!/usr/bin/env bash
+# Provision a local Rouvr user (S016): register in the ledger WorkHub and
+# write the local profile. Idempotent; --rotate issues a fresh token.
+#   scripts/seed-user <username> [--rotate]
+# The user-facing entry point is `rouvr user add <username>`.
+set -euo pipefail
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+OPS=/tmp/rouvr-supervisor
+USER_NAME="${1:-}"
+ROTATE="${2:-}"
+[ -n "$USER_NAME" ] || { echo "usage: seed-user <username> [--rotate]" >&2; exit 2; }
+case "$USER_NAME" in *[!a-z0-9_-]*) echo "username: lowercase letters, digits, - and _ only" >&2; exit 2;; esac
+
+CONF="${XDG_CONFIG_HOME:-$HOME/.config}/rouvr"
+PROFILE="$CONF/users/$USER_NAME.json"
+mkdir -p "$CONF/users"
+
+# Stack operands + ledger must exist to register against.
+cd "$ROOT"
+[ -f "$OPS/env.sh" ] || bash scripts/rouvr status >/dev/null 2>&1 || true
+set -a; . "$OPS/env.sh"; set +a
+if ! curl -sf http://127.0.0.1:8221/health >/dev/null 2>&1; then
+  setsid -f env ROUVR_LEDGER_DATABASE_URL="sqlite:///$OPS/ledger.db" .venv/bin/python -c "
+from ledger.app import make_app
+import os, uvicorn
+uvicorn.run(make_app(os.environ['ROUVR_LEDGER_DATABASE_URL']), host='127.0.0.1', port=8221, log_level='warning')
+" >>"$OPS/logs/ledger.log" 2>&1
+  for _ in $(seq 1 15); do curl -sf http://127.0.0.1:8221/health >/dev/null 2>&1 && break; sleep 1; done
+fi
+
+# Reuse the profile's token unless --rotate (idempotent re-seed).
+TOKEN=""
+if [ -f "$PROFILE" ] && [ "$ROTATE" != "--rotate" ]; then
+  TOKEN="$(.venv/bin/python -c "import json;print(json.load(open('$PROFILE'))['token'])")"
+fi
+if [ -z "$TOKEN" ]; then
+  TOKEN="$(head -c 32 /dev/urandom | od -An -tx1 | tr -d ' \n')"
+fi
+HASH="$(printf %s "$TOKEN" | sha256sum | cut -d' ' -f1)"
+curl -sf -X POST http://127.0.0.1:8221/v1/users \
+  -H "X-Rouvr-Token: $ROUVR_LEDGER_TOKEN" -H 'Content-Type: application/json' \
+  -d "{\"username\":\"$USER_NAME\",\"token_hash\":\"$HASH\",\"display_name\":\"$USER_NAME\"}" >/dev/null
+(umask 077; cat > "$PROFILE" <<EOF
+{"username": "$USER_NAME", "workhub_url": "http://127.0.0.1:8221", "token": "$TOKEN"}
+EOF
+)
+[ -f "$CONF/default-user" ] || printf %s "$USER_NAME" > "$CONF/default-user"
+echo "rouvr user '$USER_NAME' ready (profile: $PROFILE)"

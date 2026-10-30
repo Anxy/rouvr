@@ -145,6 +145,17 @@ class Activities:
                                        {"GH_TOKEN": grant})
         ev.append(await wh.attach_evidence_exact(wf.task_id, "pr_record", fence,
                                                  {"url": pr_url, "head_sha": head, "branch": branch}))
+        if inp.attempt_no > 1:  # S013: close the superseded attempt's PR
+            from rouvr.gitops import close_superseded_pr
+            prev = branch_for(wf.task_id, inp.attempt_no - 1)
+            try:
+                closed = await close_superseded_pr(spec.repo, prev, pr_url, {"GH_TOKEN": grant})
+                note = {"closed_pr": closed, "superseded_by": pr_url} if closed \
+                    else {"closed_pr": "", "note": "no open PR on previous branch"}
+            except Exception as e:  # failure is evidence, never silent
+                note = {"close_failed": f"{type(e).__name__}: {e}"[:200], "prev_branch": prev}
+            ev.append(await wh.attach_evidence_exact(wf.task_id, "pr_superseded",
+                                                     f"{fence}:pr-superseded", note))
         # No record_result here: one result per attempt, written by run_tests as
         # "tested" (the build facts live in pr_record evidence). A second core
         # for the same attempt 409s on both backends (R10 rehearsal finding).
@@ -266,16 +277,17 @@ class Activities:
         fence = f"{built.attempt_id}:verify"
         if gv.verdict in ("blocked", "failed"):
             ev = await wh.attach_evidence_exact(wf.task_id, "reviewer_report", fence,
-                                                {"gate": gv.verdict, "feedback": gv.feedback})
+                                                {"verdict": "reject", "gate_detail": gv.verdict,
+                                                 "feedback": gv.feedback})
             return VerifyResult("reject", gv.feedback or gv.verdict, reviewer.principal, ev)
         if gv.verdict == "reject":
             await wh.attach_evidence_exact(wf.task_id, SUBMIT_ATTEMPT_TYPE, f"{fence}:submit-{facts.prior_submits + 1}",
-                                           {"gate": "reject", "feedback": gv.feedback})
+                                           {"verdict": "request_changes", "feedback": gv.feedback})
             ev = await wh.attach_evidence_exact(wf.task_id, "reviewer_report", fence,
-                                                {"gate": "reject", "feedback": gv.feedback})
+                                                {"verdict": "request_changes", "feedback": gv.feedback})
             return VerifyResult("request_changes", gv.feedback or "gate rejected", reviewer.principal, ev)
         await wh.attach_evidence_exact(wf.task_id, SUBMIT_ATTEMPT_TYPE, f"{fence}:submit-{facts.prior_submits + 1}",
-                                       {"gate": "approved"})
+                                       {"verdict": "approve"})
         diff = await diff_range(ws, f"origin/{spec.base_branch}", built.head_sha)
         vdir = ws.parent / f"{ws.name}__verify"
         vdir.mkdir(parents=True, exist_ok=True)
@@ -297,11 +309,11 @@ class Activities:
         try:
             verdict, notes = read_verdict(vdir)
         except RouvrError as e:  # unreadable verdict fails closed: block + escalate, never approve
-            ev = await wh.attach_evidence_exact(wf.task_id, "reviewer_report", fence, {"gate": "approved",
-                                                                                       "verdict_error": str(e)})
+            ev = await wh.attach_evidence_exact(wf.task_id, "reviewer_report", fence,
+                                                {"verdict": "reject", "verdict_error": str(e)})
             return VerifyResult("reject", f"reviewer output unusable: {e}", reviewer.principal, ev)
         ev = await wh.attach_evidence_exact(wf.task_id, "reviewer_report", fence,
-                                            {"gate": "approved", "verdict": verdict, "notes": notes})
+                                            {"verdict": verdict, "notes": notes})
         return VerifyResult(verdict, notes, reviewer.principal, ev)  # verdict in VERDICTS by read_verdict
 
     # Next hop toward done. Stage map: GET /api/v1/tasks/transitions/help; ledger: TRANSITIONS in app.py.

@@ -61,3 +61,19 @@ def test_chat_seed_is_supervisor_style(monkeypatch, tmp_path):
     assert "say exactly" not in joined
     assert "Greet the supervisor briefly" in joined
     assert "Message from <sender>" in joined
+
+
+def test_chat_window_scrubs_credential_env(monkeypatch, tmp_path):
+    monkeypatch.setenv("DISPLAY", ":0")
+    monkeypatch.setattr("shutil.which", lambda t: "/usr/bin/" + t)
+    joined = " ".join(chat_command("t", tmp_path, tmp_path / "p.md", "", "muse"))
+    assert "env -u GH_TOKEN -u ROUVR_LEDGER_TOKEN" in joined
+
+
+def test_clone_env_uses_only_stack_token(monkeypatch):
+    from rouvr.gitops import clone_env
+    monkeypatch.setenv("GH_TOKEN", "x")
+    monkeypatch.setenv("ROUVR_LEDGER_TOKEN", "y")
+    env = clone_env()
+    assert env["GH_TOKEN"] == "x" and "ROUVR_LEDGER_TOKEN" not in env
+    assert env["GIT_TERMINAL_PROMPT"] == "0"

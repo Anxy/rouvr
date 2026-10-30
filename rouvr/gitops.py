@@ -25,14 +25,43 @@ def workspace_path(root: Path, branch: str) -> Path:
     return root / branch.replace("/", "__")
 
 
+def clone_env() -> dict[str, str]:
+    """Environment for clone/fetch (S011): auth only via the stack's
+    explicit GH_TOKEN through the gh credential helper — never the host's
+    stored git credentials, never an interactive prompt."""
+    import os
+    env = {k: v for k, v in os.environ.items() if k != "ROUVR_LEDGER_TOKEN"}
+    env["GIT_TERMINAL_PROMPT"] = "0"
+    return env
+
+
+_GH_HELPER = ("-c", "credential.helper=!gh auth git-credential")
+
+
 async def prepare_workspace(root: Path, repo: str, base: str, branch: str) -> Path:
     ws = workspace_path(root, branch)
+    env = clone_env()
     if not (ws / ".git").exists():
         ws.parent.mkdir(parents=True, exist_ok=True)
-        await _run("git", "clone", "--branch", base, f"https://github.com/{repo}.git", str(ws))
-    await _run("git", "fetch", "origin", cwd=ws)
-    await _run("git", "checkout", "-B", branch, f"origin/{base}", cwd=ws)  # reset: attempt is a clean slate
+        await _run("git", *_GH_HELPER, "clone", "--branch", base,
+                   f"https://github.com/{repo}.git", str(ws), env=env)
+    await _run("git", *_GH_HELPER, "fetch", "origin", cwd=ws, env=env)
+    await checkout_branch(ws, branch, base)
     return ws
+
+
+async def checkout_branch(ws: Path, branch: str, base: str) -> None:
+    """Existing local branch (a retried attempt after worker death) is
+    resumed as-is; only a fresh attempt starts clean from origin/base.
+    Resetting unconditionally wiped the prior attempt's commit and the
+    retry then failed PR creation with 'No commits between'."""
+    p = await asyncio.create_subprocess_exec("git", "rev-parse", "--verify", "--quiet", branch,
+                                             cwd=str(ws), stdout=asyncio.subprocess.DEVNULL,
+                                             stderr=asyncio.subprocess.DEVNULL)
+    if await p.wait() == 0:
+        await _run("git", "checkout", branch, cwd=ws)
+    else:
+        await _run("git", "checkout", "-B", branch, f"origin/{base}", cwd=ws)
 
 
 async def ensure_pr(ws: Path, repo: str, base: str, branch: str, title: str, env: dict[str, str]) -> tuple[str, str]:
@@ -45,6 +74,20 @@ async def ensure_pr(ws: Path, repo: str, base: str, branch: str, title: str, env
     url = await _run("gh", "pr", "create", "-R", repo, "--base", base, "--head", branch, "--title", title,
                      "--body", "Opened by Rouvr.", env=env)
     return url, head
+
+
+async def close_superseded_pr(repo: str, prev_branch: str, new_pr_url: str,
+                              env: dict[str, str]) -> str:
+    """Close the previous attempt's open PR, superseded by the new one.
+    Returns the closed PR url or '' when none was open."""
+    existing = json.loads(await _run("gh", "pr", "list", "-R", repo, "--head", prev_branch,
+                                     "--state", "open", "--json", "url", env=env) or "[]")
+    if not existing:
+        return ""
+    url = existing[0]["url"]
+    await _run("gh", "pr", "close", url, "-R", repo,
+               "--comment", f"Superseded by {new_pr_url} (new attempt).", env=env)
+    return url
 
 
 async def clone_at(repo: str, sha: str, base: str, dest: Path, env: dict[str, str] | None = None) -> Path:

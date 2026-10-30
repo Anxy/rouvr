@@ -123,7 +123,13 @@ def chat_command(title: str, cwd: Path, prompt_file: Path, model: str,
         seed += " Messages shown in this window: " + " | ".join(shown)[:600]
     # --yolo: no trust prompt, no approval/continue dialogs — the persona
     # window starts and runs unattended in its governed workspace.
-    muse = f"{shlex.quote(bin_path)} --yolo --workspace {shlex.quote(str(cwd))}"
+    # S011 fence: strip credential-bearing env vars the worker shell holds
+    # (GH_TOKEN, ledger token) so the window agent cannot use them.
+    # shortcut: HOME stays real (muse login lives there), so file reads
+    # outside the workspace are bounded by muse's sandbox, not by us —
+    # revisit if muse supports a portable login dir.
+    muse = (f"env -u GH_TOKEN -u ROUVR_LEDGER_TOKEN -u META_MODEL_API_KEY "
+            f"{shlex.quote(bin_path)} --yolo --workspace {shlex.quote(str(cwd))}")
     if model:
         muse += f" --model {shlex.quote(model)}"
     muse += f" {shlex.quote(seed)}"

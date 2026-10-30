@@ -41,6 +41,9 @@ tenants:
       builder-1: {role: builder, principal: svc-sup-builder, muse_model: "", credential_file: "$ws/builder-1.json", github_app: supervisor}
       verifier-1: {role: verifier, principal: svc-sup-verifier, muse_model: "", credential_file: "$ws/verifier-1.json"}
 EOF
+  for md in coder.md reviewer.md; do
+    [ -f "$OPS/personas/$md" ] || cp "$ROOT/personas/$md" "$OPS/personas/$md"
+  done
   [ -f "$OPS/specs/supervisor/scratch.yaml" ] || cat > "$OPS/specs/supervisor/scratch.yaml" <<'EOF'
 repo: ebiz-backend-developer/rouvr-r10-scratch
 base_branch: main

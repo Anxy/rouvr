@@ -32,7 +32,9 @@ async def test_mcp_tools_registered():
     names = [t.name for t in await mcp.list_tools()]
     assert names == ["workhub_create_task", "workhub_list_tasks",
                      "workhub_show_task", "workhub_post_message",
-                     "workhub_read_messages", "rouvr_start_task"]
+                     "workhub_read_messages", "workhub_peer_sessions",
+                     "workhub_message_agent", "workhub_agent_windows",
+                     "workhub_reap_windows", "rouvr_start_task"]
 
 
 def test_mcp_create_and_show(monkeypatch, ledger_url):

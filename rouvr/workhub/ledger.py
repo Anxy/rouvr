@@ -120,7 +120,7 @@ class LedgerWorkHub:
         return {"result_id": str(r["result"]["id"])}
 
     async def evaluate(self, task_id: str, contract_rev: str) -> dict:
-        raise NotImplementedError("R9: verifier evaluation")
+        raise NotImplementedError("R9: reviewer evaluation")
 
     async def transition_batch(self, items: list[dict], key_parts: tuple) -> dict:
         moved = []

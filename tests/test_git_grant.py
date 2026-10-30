@@ -24,7 +24,7 @@ def test_grant_requires_0600_and_token(tmp_path):
     assert acts._git_grant("7") == "tok"
 
 
-def test_builder_prompt_forbids_push():
+def test_coder_prompt_forbids_push():
     from rouvr.muse import build_task_prompt
     prompt = build_task_prompt({"id": 1, "title": "t", "acceptance_criteria": []}, "r", "b", "")
     assert "do NOT push" in prompt and "supervisor grants" in prompt

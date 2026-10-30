@@ -4,7 +4,7 @@ Instruction -> contract -> execute -> independent verify -> receipts, against
 the Rouvr ledger. Delivery goes to a local file outbox (demo/.outbox), never a
 real mailbox. Failure injection via ROUVR_INJECT:
   kill_midstep     crash after delivery, before close; a rerun must not double-send
-  silent_delivery  primary sink reports OK but delivers nothing; verifier must catch it
+  silent_delivery  primary sink reports OK but delivers nothing; reviewer must catch it
   revoked_key      model provider unavailable; task parks as blocked and escalates
 Usage: python demo/morning_report.py [--ledger http://localhost:8221]
 """
@@ -112,7 +112,7 @@ def run(ledger_url: str | None = None) -> str:
             os.environ.pop("ROUVR_INJECT")
             raise SystemExit("worker killed mid-step (injected); rerun to resume")
         result = verify(c, sent["message_id"], figures)
-        c.post(f"/v1/tasks/{tid}/evidence", json={"kind": "verifier", "body": {"sink": sink, **result}})
+        c.post(f"/v1/tasks/{tid}/evidence", json={"kind": "reviewer", "body": {"sink": sink, **result}})
         if result["verdict"] == "pass":
             break
     if not result or result["verdict"] != "pass":

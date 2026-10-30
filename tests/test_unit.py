@@ -72,13 +72,13 @@ async def test_lease_lost_aborts_work():
 
 def test_personas_self_review(tmp_path: Path):
     reg = PersonaRegistry({"tenants": {"t": {"personas": {
-        "b": {"role": "builder", "principal": "same", "muse_model": "muse-wonder-1.0", "credential_file": "/x"},
-        "v": {"role": "verifier", "principal": "same", "muse_model": "muse-spark", "credential_file": "/y"}}}}})
+        "b": {"role": "coder", "principal": "same", "muse_model": "muse-wonder-1.0", "credential_file": "/x"},
+        "v": {"role": "reviewer", "principal": "same", "muse_model": "muse-spark", "credential_file": "/y"}}}}})
     with pytest.raises(RouvrError) as ei:
         reg.pair("t", "b", "v")
     assert ei.value.code is Code.SELF_REVIEW
     with pytest.raises(RouvrError) as ei:
-        reg.get("t", "b", "verifier")
+        reg.get("t", "b", "reviewer")
     assert ei.value.code is Code.INELIGIBLE
 
 
@@ -88,12 +88,12 @@ def test_credentials_refuse_bad_perms(tmp_path: Path):
     loose.write_text('{"meta_api_key": "x"}')
     loose.chmod(0o644)
     with pytest.raises(RouvrError) as ei:
-        Persona("b", "builder", "p", "m", loose).credentials()
+        Persona("b", "coder", "p", "m", loose).credentials()
     assert ei.value.code is Code.AUTHZ
     tight = tmp_path / "tight.json"
     tight.write_text('{"meta_api_key": "x"}')
     tight.chmod(0o600)
-    assert Persona("b", "builder", "p", "m", tight).credentials() == {"meta_api_key": "x"}
+    assert Persona("b", "coder", "p", "m", tight).credentials() == {"meta_api_key": "x"}
 
 
 def test_branch_for():

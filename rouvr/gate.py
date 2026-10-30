@@ -1,6 +1,6 @@
 """rouvr/gate.py — deterministic submit gate (R7, NOT in the scaffold).
 
-The only way to finish: the builder submits {pr_url, claims}; the gate checks
+The only way to finish: the coder submits {pr_url, claims}; the gate checks
 system-observable facts only and returns PASS or exactly one line of
 machine-readable feedback. Three rejects on one attempt => blocked.
 
@@ -13,8 +13,8 @@ as a real MCP tool later changes no gate logic.
 submit.json schema:
     {"pr_url": "https://.../pull/N",
      "claims": [{"criterion_id": "c1"}, ...]}
-The builder claims criteria; the R8 evidence refs are system-known (the
-builder writes submit.json before tests run, so it cannot cite them).
+The coder claims criteria; the R8 evidence refs are system-known (the
+coder writes submit.json before tests run, so it cannot cite them).
 
 Round counting is evidence-backed: each judged submission is recorded as a
 `submit_attempt` evidence row by the caller; count_prior_submits() reads them.
@@ -65,7 +65,7 @@ def submit_result(pr_url: str, claims: list[dict], *, prior_rounds: int) -> dict
 
 
 def read_submission_file(workspace: Path) -> dict | None:
-    """None when the builder never submitted (exit-without-submit => failed)."""
+    """None when the coder never submitted (exit-without-submit => failed)."""
     path = workspace / SUBMIT_FILE
     if not path.exists():
         return None

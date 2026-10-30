@@ -1,6 +1,6 @@
-"""S010 P2: Ed25519 receipt signing — AC-1/2/3 + independent verifier (10.2).
+"""S010 P2: Ed25519 receipt signing — AC-1/2/3 + independent reviewer (10.2).
 
-Pure logic + tmp keys, no network. The independent-verifier test deliberately
+Pure logic + tmp keys, no network. The independent-reviewer test deliberately
 avoids rouvr.receipts.verify_* and checks the signature with cryptography +
 hashlib + json only, exactly as an external auditor would.
 """
@@ -38,7 +38,7 @@ LINKS = dict(
     test_run_id="tr1",
     test_evidence_id="ev-t",
     verdict="approve",
-    verifier="svc-v",
+    reviewer="svc-v",
     verify_evidence_id="ev-v",
 )
 
@@ -69,7 +69,7 @@ def test_digest_covers_exactly_11_links_legacy_value():
     links = build_links(**LINKS)
     assert set(links) == {
         "task_id", "contract_rev", "attempt_id", "muse_session_id", "pr_url",
-        "head_sha", "test_run_id", "test_evidence_id", "verdict", "verifier",
+        "head_sha", "test_run_id", "test_evidence_id", "verdict", "reviewer",
         "verify_evidence_id",
     }
     assert len(links) == 11
@@ -132,9 +132,9 @@ def test_key_rotation_old_receipts_still_verify(tmp_path: Path):
     assert verify_receipt(r1, {"rouvr-receipt-2": k2.public_key()}) is False
 
 
-# --- 10.2 independent verifier (no rouvr verify helper) ---
+# --- 10.2 independent reviewer (no rouvr verify helper) ---
 
-def test_independent_verifier_with_cryptography_only(tmp_path: Path):
+def test_independent_reviewer_with_cryptography_only(tmp_path: Path):
     key = Ed25519PrivateKey.generate()
     priv = _write_private(tmp_path / "receipt_ed25519.pem", key)
     loaded = load_private_key(priv)

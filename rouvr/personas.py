@@ -4,10 +4,10 @@ tenants.yaml:
   tenants:
     default:
       personas:
-        builder-1: {role: builder, principal: svc-rouvr-builder-1, muse_model: muse-wonder-1.0,
-                    credential_file: /srv/rouvr/personas/builder-1.json, github_app: rouvr-builder}
-        verifier-1: {role: verifier, principal: svc-rouvr-verifier-1, muse_model: muse-spark,
-                     credential_file: /srv/rouvr/personas/verifier-1.json}
+        coder-1: {role: coder, principal: svc-rouvr-coder-1, muse_model: muse-wonder-1.0,
+                    credential_file: /srv/rouvr/personas/coder-1.json, github_app: rouvr-coder}
+        reviewer-1: {role: reviewer, principal: svc-rouvr-reviewer-1, muse_model: muse-spark,
+                     credential_file: /srv/rouvr/personas/reviewer-1.json}
 """
 from __future__ import annotations
 
@@ -20,10 +20,10 @@ import yaml
 
 from rouvr.errors import Code, RouvrError
 
-Role = Literal["builder", "verifier"]
+Role = Literal["coder", "reviewer"]
 
 
-_INSTRUCTION_ALIAS = {"builder": "coder", "verifier": "reviewer"}
+_INSTRUCTION_ALIAS = {"coder": "coder", "reviewer": "reviewer"}
 
 
 @dataclass(frozen=True)
@@ -86,10 +86,10 @@ class PersonaRegistry:
             raise RouvrError(Code.INELIGIBLE, f"persona {name} is {p.role}, need {role}")
         return p
 
-    def pair(self, tenant: str, builder: str, verifier: str) -> tuple[Persona, Persona]:
-        b, v = self.get(tenant, builder, "builder"), self.get(tenant, verifier, "verifier")
+    def pair(self, tenant: str, coder: str, reviewer: str) -> tuple[Persona, Persona]:
+        b, v = self.get(tenant, coder, "coder"), self.get(tenant, reviewer, "reviewer")
         if b.principal == v.principal:
-            raise RouvrError(Code.SELF_REVIEW, "verifier principal equals builder principal")
+            raise RouvrError(Code.SELF_REVIEW, "reviewer principal equals coder principal")
         return b, v
 
     def by_role(self, tenant: str, role: Role) -> Persona:
@@ -99,12 +99,12 @@ class PersonaRegistry:
         return self._t[tenant][names[0]]
 
     def role_pair(self, tenant: str) -> tuple[Persona, Persona]:
-        """Builder/verifier by tenant role. Stage-confirmed: the assignment
+        """Coder/reviewer by tenant role. Stage-confirmed: the assignment
         binding names no personas (single `persona` field), so the pair comes
         from the registry, with the same SELF_REVIEW teeth as pair()."""
-        b, v = self.by_role(tenant, "builder"), self.by_role(tenant, "verifier")
+        b, v = self.by_role(tenant, "coder"), self.by_role(tenant, "reviewer")
         if b.principal == v.principal:
-            raise RouvrError(Code.SELF_REVIEW, "verifier principal equals builder principal")
+            raise RouvrError(Code.SELF_REVIEW, "reviewer principal equals coder principal")
         return b, v
 
 
@@ -114,14 +114,14 @@ class PersonaRegistry:
 # tools/bridge_creds.py) and logs in per run with the JWT memory-only. There is
 # no single AIX mapping file: the mapping below is ROUVR-DEFINED (authored at
 # deploy from the AIX roles) and points at those per-role creds files:
-#   {"roles": {"builder":  {"principal": "svc-...", "creds_file": "/srv/...json", "model": "muse-wonder-1.0"},
+#   {"roles": {"coder":  {"principal": "svc-...", "creds_file": "/srv/...json", "model": "muse-wonder-1.0"},
 #              "reviewer": {"principal": "svc-...", "creds_file": "/srv/...json", "model": "muse-spark"},
 #              "closer":   {"principal": "svc-...", "creds_file": "/srv/...json"}}}
-# AIX "reviewer" maps to the Rouvr "verifier" role. Persona name = AIX role name. Single tenant.
+# AIX "reviewer" maps to the Rouvr "reviewer" role. Persona name = AIX role name. Single tenant.
 # Deploy check: the referenced creds files must exist, be 0600, and hold meta_api_key (headless
 # Muse auth, R6 probe) + github_token (PRs) + workhub_token (API calls).
-AIX_ROLE_MAP = {"builder": "builder", "reviewer": "verifier", "verifier": "verifier"}
-DEFAULT_MODELS = {"builder": "muse-wonder-1.0", "verifier": "muse-spark"}
+AIX_ROLE_MAP = {"coder": "coder", "reviewer": "reviewer", "reviewer": "reviewer"}
+DEFAULT_MODELS = {"coder": "muse-wonder-1.0", "reviewer": "muse-spark"}
 
 
 def registry_from_aix_mapping(data: dict, tenant: str) -> PersonaRegistry:

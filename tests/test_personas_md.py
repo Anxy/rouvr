@@ -7,8 +7,8 @@ YAML = """
 tenants:
   t:
     personas:
-      builder-1: {role: builder, principal: svc-b, muse_model: '', credential_file: /tmp/b.json}
-      verifier-1: {role: verifier, principal: svc-v, muse_model: '', credential_file: /tmp/v.json}
+      coder-1: {role: coder, principal: svc-b, muse_model: '', credential_file: /tmp/b.json}
+      reviewer-1: {role: reviewer, principal: svc-v, muse_model: '', credential_file: /tmp/v.json}
 """
 
 
@@ -18,18 +18,18 @@ def test_instructions_alias_and_name(tmp_path: Path):
     reg_path = tmp_path / "tenants.yaml"
     reg_path.write_text(YAML)
     reg = PersonaRegistry.load(reg_path)
-    assert reg.get("t", "builder-1", "builder").instructions == "CODER PERSONA"
-    assert reg.get("t", "verifier-1", "verifier").instructions == "REVIEWER PERSONA"
+    assert reg.get("t", "coder-1", "coder").instructions == "CODER PERSONA"
+    assert reg.get("t", "reviewer-1", "reviewer").instructions == "REVIEWER PERSONA"
 
 
 def test_name_file_wins_and_missing_is_empty(tmp_path: Path):
-    (tmp_path / "builder-1.md").write_text("NAMED")
+    (tmp_path / "coder-1.md").write_text("NAMED")
     (tmp_path / "coder.md").write_text("ALIAS")
     reg_path = tmp_path / "tenants.yaml"
     reg_path.write_text(YAML)
     reg = PersonaRegistry.load(reg_path)
-    assert reg.get("t", "builder-1", "builder").instructions == "NAMED"
-    assert reg.get("t", "verifier-1", "verifier").instructions == ""
+    assert reg.get("t", "coder-1", "coder").instructions == "NAMED"
+    assert reg.get("t", "reviewer-1", "reviewer").instructions == ""
 
 
 def test_repo_persona_files_exist():

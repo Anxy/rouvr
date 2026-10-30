@@ -70,17 +70,17 @@ def person(role, principal="p"):
 
 
 def test_role_pair():
-    r = reg(builder=person("builder", "pb"), reviewer=person("verifier", "pv"))
+    r = reg(coder=person("coder", "pb"), reviewer=person("reviewer", "pv"))
     b, v = r.role_pair("t")
-    assert (b.name, v.name) == ("builder", "reviewer")
+    assert (b.name, v.name) == ("coder", "reviewer")
 
 
 def test_role_pair_self_review_and_missing():
     with pytest.raises(RouvrError) as e:
-        reg(builder=person("builder", "same"), reviewer=person("verifier", "same")).role_pair("t")
+        reg(coder=person("coder", "same"), reviewer=person("reviewer", "same")).role_pair("t")
     assert e.value.code is Code.SELF_REVIEW
     with pytest.raises(RouvrError) as e:
-        reg(builder=person("builder")).role_pair("t")
+        reg(coder=person("coder")).role_pair("t")
     assert e.value.code is Code.SCOPE
 
 

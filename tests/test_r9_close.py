@@ -11,7 +11,7 @@ from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 from rouvr.activities import Activities
 from rouvr.errors import Code, RouvrError
 from rouvr.gitops import ci_status
-from rouvr.muse import build_verifier_prompt, read_verdict
+from rouvr.muse import build_reviewer_prompt, read_verdict
 from rouvr.receipts import SignedReceipt, build_links, verify_receipt
 
 
@@ -37,8 +37,8 @@ def test_read_verdict(tmp_path):
         read_verdict(tmp_path)
 
 
-def test_verifier_prompt_carries_criteria_diff_summary():
-    p = build_verifier_prompt({"id": "t", "title": "T", "acceptance_criteria": ["c1"]}, "DIFF", "1/1 pass")
+def test_reviewer_prompt_carries_criteria_diff_summary():
+    p = build_reviewer_prompt({"id": "t", "title": "T", "acceptance_criteria": ["c1"]}, "DIFF", "1/1 pass")
     assert "c1" in p and "DIFF" in p and "1/1 pass" in p and "verdict.json" in p
 
 
@@ -125,7 +125,7 @@ async def test_sign_receipt_links_attempt_run_session_pr_tests(tmp_path: Path):
     links = build_links(task_id="task1", contract_rev="3", attempt_id="att1",
                         muse_session_id="sess1", pr_url="https://pr/1", head_sha="sha1",
                         test_run_id="tr1", test_evidence_id="ev-t", verdict="approve",
-                        verifier="svc-v", verify_evidence_id="ev-v")
+                        reviewer="svc-v", verify_evidence_id="ev-v")
     signed = SignedReceipt(version="rouvr-receipt-v1", key_id=r1["key_id"],
                            digest=r1["digest"], signature=r1["signature"], links=links)
     assert verify_receipt(signed, key.public_key()) is True
@@ -141,7 +141,7 @@ async def test_sign_receipt_wrong_key_and_tamper_fail(tmp_path: Path):
     links = build_links(task_id="task1", contract_rev="3", attempt_id="att1",
                         muse_session_id="sess1", pr_url="https://pr/1", head_sha="sha1",
                         test_run_id="tr1", test_evidence_id="ev-t", verdict="approve",
-                        verifier="svc-v", verify_evidence_id="ev-v")
+                        reviewer="svc-v", verify_evidence_id="ev-v")
     signed = SignedReceipt(version="rouvr-receipt-v1", key_id=r["key_id"],
                            digest=r["digest"], signature=r["signature"], links=links)
     other = Ed25519PrivateKey.generate()

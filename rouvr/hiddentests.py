@@ -1,7 +1,7 @@
 """rouvr/hiddentests.py — hidden acceptance-test store (R8a).
 
-Written once at task creation by the test_author persona (never the builder),
-hashed and locked. The builder workspace must have no copy (checked by the
+Written once at task creation by the test_author persona (never the coder),
+hashed and locked. The coder workspace must have no copy (checked by the
 runner). Hidden tests are pytest files; each test name embeds its criterion:
 `test_<criterion_id>_...` (e.g. `test_c1_returns_200`). The runner parses
 per-criterion outcomes from `pytest -v` output.
@@ -69,17 +69,17 @@ def fetch_hidden_suite(root: Path, task_id: str) -> tuple[Path, HiddenManifest]:
     return task_dir, manifest
 
 
-def assert_builder_clean(builder_ws: Path, task_dir: Path, manifest: HiddenManifest) -> None:
-    """The builder workspace must hold no copy of the hidden tests (checked by the runner)."""
-    if not builder_ws.exists():
+def assert_coder_clean(coder_ws: Path, task_dir: Path, manifest: HiddenManifest) -> None:
+    """The coder workspace must hold no copy of the hidden tests (checked by the runner)."""
+    if not coder_ws.exists():
         return
     hidden_names = set(manifest.files)
     hidden_hashes = {(task_dir / n).read_bytes() for n in manifest.files}
-    for path in sorted(builder_ws.rglob("*")):
+    for path in sorted(coder_ws.rglob("*")):
         if not path.is_file() or ".git/" in str(path):
             continue
         if path.name in hidden_names or path.read_bytes() in hidden_hashes:
-            raise RouvrError(Code.EVIDENCE, f"builder workspace leaks hidden tests: {path.name}")
+            raise RouvrError(Code.EVIDENCE, f"coder workspace leaks hidden tests: {path.name}")
 
 
 def hidden_literals(hidden_dir: Path) -> frozenset[str]:

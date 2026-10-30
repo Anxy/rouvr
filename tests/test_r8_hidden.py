@@ -3,7 +3,7 @@ import pytest
 
 from rouvr.cheatscan import scan_diff
 from rouvr.errors import Code, RouvrError
-from rouvr.hiddentests import (assert_builder_clean, fetch_hidden_suite, hidden_literals,
+from rouvr.hiddentests import (assert_coder_clean, fetch_hidden_suite, hidden_literals,
                                parse_criterion_outcomes, write_hidden_suite)
 
 HIDDEN = {"test_hidden.py": "def test_c1_returns_200():\n    assert check() == 'zx-AlPhA-42'\n"}
@@ -15,7 +15,7 @@ def test_write_fetch_roundtrip_and_lock(tmp_path):
     d, m2 = fetch_hidden_suite(tmp_path, "t1")
     assert m2 == m and (d / "test_hidden.py").exists()
     with pytest.raises(RouvrError) as e:  # locked at creation
-        write_hidden_suite(tmp_path, task_id="t1", files=HIDDEN, created_by="builder")
+        write_hidden_suite(tmp_path, task_id="t1", files=HIDDEN, created_by="coder")
     assert e.value.code is Code.CONTRACT
 
 
@@ -39,22 +39,22 @@ def test_fetch_detects_tamper_and_missing(tmp_path):
     assert e.value.code is Code.EVIDENCE
 
 
-def test_builder_clean(tmp_path):
+def test_coder_clean(tmp_path):
     m = write_hidden_suite(tmp_path / "hidden", task_id="t1", files=HIDDEN, created_by="test_author")
     d, _ = fetch_hidden_suite(tmp_path / "hidden", "t1")
     ws = tmp_path / "ws"
-    assert_builder_clean(ws, d, m)  # missing workspace is clean
+    assert_coder_clean(ws, d, m)  # missing workspace is clean
     ws.mkdir()
     (ws / "app.py").write_text("print('hi')\n")
-    assert_builder_clean(ws, d, m)
+    assert_coder_clean(ws, d, m)
     (ws / "test_hidden.py").write_text("# lookalike name, different bytes\n")
     with pytest.raises(RouvrError) as e:
-        assert_builder_clean(ws, d, m)
+        assert_coder_clean(ws, d, m)
     assert e.value.code is Code.EVIDENCE
     (ws / "test_hidden.py").unlink()
     (ws / "notes.txt").write_bytes((d / "test_hidden.py").read_bytes())  # same bytes, other name
     with pytest.raises(RouvrError):
-        assert_builder_clean(ws, d, m)
+        assert_coder_clean(ws, d, m)
 
 
 def test_hidden_literals(tmp_path):

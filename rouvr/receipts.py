@@ -3,7 +3,7 @@
 A receipt binds the same 11 links the unsigned S006 digest covered; the
 digest formula is unchanged (sha256 of sort-keys JSON) and the Ed25519
 signature covers the digest bytes. Key rotation: the envelope carries
-`key_id`; verifiers keep a {key_id: public key} pool so receipts signed
+`key_id`; reviewers keep a {key_id: public key} pool so receipts signed
 under a retired id stay verifiable until that id is dropped from the pool.
 Private keys live only in 0600 files (receipt_key_path); key material is
 never logged, returned, or placed in evidence.
@@ -30,12 +30,12 @@ RECEIPT_VERSION = "rouvr-receipt-v1"
 
 def build_links(*, task_id: str, contract_rev: str, attempt_id: str, muse_session_id: str,
                 pr_url: str, head_sha: str, test_run_id: str, test_evidence_id: str,
-                verdict: str, verifier: str, verify_evidence_id: str) -> dict[str, str]:
+                verdict: str, reviewer: str, verify_evidence_id: str) -> dict[str, str]:
     """The 11 receipt links, exactly as the unsigned digest covered them."""
     return {"task_id": task_id, "contract_rev": contract_rev, "attempt_id": attempt_id,
             "muse_session_id": muse_session_id, "pr_url": pr_url, "head_sha": head_sha,
             "test_run_id": test_run_id, "test_evidence_id": test_evidence_id,
-            "verdict": verdict, "verifier": verifier, "verify_evidence_id": verify_evidence_id}
+            "verdict": verdict, "reviewer": reviewer, "verify_evidence_id": verify_evidence_id}
 
 
 def receipt_digest(links: Mapping[str, str]) -> str:

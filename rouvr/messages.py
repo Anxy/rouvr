@@ -26,7 +26,7 @@ def read_message_file(ws: Path, to_role: str) -> str:
 
 
 def messages_for(rows: list[dict], to_role: str) -> list[str]:
-    """['builder: text', ...] from evidence rows addressed to to_role, oldest first."""
+    """['coder: text', ...] from evidence rows addressed to to_role, oldest first."""
     out = []
     for r in rows:
         if r.get("type") != MESSAGE_TYPE:

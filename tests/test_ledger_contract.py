@@ -53,7 +53,7 @@ def norm_attempt(r: dict) -> dict:
 
 async def test_claim_attempt_renew_result_flow(backend):
     wh, tid, _number = backend
-    c = norm_claim(await wh.claim(tid, "builder-1", 1, 120))
+    c = norm_claim(await wh.claim(tid, "coder-1", 1, 120))
     assert c["lease_epoch"] >= 1
     a = norm_attempt(await wh.open_attempt(tid, 1, c["lease_epoch"]))
     assert a["attempt_no"] == 1
@@ -68,7 +68,7 @@ async def test_claim_attempt_renew_result_flow(backend):
 
 async def test_replays_return_same_row(backend):
     wh, tid, _number = backend
-    c1 = norm_claim(await wh.claim(tid, "builder-1", 1, 120))
+    c1 = norm_claim(await wh.claim(tid, "coder-1", 1, 120))
     a1 = norm_attempt(await wh.open_attempt(tid, 1, c1["lease_epoch"]))
     a2 = norm_attempt(await wh.open_attempt(tid, 1, c1["lease_epoch"]))
     assert a1["attempt_id"] == a2["attempt_id"]
@@ -79,7 +79,7 @@ async def test_replays_return_same_row(backend):
 
 async def test_stale_renew_and_live_reclaim_refused(backend):
     wh, tid, _number = backend
-    c = norm_claim(await wh.claim(tid, "builder-1", 1, 120))
+    c = norm_claim(await wh.claim(tid, "coder-1", 1, 120))
     with pytest.raises(RouvrError) as ei:
         await wh.renew_lease(tid, c["assignment_id"], c["lease_epoch"] + 99, 120, 9)
     assert ei.value.code is Code.MOVED
@@ -90,13 +90,13 @@ async def test_stale_renew_and_live_reclaim_refused(backend):
 
 async def test_expired_lease_reclaims(backend):
     wh, tid, _number = backend
-    await wh.claim(tid, "builder-1", 1, 0)  # ttl 0: already expired
+    await wh.claim(tid, "coder-1", 1, 0)  # ttl 0: already expired
     assert (await wh.reclaim_dead(tid, 1))["reclaimed"] is True
 
 
 async def test_result_core_change_conflicts(backend):
     wh, tid, _number = backend
-    c = norm_claim(await wh.claim(tid, "builder-1", 1, 120))
+    c = norm_claim(await wh.claim(tid, "coder-1", 1, 120))
     a = norm_attempt(await wh.open_attempt(tid, 1, c["lease_epoch"]))
     await wh.record_result(tid, a["attempt_id"], c["lease_epoch"], {"verdict": "approved"})
     with pytest.raises(RouvrError) as ei:

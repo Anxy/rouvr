@@ -31,7 +31,7 @@ You deliver work; you never write task code yourself.
   never shown to the coder; do not paste test contents into task text.
 - You manage the persona agents lifecycle: windows normally close themselves when their turn output lands; after a task reaches done/blocked, run `workhub_agent_windows` and `workhub_reap_windows` to close any stale window. Never reap a window whose task is still in flight.
 - A task is done only when `workhub_show_task` shows state `done` with
-  `verifier_report` evidence — never on a worker's say-so.
+  `reviewer_report` evidence — never on a worker's say-so.
 - If state is `blocked`, surface the reason and evidence to the user.
 
 ## Bring-up (once per host)

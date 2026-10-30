@@ -33,13 +33,13 @@ class Settings:
     lease_ttl_s: int = 120
     heartbeat_s: int = 30
     assign_start_to_close_s: int = 1800
-    builder_concurrency: int = 2
+    coder_concurrency: int = 2
     resume_supported: bool = True  # R2 spike verdict: same-session-id resume works
     spec_provider: str = "local"
     receipt_key_path: Path = field(default=Path("/srv/rouvr/keys/receipt_ed25519.pem"))
     receipt_key_id: str = "rouvr-receipt-1"
     testrun_runner_url: str = "http://localhost:8090"
-    hidden_tests_root: Path = Path("/srv/rouvr/hidden-tests")  # R8a: outside any builder workspace
+    hidden_tests_root: Path = Path("/srv/rouvr/hidden-tests")  # R8a: outside any coder workspace
     runner_image: str = "rouvr-runner:py313-p9"  # R8: testrunner.Dockerfile build; pytest baked in
     persona_source: str = "aix"          # "aix" (owner decision 3) | "yaml"
     aix_mapping_path: Path = Path("/srv/rouvr/personas/aix_mapping.json")  # Rouvr-defined, see personas.py
@@ -68,7 +68,7 @@ class Settings:
             lease_ttl_s=int(_env("LEASE_TTL_S", "120")),
             heartbeat_s=int(_env("HEARTBEAT_S", "30")),
             assign_start_to_close_s=int(_env("ASSIGN_START_TO_CLOSE_S", "1800")),
-            builder_concurrency=int(_env("BUILDER_CONCURRENCY", "2")),
+            coder_concurrency=int(_env("CODER_CONCURRENCY", "2")),
             resume_supported=_bool("RESUME_SUPPORTED", True),  # R2: RESUME
             spec_provider=_env("SPEC_PROVIDER", "local"),
             receipt_key_path=Path(_env("RECEIPT_SIGNING_KEY_PATH", "/srv/rouvr/keys/receipt_ed25519.pem")),

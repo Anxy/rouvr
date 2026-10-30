@@ -1,8 +1,8 @@
 """rouvr/activities.py — Temporal activities. All side effects live here; workflows stay deterministic.
 
 R5: _wrap + assign_task ownership skeleton (reclaim-on-retry, claim, attempt,
-handoff evidence, lease heartbeats). The builder-turn interior lands in R6
-(_run_builder_turn), verify/run_tests/close in R8/R9.
+handoff evidence, lease heartbeats). The coder-turn interior lands in R6
+(_run_coder_turn), verify/run_tests/close in R8/R9.
 
 Return annotations are load-bearing: the SDK deserializes activity results into
 them, and the workflow uses attribute access."""
@@ -25,14 +25,14 @@ from rouvr.gate import (SUBMIT_ATTEMPT_TYPE, GateEvidence, count_prior_submits, 
                         read_submission_file)
 from rouvr.gitops import (branch_for, clone_at, diff_range, ensure_pr, pr_facts, prepare_workspace,
                           workspace_path)
-from rouvr.hiddentests import (assert_builder_clean, fetch_hidden_suite, hidden_literals,
+from rouvr.hiddentests import (assert_coder_clean, fetch_hidden_suite, hidden_literals,
                                parse_criterion_outcomes)
 from rouvr.host import Host
 from rouvr.ids import handoff_fence
 from rouvr.lease import (LeaseKeeper, claim_assignment_and_lease, open_or_reuse_attempt, resume_or_claim,
                          run_fenced)
 from rouvr.messages import MESSAGE_TYPE, messages_for, read_message_file
-from rouvr.muse import build_task_prompt, build_verifier_prompt, read_verdict
+from rouvr.muse import build_task_prompt, build_reviewer_prompt, read_verdict
 from rouvr.receipts import build_links, load_private_key, sign_links
 
 
@@ -59,7 +59,7 @@ class Activities:
         if str(task.get("contract_rev")) != wf.contract_rev:
             raise RouvrError(Code.CONTRACT_MOVED, "contract revision changed since start")
         b, v = self.h.personas.role_pair(wf.tenant_id)  # raises SELF_REVIEW; binding names no personas
-        return Binding(task_id=wf.task_id, builder_persona=b.name, verifier_persona=v.name,
+        return Binding(task_id=wf.task_id, coder_persona=b.name, reviewer_persona=v.name,
                        contract_rev=wf.contract_rev, record_version=int(task["record_version"]))
 
     @activity.defn(name="assign_task")
@@ -67,7 +67,7 @@ class Activities:
     async def assign_task(self, inp: AssignInput) -> AssignResult:
         s, wf = self.h.settings, inp.wf
         wh = self.h.workhub_for(None)
-        principal = self.h.personas.get(wf.tenant_id, inp.binding.builder_persona, "builder").principal
+        principal = self.h.personas.get(wf.tenant_id, inp.binding.coder_persona, "coder").principal
         if activity.info().attempt > 1:  # retry after worker death: renew if live, else reclaim + claim (R5)
             task = await wh.get_task(wf.task_id)
             number = task.get("task_number") or wf.task_id  # ledger rows: the id is the number
@@ -91,13 +91,13 @@ class Activities:
         keeper = LeaseKeeper(wh, lease, assignment_id, s.lease_ttl_s, s.heartbeat_s, on_beat=beat)
         activity.heartbeat(state)
         try:
-            return await run_fenced(keeper, self._run_builder_turn(inp, lease, fence, state))
+            return await run_fenced(keeper, self._run_coder_turn(inp, lease, fence, state))
         except asyncio.CancelledError:
             raise RouvrError(Code.CANCELLED, "activity cancelled")
 
-    async def _run_builder_turn(self, inp: AssignInput, lease, fence: str, state: dict) -> AssignResult:
+    async def _run_coder_turn(self, inp: AssignInput, lease, fence: str, state: dict) -> AssignResult:
         s, wf = self.h.settings, inp.wf
-        persona = self.h.personas.get(wf.tenant_id, inp.binding.builder_persona, "builder")
+        persona = self.h.personas.get(wf.tenant_id, inp.binding.coder_persona, "coder")
         wh = self.h.workhub_for(persona)
         task = await wh.get_task(wf.task_id)
         spec = await self.h.exec_specs.get(wf.tenant_id, task)
@@ -120,7 +120,7 @@ class Activities:
             if e.get("session_id"):
                 state["session_id"] = str(e["session_id"])
 
-        peer = messages_for(await wh.list_evidence(wf.task_id), "builder")
+        peer = messages_for(await wh.list_evidence(wf.task_id), "coder")
         prompt = build_task_prompt(task, spec.repo, branch, inp.rework_notes, peer)
         if persona.instructions:
             prompt = f"{persona.instructions}\n\n---\n\n{prompt}"
@@ -128,16 +128,16 @@ class Activities:
             prompt=prompt,
             model=persona.muse_model, cwd=ws, env=env, timeout_s=spec.timeout_s,
             resume=resume, on_event=on_event)
-        if (msg := read_message_file(ws, "verifier")):
+        if (msg := read_message_file(ws, "reviewer")):
             ev.append(await wh.attach_evidence_exact(
-                wf.task_id, MESSAGE_TYPE, f"{fence}:msg-verifier",
-                {"from": "builder", "to": "verifier", "text": msg}))
+                wf.task_id, MESSAGE_TYPE, f"{fence}:msg-reviewer",
+                {"from": "coder", "to": "reviewer", "text": msg}))
         ev.append(await wh.attach_evidence_exact(wf.task_id, "muse_session", fence,
                                                  {"session_id": turn.session_id, "events": turn.events}))
         if turn.session_id:
             ev.append(await wh.attach_evidence_exact(
                 wf.task_id, "peer_session", f"{fence}:peer",
-                {"role": "builder", "session_id": turn.session_id, "workspace": str(ws)}))
+                {"role": "coder", "session_id": turn.session_id, "workspace": str(ws)}))
         grant = await self._await_git_grant(wf.task_id, fence, branch, state, ev, wh)
         await self._push_branch(ws, branch, grant)
         pr_url, head = await ensure_pr(ws, spec.repo, spec.base_branch, branch,
@@ -173,7 +173,7 @@ class Activities:
             return token
         ev.append(await wh.attach_evidence_exact(
             task_id, "credential_request", f"{fence}:git-grant",
-            {"from": "builder", "to": "supervisor",
+            {"from": "coder", "to": "supervisor",
              "reason": "git credential needed to push branch and open PR", "branch": branch}))
         for _ in range(90):  # ~30 min at 20 s, inside the 1800 s activity timeout
             await asyncio.sleep(20)
@@ -205,12 +205,12 @@ class Activities:
         task = await wh.get_task(wf.task_id)
         spec = await h.exec_specs.get(wf.tenant_id, task)
         hidden_dir, manifest = fetch_hidden_suite(s.hidden_tests_root, wf.task_id)
-        assert_builder_clean(workspace_path(s.workspace_root, built.branch), hidden_dir, manifest)
+        assert_coder_clean(workspace_path(s.workspace_root, built.branch), hidden_dir, manifest)
         fence = f"{built.attempt_id}:run-tests"
         with tempfile.TemporaryDirectory(prefix="rouvr-verify-") as tmp:
             clone = await clone_at(spec.repo, built.head_sha, spec.base_branch, Path(tmp) / "src")
             target = clone / "_rouvr_hidden"
-            target.mkdir()  # hidden tests enter the fresh clone only — never the builder workspace
+            target.mkdir()  # hidden tests enter the fresh clone only — never the coder workspace
             for n in manifest.files:
                 (target / n).write_bytes((hidden_dir / n).read_bytes())
             # `python -m` puts the clone on sys.path so hidden tests import repo code.
@@ -241,8 +241,8 @@ class Activities:
     @_wrap
     async def verify(self, wf: TaskWorkflowInput, b: Binding, built: AssignResult, tests: TestResult) -> VerifyResult:
         s, h = self.h.settings, self.h
-        _, verifier = h.personas.role_pair(wf.tenant_id)  # SELF_REVIEW re-checked at the verify claim
-        wh = self.h.workhub_for(verifier)  # verifier-identity reads + writes; builder never touches these
+        _, reviewer = h.personas.role_pair(wf.tenant_id)  # SELF_REVIEW re-checked at the verify claim
+        wh = self.h.workhub_for(reviewer)  # reviewer-identity reads + writes; coder never touches these
         # Supervisor-visible sync: entering review moves the task to needs_review.
         await self._close_to(wf.task_id, "needs_review", "verify entered",
                              ("state", wf.task_id, built.attempt_id))
@@ -265,44 +265,44 @@ class Activities:
         gv = evaluate(submission, facts)
         fence = f"{built.attempt_id}:verify"
         if gv.verdict in ("blocked", "failed"):
-            ev = await wh.attach_evidence_exact(wf.task_id, "verifier_report", fence,
+            ev = await wh.attach_evidence_exact(wf.task_id, "reviewer_report", fence,
                                                 {"gate": gv.verdict, "feedback": gv.feedback})
-            return VerifyResult("reject", gv.feedback or gv.verdict, verifier.principal, ev)
+            return VerifyResult("reject", gv.feedback or gv.verdict, reviewer.principal, ev)
         if gv.verdict == "reject":
             await wh.attach_evidence_exact(wf.task_id, SUBMIT_ATTEMPT_TYPE, f"{fence}:submit-{facts.prior_submits + 1}",
                                            {"gate": "reject", "feedback": gv.feedback})
-            ev = await wh.attach_evidence_exact(wf.task_id, "verifier_report", fence,
+            ev = await wh.attach_evidence_exact(wf.task_id, "reviewer_report", fence,
                                                 {"gate": "reject", "feedback": gv.feedback})
-            return VerifyResult("request_changes", gv.feedback or "gate rejected", verifier.principal, ev)
+            return VerifyResult("request_changes", gv.feedback or "gate rejected", reviewer.principal, ev)
         await wh.attach_evidence_exact(wf.task_id, SUBMIT_ATTEMPT_TYPE, f"{fence}:submit-{facts.prior_submits + 1}",
                                        {"gate": "approved"})
         diff = await diff_range(ws, f"origin/{spec.base_branch}", built.head_sha)
         vdir = ws.parent / f"{ws.name}__verify"
         vdir.mkdir(parents=True, exist_ok=True)
-        creds = verifier.credentials()
-        vprompt = build_verifier_prompt(task, diff, tests.summary,
-                                        messages_for(rows, "verifier"))
-        if verifier.instructions:
-            vprompt = f"{verifier.instructions}\n\n---\n\n{vprompt}"
+        creds = reviewer.credentials()
+        vprompt = build_reviewer_prompt(task, diff, tests.summary,
+                                        messages_for(rows, "reviewer"))
+        if reviewer.instructions:
+            vprompt = f"{reviewer.instructions}\n\n---\n\n{vprompt}"
         vturn = await h.muse.run(prompt=vprompt,
-                         model=verifier.muse_model,
+                         model=reviewer.muse_model,
                          cwd=vdir, env={"META_API_KEY": creds.get("meta_api_key", "")}, timeout_s=spec.timeout_s)
         if vturn.session_id:
             await wh.attach_evidence_exact(wf.task_id, "peer_session", f"{fence}:peer",
-                                           {"role": "verifier", "session_id": vturn.session_id,
+                                           {"role": "reviewer", "session_id": vturn.session_id,
                                             "workspace": str(vdir)})
-        if (msg := read_message_file(vdir, "builder")):
-            await wh.attach_evidence_exact(wf.task_id, MESSAGE_TYPE, f"{fence}:msg-builder",
-                                           {"from": "verifier", "to": "builder", "text": msg})
+        if (msg := read_message_file(vdir, "coder")):
+            await wh.attach_evidence_exact(wf.task_id, MESSAGE_TYPE, f"{fence}:msg-coder",
+                                           {"from": "reviewer", "to": "coder", "text": msg})
         try:
             verdict, notes = read_verdict(vdir)
         except RouvrError as e:  # unreadable verdict fails closed: block + escalate, never approve
-            ev = await wh.attach_evidence_exact(wf.task_id, "verifier_report", fence, {"gate": "approved",
+            ev = await wh.attach_evidence_exact(wf.task_id, "reviewer_report", fence, {"gate": "approved",
                                                                                        "verdict_error": str(e)})
-            return VerifyResult("reject", f"verifier output unusable: {e}", verifier.principal, ev)
-        ev = await wh.attach_evidence_exact(wf.task_id, "verifier_report", fence,
+            return VerifyResult("reject", f"reviewer output unusable: {e}", reviewer.principal, ev)
+        ev = await wh.attach_evidence_exact(wf.task_id, "reviewer_report", fence,
                                             {"gate": "approved", "verdict": verdict, "notes": notes})
-        return VerifyResult(verdict, notes, verifier.principal, ev)  # verdict in VERDICTS by read_verdict
+        return VerifyResult(verdict, notes, reviewer.principal, ev)  # verdict in VERDICTS by read_verdict
 
     # Next hop toward done. Stage map: GET /api/v1/tasks/transitions/help; ledger: TRANSITIONS in app.py.
     _HOPS = {"queued": "running", "running": "needs_review", "needs_review": "done",
@@ -348,6 +348,6 @@ class Activities:
         links = build_links(task_id=wf.task_id, contract_rev=wf.contract_rev, attempt_id=built.attempt_id,
                             muse_session_id=built.muse_session_id, pr_url=built.pr_url, head_sha=built.head_sha,
                             test_run_id=tests.run_id, test_evidence_id=tests.evidence_id,
-                            verdict=v.verdict, verifier=v.verifier_principal, verify_evidence_id=v.evidence_id)
+                            verdict=v.verdict, reviewer=v.reviewer_principal, verify_evidence_id=v.evidence_id)
         signed = sign_links(links, load_private_key(s.receipt_key_path), s.receipt_key_id)
         return {"digest": signed.digest, "signature": signed.signature, "key_id": signed.key_id}

@@ -34,7 +34,7 @@ def test_silent_delivery_caught_and_fallback_used(demo, monkeypatch):
     assert m.run() == "Done. No action needed."
     c = m.ledger_client(None)
     ev = c.get("/v1/tasks/1").json()["evidence"]
-    verdicts = [json.loads(e["body"])["verdict"] for e in ev if e["kind"] == "verifier"]
+    verdicts = [json.loads(e["body"])["verdict"] for e in ev if e["kind"] == "reviewer"]
     assert verdicts == ["fail", "pass"]
 
 

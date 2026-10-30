@@ -36,16 +36,16 @@ async def test_thin_start_endpoint_idempotent():
 
 def test_aix_mapping_registry():
     reg = registry_from_aix_mapping({"roles": {
-        "builder": {"principal": "svc-b", "creds_file": "/x.json"},
+        "coder": {"principal": "svc-b", "creds_file": "/x.json"},
         "reviewer": {"principal": "svc-r", "creds_file": "/y.json"},
         "closer": {"principal": "svc-c", "creds_file": "/z.json"}}}, "t")
-    b, v = reg.pair("t", "builder", "reviewer")
-    assert (b.role, v.role, b.muse_model, v.muse_model) == ("builder", "verifier", "muse-wonder-1.0", "muse-spark")
+    b, v = reg.pair("t", "coder", "reviewer")
+    assert (b.role, v.role, b.muse_model, v.muse_model) == ("coder", "reviewer", "muse-wonder-1.0", "muse-spark")
     with pytest.raises(RouvrError) as ei:
-        registry_from_aix_mapping({"roles": {"builder": {"principal": "p"}}}, "t")
+        registry_from_aix_mapping({"roles": {"coder": {"principal": "p"}}}, "t")
     assert ei.value.code is Code.CONTRACT
     same = registry_from_aix_mapping({"roles": {
-        "builder": {"principal": "s", "creds_file": "/x"}, "reviewer": {"principal": "s", "creds_file": "/y"}}}, "t")
+        "coder": {"principal": "s", "creds_file": "/x"}, "reviewer": {"principal": "s", "creds_file": "/y"}}}, "t")
     with pytest.raises(RouvrError) as ei:
-        same.pair("t", "builder", "reviewer")
+        same.pair("t", "coder", "reviewer")
     assert ei.value.code is Code.SELF_REVIEW

@@ -20,8 +20,8 @@ class TaskWorkflowInput:
 @dataclass
 class Binding:
     task_id: str
-    builder_persona: str
-    verifier_persona: str
+    coder_persona: str
+    reviewer_persona: str
     contract_rev: str
     record_version: int
 
@@ -69,7 +69,7 @@ class TestResult:
 class VerifyResult:
     verdict: Verdict
     notes: str
-    verifier_principal: str
+    reviewer_principal: str
     evidence_id: str
 
 

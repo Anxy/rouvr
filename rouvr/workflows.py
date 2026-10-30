@@ -17,7 +17,7 @@ with workflow.unsafe.imports_passed_through():
     from rouvr.errors import retry_policy_for
     from rouvr.ids import workflow_id
 
-Q_ORCH, Q_BUILD, Q_TEST, Q_VERIFY = "rouvr-orchestrator", "rouvr-builder", "rouvr-test", "rouvr-verifier"
+Q_ORCH, Q_BUILD, Q_TEST, Q_VERIFY = "rouvr-orchestrator", "rouvr-coder", "rouvr-test", "rouvr-reviewer"
 
 
 def _code(err: BaseException) -> str:
@@ -90,7 +90,7 @@ class TaskWorkflow:
                     return {"state": closed.final_state, "pr_url": built.pr_url, "receipt": receipt,
                             "attempts": self.attempt}
                 if v.verdict == "reject":
-                    return await self._block(wf, "rejected_by_verifier", built.attempt_id)
+                    return await self._block(wf, "rejected_by_reviewer", built.attempt_id)
                 notes, resume = v.notes, built.muse_session_id
             return await self._block(wf, "rework_exhausted", f"attempt-{self.attempt}")
         except ActivityError as e:

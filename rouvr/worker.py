@@ -1,7 +1,7 @@
 """rouvr/worker.py — run the Rouvr Temporal workers (R10).
 
 Usage: ORCHESTRATOR_TOKEN=... .venv/bin/python -m rouvr.worker [all|orch|build|test|verify]
-R10 runs one process per queue so the rehearsal can kill -9 the builder only.
+R10 runs one process per queue so the rehearsal can kill -9 the coder only.
 """
 from __future__ import annotations
 
@@ -26,7 +26,7 @@ async def run_workers(s: Settings, which: str) -> None:
                        activities=[acts.verify_binding, acts.close_task, acts.mark_blocked, acts.escalate,
                                    acts.sign_receipt]),
         "build": Worker(client, task_queue=Q_BUILD, activities=[acts.assign_task],
-                        max_concurrent_activities=s.builder_concurrency),
+                        max_concurrent_activities=s.coder_concurrency),
         "test": Worker(client, task_queue=Q_TEST, activities=[acts.run_tests]),
         "verify": Worker(client, task_queue=Q_VERIFY, activities=[acts.verify]),
     }

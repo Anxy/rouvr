@@ -51,14 +51,14 @@ def _settings(tmp_path, registry):
                     persona_source="yaml", spec_root=tmp_path)
 
 
-def _persona(tmp_path, creds: dict, name="builder-1"):
+def _persona(tmp_path, creds: dict, name="coder-1"):
     cred_file = tmp_path / f"{name}.json"
     cred_file.write_text(json.dumps(creds))
     os.chmod(cred_file, 0o600)
     registry = tmp_path / "tenants.yaml"
     registry.write_text(
         "tenants:\n  hyeve-lane-ops:\n    personas:\n"
-        f"      {name}: {{role: builder, principal: svc-b, muse_model: '', credential_file: {cred_file}}}\n")
+        f"      {name}: {{role: coder, principal: svc-b, muse_model: '', credential_file: {cred_file}}}\n")
     return registry, name
 
 
@@ -67,12 +67,12 @@ def test_host_uses_token_source_for_service_credentials(tmp_path):
                                          "auth_base": "https://auth.example", "audience": "wh",
                                          "tenant": "hyeve-lane-ops"})
     host = build_host(_settings(tmp_path, registry))
-    wh = host.workhub_for(host.personas.get("hyeve-lane-ops", name, "builder"))
+    wh = host.workhub_for(host.personas.get("hyeve-lane-ops", name, "coder"))
     assert isinstance(wh._token, TokenSource)
 
 
 def test_host_keeps_static_workhub_token(tmp_path):
     registry, name = _persona(tmp_path, {"workhub_token": "static-tok", "meta_api_key": "k"})
     host = build_host(_settings(tmp_path, registry))
-    wh = host.workhub_for(host.personas.get("hyeve-lane-ops", name, "builder"))
+    wh = host.workhub_for(host.personas.get("hyeve-lane-ops", name, "coder"))
     assert wh._token == "static-tok"

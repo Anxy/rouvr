@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # R10: kill/resume rehearsal. Ledger (local) + live Muse turns + scratch GitHub repo.
-# Single-credential rehearsal: builder/verifier share one model+GitHub credential under
-# distinct logical principals; the verifier credential + stage attempt-scope grant are A2 gates.
+# Single-credential rehearsal: coder/reviewer share one model+GitHub credential under
+# distinct logical principals; the reviewer credential + stage attempt-scope grant are A2 gates.
 # Env in: META_MODEL_API_KEY (model key), GH_TOKEN (or `gh auth token`).
 # Out: exit 0 + docs/r10-runs/<ts>/ transcript iff done + 1 PR + activity retry on attempt 1.
 set -euo pipefail
@@ -35,12 +35,12 @@ cat > "$R10_ROOT/personas/tenants.yaml" <<EOF
 tenants:
   $R10_TENANT:
     personas:
-      builder-1: {role: builder, principal: svc-r10-builder, muse_model: "",
-                  credential_file: "$R10_ROOT/personas/builder.json", github_app: r10}
-      verifier-1: {role: verifier, principal: svc-r10-verifier, muse_model: "",
-                   credential_file: "$R10_ROOT/personas/verifier.json"}
+      coder-1: {role: coder, principal: svc-r10-coder, muse_model: "",
+                  credential_file: "$R10_ROOT/personas/coder.json", github_app: r10}
+      reviewer-1: {role: reviewer, principal: svc-r10-reviewer, muse_model: "",
+                   credential_file: "$R10_ROOT/personas/reviewer.json"}
 EOF
-for p in builder verifier; do
+for p in coder reviewer; do
   "$ROOT/.venv/bin/python" - "$R10_ROOT/personas/$p.json" <<'EOF'
 import json, os, sys
 json.dump({"meta_api_key": os.environ["META_MODEL_API_KEY"], "github_token": os.environ["GH_TOKEN"],

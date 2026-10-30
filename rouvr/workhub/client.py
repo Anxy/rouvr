@@ -145,7 +145,7 @@ class WorkHubClient:
     # ---- mutations (bodies verified against stage Oct 2026; holder identity is auth-bound server-side)
     async def claim(self, task_id: str, principal: str, attempt_no: int, ttl_s: int) -> dict:
         a = await self._call("POST", R.R10_CLAIM.format(project=self.project_id),
-                             json={"task_id": task_id, "persona": "builder", "plan_step": "build"},
+                             json={"task_id": task_id, "persona": "coder", "plan_step": "build"},
                              idem=idempotency_key("claim", task_id, attempt_no))
         lease = await self._call("POST", R.R10_LEASE_CLAIM.format(project=self.project_id),
                                  json={"task_id": task_id, "ttl_seconds": ttl_s},

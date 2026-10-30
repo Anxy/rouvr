@@ -5,7 +5,7 @@
 # The user-facing entry point is `rouvr user add <username>`.
 set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-OPS=/tmp/rouvr-supervisor
+OPS="${ROUVR_OPS_DIR:-/tmp/rouvr-supervisor}"
 USER_NAME="${1:-}"
 ROTATE="${2:-}"
 [ -n "$USER_NAME" ] || { echo "usage: seed-user <username> [--rotate]" >&2; exit 2; }

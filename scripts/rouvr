@@ -11,7 +11,8 @@
 # interactive muse chat windows (ROUVR_LAUNCH_WINDOWS=0 for headless).
 set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-OPS=/tmp/rouvr-supervisor
+OPS="${ROUVR_OPS_DIR:-/tmp/rouvr-supervisor}"
+PID_DIR="$OPS/pids"
 OVERRIDE=/tmp/rouvr-override.yml
 cd "$ROOT"
 
@@ -32,8 +33,8 @@ EOF
 }
 
 write_operands() {
-  mkdir -p "$OPS/personas" "$OPS/specs/supervisor" "$OPS/workspaces" "$OPS/evidence" "$OPS/hidden-tests" "$OPS/logs"
-  local ws="$HOME/Repository/hackathon/.secrets/rouvr/personas"
+  mkdir -p "$OPS/personas" "$OPS/specs/supervisor" "$OPS/workspaces" "$OPS/evidence" "$OPS/hidden-tests" "$OPS/logs" "$OPS/keys"
+  local ws="${ROUVR_PERSONA_CREDS_DIR:-$HOME/Repository/hackathon/.secrets/rouvr/personas}"
   [ -f "$OPS/personas/tenants.yaml" ] || cat > "$OPS/personas/tenants.yaml" <<EOF
 tenants:
   supervisor:
@@ -41,6 +42,9 @@ tenants:
       coder-1: {role: coder, principal: svc-sup-coder, muse_model: "", credential_file: "$ws/coder-1.json", github_app: supervisor}
       reviewer-1: {role: reviewer, principal: svc-sup-reviewer, muse_model: "", credential_file: "$ws/reviewer-1.json"}
 EOF
+  if [ -n "${ROUVR_PERSONA_CREDS_DIR:-}" ] && [ -f "$OPS/personas/tenants.yaml" ]; then
+    sed -i "s|credential_file: \"[^\"]*/\([^/\"]*\)\"|credential_file: \"$ws/\1\"|g; s|credential_file: [^ \"',}]*/\([^ \"',}]*\)|credential_file: $ws/\1|g" "$OPS/personas/tenants.yaml"
+  fi
   for md in coder.md reviewer.md; do
     [ -f "$OPS/personas/$md" ] || cp "$ROOT/personas/$md" "$OPS/personas/$md"
   done
@@ -53,9 +57,20 @@ EOF
   if [ ! -f "$OPS/api-token" ]; then
     (umask 077; head -c 32 /dev/urandom | od -An -tx1 | tr -d ' \n' > "$OPS/api-token")
   fi
-  cat > "$OPS/env.sh" <<'EOF'
-export WORKHUB_BACKEND=ledger WORKHUB_BASE_URL=http://127.0.0.1:8221 ROUVR_TENANT_ID=supervisor ROUVR_PROJECT_ID=scratch PERSONA_SOURCE=yaml PERSONA_REGISTRY_PATH=/tmp/rouvr-supervisor/personas/tenants.yaml SPEC_ROOT=/tmp/rouvr-supervisor/specs WORKSPACE_ROOT=/tmp/rouvr-supervisor/workspaces EVIDENCE_ROOT=/tmp/rouvr-supervisor/evidence HIDDEN_TESTS_ROOT=/tmp/rouvr-supervisor/hidden-tests TEMPORAL_ADDRESS=127.0.0.1:7233 TEMPORAL_NAMESPACE=default ORCHESTRATOR_TOKEN=ledger LEASE_TTL_S=180 HEARTBEAT_S=30 MAX_REWORK=2 MUSE_BIN=muse
-export ROUVR_LEDGER_TOKEN="$(cat /tmp/rouvr-supervisor/api-token)"
+  if [ ! -f "$OPS/keys/receipt_ed25519.pem" ]; then
+    (umask 077; RECEIPT_KEY_PATH="$OPS/keys/receipt_ed25519.pem" .venv/bin/python -c "
+import os
+from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+from cryptography.hazmat.primitives.serialization import Encoding, NoEncryption, PrivateFormat
+p = os.environ['RECEIPT_KEY_PATH']
+open(p, 'wb').write(Ed25519PrivateKey.generate().private_bytes(Encoding.PEM, PrivateFormat.PKCS8, NoEncryption()))
+os.chmod(p, 0o600)
+")
+  fi
+  cat > "$OPS/env.sh" <<EOF
+export WORKHUB_BACKEND=ledger WORKHUB_BASE_URL=http://127.0.0.1:8221 ROUVR_TENANT_ID=supervisor ROUVR_PROJECT_ID=scratch PERSONA_SOURCE=yaml PERSONA_REGISTRY_PATH=$OPS/personas/tenants.yaml SPEC_ROOT=$OPS/specs WORKSPACE_ROOT=$OPS/workspaces EVIDENCE_ROOT=$OPS/evidence HIDDEN_TESTS_ROOT=$OPS/hidden-tests TEMPORAL_ADDRESS=127.0.0.1:7233 TEMPORAL_NAMESPACE=default ORCHESTRATOR_TOKEN=ledger LEASE_TTL_S=180 HEARTBEAT_S=30 MAX_REWORK=2 MUSE_BIN=muse
+export ROUVR_LEDGER_TOKEN="\$(cat $OPS/api-token)"
+export RECEIPT_SIGNING_KEY_PATH=$OPS/keys/receipt_ed25519.pem
 EOF
 }
 
@@ -68,23 +83,61 @@ load_env() {
   export ROUVR_LAUNCH_WINDOWS="${ROUVR_LAUNCH_WINDOWS:-1}"
 }
 
+# Checkout-scoped process tracking: pids started here are recorded in
+# $PID_DIR, and a pid only counts as ours when /proc shows it runs from
+# $ROOT (another checkout's workers on the same box are never touched).
+_ours() {
+  local pid="${1:-}"
+  [ -n "$pid" ] && [ -d "/proc/$pid" ] || return 1
+  [ "$(readlink "/proc/$pid/cwd" 2>/dev/null)" = "$ROOT" ] && return 0
+  tr '\0' ' ' <"/proc/$pid/cmdline" 2>/dev/null | grep -qF "$ROOT/"
+}
+
+_pid_alive() {  # $1 = name: pidfile holds a live pid of this checkout
+  local f="$PID_DIR/$1.pid" pid=""
+  [ -f "$f" ] || return 1
+  pid="$(cat "$f" 2>/dev/null)" || return 1
+  [ -n "$pid" ] && kill -0 "$pid" 2>/dev/null && _ours "$pid"
+}
+
+_adopt() {  # $1 = name, $2 = pgrep pattern: record a running own-checkout pid
+  local pid
+  for pid in $(pgrep -f "$2" || true); do
+    if _ours "$pid"; then mkdir -p "$PID_DIR"; echo "$pid" >"$PID_DIR/$1.pid"; return 0; fi
+  done
+  return 1
+}
+
+_start() {  # $1 = name, $2 = log, rest = command: detached, pid recorded
+  local name="$1" log="$2"; shift 2
+  mkdir -p "$PID_DIR"
+  setsid -f bash -c 'echo $$ >"$1"; shift; exec "$@"' _ "$PID_DIR/$name.pid" "$@" >>"$log" 2>&1
+}
+
 up() {
   write_override; load_env
   echo "[rouvr] Temporal stack (Docker)..."
   docker compose -p rouvr -f demo/docker-compose.yml -f "$OVERRIDE" up -d db redis temporal >/dev/null
+  local temporal_ok=0
   for _ in $(seq 1 30); do
     .venv/bin/python -c "
 import asyncio
 from temporalio.client import Client
-asyncio.run(Client.connect('127.0.0.1:7233', namespace='default'))" 2>/dev/null && break; sleep 2
+asyncio.run(Client.connect('127.0.0.1:7233', namespace='default'))" 2>/dev/null && { temporal_ok=1; break; }; sleep 2
   done
+  [ "$temporal_ok" = "1" ] || { echo "[rouvr] ERROR: Temporal did not answer on 7233; aborting up" >&2; exit 1; }
   echo "[rouvr] ledger WorkHub (8221)..."
-  curl -sf http://127.0.0.1:8221/health >/dev/null 2>&1 || \
-    setsid -f env ROUVR_LEDGER_DATABASE_URL="sqlite:///$OPS/ledger.db" .venv/bin/python -c "
+  if curl -sf http://127.0.0.1:8221/health >/dev/null 2>&1; then
+    _pid_alive ledger || _adopt ledger 'ledger[.]app' || { echo "[rouvr] ERROR: port 8221 answered by a foreign process (not this checkout $ROOT); aborting up" >&2; exit 1; }
+  else
+    _start ledger "$OPS/logs/ledger.log" env ROUVR_LEDGER_DATABASE_URL="sqlite:///$OPS/ledger.db" .venv/bin/python -c "
 from ledger.app import make_app
 import os, uvicorn
 uvicorn.run(make_app(os.environ['ROUVR_LEDGER_DATABASE_URL']), host='127.0.0.1', port=8221, log_level='warning')
-" >>"$OPS/logs/ledger.log" 2>&1
+"
+    for _ in $(seq 1 10); do curl -sf http://127.0.0.1:8221/health >/dev/null 2>&1 && break; sleep 1; done
+    curl -sf http://127.0.0.1:8221/health >/dev/null 2>&1 || { echo "[rouvr] ERROR: ledger did not answer /health; aborting up (see $OPS/logs/ledger.log)" >&2; exit 1; }
+  fi
   echo "[rouvr] WorkHub MCP plugin (bundled; no manual MCP setup)..."
   if ! muse plugins list --json 2>/dev/null | grep -q '"rouvr-workhub"'; then
     muse plugins install "$ROOT/plugin" --scope user --json >/dev/null 2>&1 || \
@@ -93,15 +146,23 @@ uvicorn.run(make_app(os.environ['ROUVR_LEDGER_DATABASE_URL']), host='127.0.0.1',
   muse plugins approve rouvr-workhub --json >/dev/null 2>&1 || true
   echo "[rouvr] workers + MCP (8231)..."
   for q in orch build test verify; do
-    pgrep -f "rouvr[.]worker $q" >/dev/null || setsid -f .venv/bin/python -m rouvr.worker "$q" >>"$OPS/logs/$q.log" 2>&1
+    _pid_alive "worker-$q" || _adopt "worker-$q" "rouvr[.]worker $q" || \
+      _start "worker-$q" "$OPS/logs/$q.log" .venv/bin/python -m rouvr.worker "$q"
   done
-  sleep 2  # S012: second pass — a worker dying during start matches pgrep once, then is gone
+  sleep 2  # S012: second pass — a worker dying during start has a pidfile once, then is gone
   for q in orch build test verify; do
-    pgrep -f "rouvr[.]worker $q" >/dev/null || setsid -f .venv/bin/python -m rouvr.worker "$q" >>"$OPS/logs/$q.log" 2>&1
+    _pid_alive "worker-$q" || _start "worker-$q" "$OPS/logs/$q.log" .venv/bin/python -m rouvr.worker "$q"
   done
-  # Port check, not pgrep: a dying MCP still matches pgrep and would make
-  # us skip the start, leaving no server once it exits.
-  curl -s -m 2 http://127.0.0.1:8231/mcp >/dev/null 2>&1 || setsid -f .venv/bin/python -m rouvr.mcp_server >>"$OPS/logs/mcp.log" 2>&1
+  # Port check, not pidfile: a dying MCP still has a pidfile briefly and
+  # would make us skip the start, leaving no server once it exits.
+  _pid_alive mcp || _adopt mcp 'rouvr[.]mcp_server' || true
+  if curl -s -m 2 http://127.0.0.1:8231/mcp >/dev/null 2>&1; then
+    _pid_alive mcp || { echo "[rouvr] ERROR: port 8231 answered by a foreign process (not this checkout $ROOT); aborting up" >&2; exit 1; }
+  else
+    _start mcp "$OPS/logs/mcp.log" .venv/bin/python -m rouvr.mcp_server
+    for _ in $(seq 1 10); do curl -s -m 2 http://127.0.0.1:8231/mcp >/dev/null 2>&1 && break; sleep 1; done
+    curl -s -m 2 http://127.0.0.1:8231/mcp >/dev/null 2>&1 || { echo "[rouvr] ERROR: MCP did not answer on 8231; aborting up (see $OPS/logs/mcp.log)" >&2; exit 1; }
+  fi
   sleep 5
   status
   cat <<'EOF'
@@ -137,17 +198,43 @@ try:
     asyncio.run(Client.connect('127.0.0.1:7233', namespace='default')); print('up')
 except Exception: print('DOWN')" 2>/dev/null)"
   echo "ledger:   $(curl -s http://127.0.0.1:8221/health 2>/dev/null || echo DOWN)"
-  echo "mcp:      http://127.0.0.1:8231/mcp ($(pgrep -fc 'rouvr[.]mcp_server' || echo 0) proc)"
-  echo "workers:  $(pgrep -fc 'rouvr[.]worker' || echo 0)/4 queues"
+  echo "mcp:      http://127.0.0.1:8231/mcp ($(_pid_alive mcp && echo 1 || echo 0) proc)"
+  local _wn=0 _q
+  for _q in orch build test verify; do _pid_alive "worker-$_q" && _wn=$((_wn + 1)) || true; done
+  echo "workers:  $_wn/4 queues"
   echo "tasks:    $(curl -s -H "X-Rouvr-Token: ${ROUVR_LEDGER_TOKEN:-}" http://127.0.0.1:8221/v1/tasks 2>/dev/null | .venv/bin/python -c "
 import json, sys
 try: print([(t['id'], t['state']) for t in json.load(sys.stdin)['items']])
 except Exception: print('n/a')" 2>/dev/null)"
 }
 
+_kill_matching() {  # $1 = pgrep pattern: kill every own-checkout match, not just the first
+  local pid
+  for pid in $(pgrep -f "$1" || true); do
+    if _ours "$pid"; then kill "$pid" 2>/dev/null || true; fi
+  done
+}
+
 stop() {
-  for p in $(pgrep -f 'rouvr[.]worker' || true) $(pgrep -f 'rouvr[.]mcp_server' || true); do kill "$p" 2>/dev/null || true; done
-  fuser -k 8221/tcp 2>/dev/null || true
+  local name f pid q
+  _kill_matching 'ledger[.]app'
+  _kill_matching 'rouvr[.]mcp_server'
+  for q in orch build test verify; do _kill_matching "rouvr[.]worker $q"; done
+  _adopt ledger 'ledger[.]app' || true
+  _adopt mcp 'rouvr[.]mcp_server' || true
+  for q in orch build test verify; do _adopt "worker-$q" "rouvr[.]worker $q" || true; done
+  for name in worker-orch worker-build worker-test worker-verify mcp ledger; do
+    f="$PID_DIR/$name.pid"
+    [ -f "$f" ] || continue
+    pid="$(cat "$f" 2>/dev/null)" || pid=""
+    if [ -n "$pid" ] && ! kill -0 "$pid" 2>/dev/null; then
+      rm -f "$f"  # stale pidfile
+    elif [ -n "$pid" ] && _ours "$pid"; then
+      kill "$pid" 2>/dev/null || true
+      rm -f "$f"
+    fi
+    # a live pid from another checkout keeps its process and its pidfile
+  done
   echo "[rouvr] workers/MCP/ledger stopped (Temporal stack left running; './scripts/rouvr down' stops it)"
 }
 

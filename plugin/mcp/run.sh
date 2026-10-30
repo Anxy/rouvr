@@ -6,12 +6,15 @@
 set -euo pipefail
 ROOT="${ROUVR_ROOT:-}"
 if [ -z "$ROOT" ]; then
-  for cand in "$HOME/Repository/hackathon/rouvr" "$PWD/rouvr" "$PWD"; do
+  for cand in "$PWD/rouvr" "$PWD" "$HOME/Repository/hackathon/rouvr"; do
     if [ -f "$cand/rouvr/mcp_server.py" ] && [ -x "$cand/.venv/bin/python" ]; then ROOT="$cand"; break; fi
   done
 fi
 [ -n "$ROOT" ] || { echo "rouvr checkout not found (set ROUVR_ROOT)" >&2; exit 1; }
-[ -f /tmp/rouvr-supervisor/env.sh ] && { set -a; . /tmp/rouvr-supervisor/env.sh; set +a; }
+OPS="${ROUVR_OPS_DIR:-/tmp/rouvr-supervisor}"
+_pre_token="${ROUVR_LEDGER_TOKEN:-}"
+[ -f "$OPS/env.sh" ] && { set -a; . "$OPS/env.sh"; set +a; }
+[ -n "$_pre_token" ] && export ROUVR_LEDGER_TOKEN="$_pre_token"
 export WORKHUB_BASE_URL="${WORKHUB_BASE_URL:-http://127.0.0.1:8221}"
 export ROUVR_MCP_TRANSPORT=stdio
 export PYTHONPATH="$ROOT"

@@ -35,8 +35,14 @@ def tree_hash(files: dict[str, str]) -> str:
     return h.hexdigest()
 
 
+def _check_task_id(task_id: str) -> None:
+    if not task_id or "/" in task_id or "\\" in task_id or ".." in task_id:
+        raise RouvrError(Code.CONTRACT, f"invalid task id: {task_id!r}")
+
+
 def write_hidden_suite(root: Path, *, task_id: str, files: dict[str, str], created_by: str) -> HiddenManifest:
     """Lock a hidden suite. Refuses overwrite: locked at creation."""
+    _check_task_id(task_id)
     task_dir = root / task_id
     manifest_path = task_dir / MANIFEST
     if manifest_path.exists():
@@ -56,14 +62,20 @@ def write_hidden_suite(root: Path, *, task_id: str, files: dict[str, str], creat
 
 def fetch_hidden_suite(root: Path, task_id: str) -> tuple[Path, HiddenManifest]:
     """Fetch at verify time only. Verifies the creation hash (tamper check)."""
+    _check_task_id(task_id)
     task_dir = root / task_id
     manifest_path = task_dir / MANIFEST
     if not manifest_path.exists():
         raise RouvrError(Code.EVIDENCE, f"no hidden suite for {task_id}")
-    raw = json.loads(manifest_path.read_text())
-    raw["files"] = tuple(raw["files"])  # JSON roundtrip: list back to tuple
-    manifest = HiddenManifest(**raw)
-    files = {n: (task_dir / n).read_text() for n in manifest.files}
+    try:
+        raw = json.loads(manifest_path.read_text())
+        if not isinstance(raw, dict):
+            raise TypeError("manifest must be an object")
+        raw["files"] = tuple(raw["files"])  # JSON roundtrip: list back to tuple
+        manifest = HiddenManifest(**raw)
+        files = {n: (task_dir / n).read_text() for n in manifest.files}
+    except (ValueError, TypeError, KeyError, OSError) as e:
+        raise RouvrError(Code.EVIDENCE, f"corrupt hidden suite for {task_id}: {e}") from e
     if tree_hash(files) != manifest.tree_sha256:
         raise RouvrError(Code.EVIDENCE, f"hidden suite for {task_id} changed since creation")
     return task_dir, manifest
@@ -74,11 +86,14 @@ def assert_coder_clean(coder_ws: Path, task_dir: Path, manifest: HiddenManifest)
     if not coder_ws.exists():
         return
     hidden_names = set(manifest.files)
-    hidden_hashes = {(task_dir / n).read_bytes() for n in manifest.files}
+    hidden_bytes = {(task_dir / n).read_bytes() for n in manifest.files}
+    hidden_sizes = {len(b) for b in hidden_bytes}
     for path in sorted(coder_ws.rglob("*")):
         if not path.is_file() or ".git/" in str(path):
             continue
-        if path.name in hidden_names or path.read_bytes() in hidden_hashes:
+        if path.name in hidden_names:
+            raise RouvrError(Code.EVIDENCE, f"coder workspace leaks hidden tests: {path.name}")
+        if path.stat().st_size in hidden_sizes and path.read_bytes() in hidden_bytes:
             raise RouvrError(Code.EVIDENCE, f"coder workspace leaks hidden tests: {path.name}")
 
 

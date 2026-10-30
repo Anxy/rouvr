@@ -102,6 +102,8 @@ def verify_receipt(receipt: SignedReceipt,
     mismatch, unknown key_id, or malformed envelope fails closed (False).
     """
     try:
+        if receipt.version != RECEIPT_VERSION:
+            return False
         digest = receipt_digest(receipt.links)
         if not hmac.compare_digest(digest, receipt.digest):
             return False

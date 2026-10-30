@@ -120,6 +120,14 @@ def test_tampered_link_or_signature_fails():
     assert verify_receipt(bad_sig, key.public_key()) is False
 
 
+def test_future_version_fails_despite_valid_signature():
+    key = Ed25519PrivateKey.generate()
+    signed = sign_links(build_links(**LINKS), key, "k1")
+    future = SignedReceipt(version="future-v99", key_id=signed.key_id, digest=signed.digest,
+                           signature=signed.signature, links=dict(signed.links))
+    assert verify_receipt(future, key.public_key()) is False
+
+
 def test_key_rotation_old_receipts_still_verify(tmp_path: Path):
     k1, k2 = Ed25519PrivateKey.generate(), Ed25519PrivateKey.generate()
     links = build_links(**LINKS)

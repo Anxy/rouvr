@@ -38,6 +38,26 @@ def test_silent_delivery_caught_and_fallback_used(demo, monkeypatch):
     assert verdicts == ["fail", "pass"]
 
 
+def test_verify_malformed_outbox_is_no_readback(demo):
+    m, tmp = demo
+    (tmp / "outbox").mkdir(parents=True, exist_ok=True)
+    (tmp / "outbox" / "msg1.txt").write_text("no-newline-here")
+
+    class Resp:
+        def __init__(self, payload=None, status=200):
+            self._p, self.status_code = payload, status
+
+        def json(self):
+            return self._p
+
+    class Client:
+        def get(self, path):
+            return Resp({"items": []}) if path == "/v1/tasks" else Resp(status=200)
+
+    assert m.verify(Client(), "msg1", {}) == {
+        "verdict": "fail", "readback": False, "figures_match": False, "health": True}
+
+
 def test_revoked_key_parks_and_escalates(demo, monkeypatch):
     m, _ = demo
     monkeypatch.setenv("ROUVR_INJECT", "revoked_key")

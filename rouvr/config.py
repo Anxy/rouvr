@@ -17,6 +17,13 @@ def _bool(name: str, default: bool) -> bool:
     return _env(name, str(default)).strip().lower() in {"1", "true", "yes", "on"}
 
 
+def _int(name: str, default: int) -> int:
+    try:
+        return int(_env(name, str(default)))
+    except ValueError as e:
+        raise RuntimeError(f"{name} must be an integer") from e
+
+
 @dataclass(frozen=True)
 class Settings:
     tenant_id: str
@@ -64,11 +71,11 @@ class Settings:
             workspace_root=Path(_env("WORKSPACE_ROOT", "/srv/rouvr/workspaces")),
             evidence_root=Path(_env("EVIDENCE_ROOT", "/srv/rouvr/evidence")),
             muse_bin=_env("MUSE_BIN", "muse"),
-            max_rework=int(_env("MAX_REWORK", "2")),
-            lease_ttl_s=int(_env("LEASE_TTL_S", "120")),
-            heartbeat_s=int(_env("HEARTBEAT_S", "30")),
-            assign_start_to_close_s=int(_env("ASSIGN_START_TO_CLOSE_S", "1800")),
-            coder_concurrency=int(_env("CODER_CONCURRENCY", "2")),
+            max_rework=_int("MAX_REWORK", 2),
+            lease_ttl_s=_int("LEASE_TTL_S", 120),
+            heartbeat_s=_int("HEARTBEAT_S", 30),
+            assign_start_to_close_s=_int("ASSIGN_START_TO_CLOSE_S", 1800),
+            coder_concurrency=_int("CODER_CONCURRENCY", 2),
             resume_supported=_bool("RESUME_SUPPORTED", True),  # R2: RESUME
             spec_provider=_env("SPEC_PROVIDER", "local"),
             receipt_key_path=Path(_env("RECEIPT_SIGNING_KEY_PATH", "/srv/rouvr/keys/receipt_ed25519.pem")),
@@ -80,8 +87,20 @@ class Settings:
             launch_windows=_bool("ROUVR_LAUNCH_WINDOWS", False),
             spec_root=Path(_env("SPEC_ROOT", "/srv/rouvr/specs")),
         )
+        if s.max_rework < 0:
+            raise RuntimeError("MAX_REWORK must be >= 0")
+        if s.coder_concurrency < 1:
+            raise RuntimeError("CODER_CONCURRENCY must be >= 1")
+        if s.assign_start_to_close_s <= 0:
+            raise RuntimeError("ASSIGN_START_TO_CLOSE_S must be positive")
+        if s.heartbeat_s <= 0:
+            raise RuntimeError("HEARTBEAT_S must be positive")
+        if s.lease_ttl_s <= 0:
+            raise RuntimeError("LEASE_TTL_S must be positive")
         if s.heartbeat_s * 3 > s.lease_ttl_s + 30:
             raise RuntimeError("HEARTBEAT_S too large for LEASE_TTL_S (need >=3 beats per lease)")
+        if s.persona_source not in {"aix", "yaml"}:
+            raise RuntimeError("PERSONA_SOURCE must be aix|yaml")
         if s.spec_provider not in {"local", "workhub"}:
             raise RuntimeError("SPEC_PROVIDER must be local|workhub")
         if s.workhub_backend not in {"stage", "ledger"}:

@@ -25,6 +25,44 @@ def test_canonical_task_v2_id_key():
     assert (t["id"], t["contract_rev"]) == ("01ABC", "2")
 
 
+def test_canonical_task_ledger_contract_rev_falls_back_to_contract_sha():
+    t = canonical_task({"id": 7, "contracts": [{"sha256": "abc123", "body": "{}"}]})
+    assert t["contract_rev"] == "abc123"
+
+
+def test_canonical_task_uses_last_contract():
+    t = canonical_task({"id": 7, "contracts": [
+        {"sha256": "old", "body": '{"description": "old", "project_id": "oldp", "acceptance_criteria": ["old"]}'},
+        {"sha256": "new", "body": '{"description": "new", "project_id": "newp", "acceptance_criteria": ["new"]}'}]})
+    assert (t["contract_rev"], t["description"], t["project_id"]) == ("new", "new", "newp")
+
+
+def test_canonical_task_sha_from_same_contract_as_body():
+    t = canonical_task({"id": 7, "contracts": [
+        {"sha256": "good", "body": '{"description": "good", "acceptance_criteria": ["g"]}'},
+        {"sha256": "bad", "body": "not-json"}]})
+    assert (t["contract_rev"], t["description"]) == ("good", "good")
+
+
+def test_canonical_task_contract_criteria_beat_stale_top_level():
+    t = canonical_task({"id": 7, "acceptance_criteria": ["stale"], "contracts": [
+        {"sha256": "new", "body": '{"acceptance_criteria": ["fresh"]}'}]})
+    assert t["contract_rev"] == "new"
+    assert t["acceptance_criteria"] == [{"id": "c1", "text": "fresh"}]
+
+
+def test_canonical_task_dict_criterion_without_id_gets_positional_id():
+    t = canonical_task({"id": 7, "acceptance_criteria": [{"text": "do it"}, {"id": "cx", "text": "x"}]})
+    assert t["acceptance_criteria"] == [{"id": "c1", "text": "do it"}, {"id": "cx", "text": "x"}]
+
+
+def test_canonical_task_contract_without_sha_still_wins_over_stale_top_level():
+    t = canonical_task({"id": 7, "acceptance_criteria": ["stale"], "contracts": [
+        {"body": '{"description": "new", "acceptance_criteria": ["fresh"]}'}]})
+    assert t["description"] == "new"
+    assert t["acceptance_criteria"] == [{"id": "c1", "text": "fresh"}]
+
+
 def test_canonical_task_tolerates_sparse_rows():
     t = canonical_task({"id": 7, "title": "x"})
     assert (t["id"], t["contract_rev"], t["acceptance_criteria"]) == ("7", "", [])

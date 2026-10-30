@@ -78,9 +78,13 @@ def verify(c, msg_id: str, figures: dict) -> dict:
     items = c.get("/v1/tasks").json()["items"]
     recount = {s: sum(1 for t in items if t["state"] == s) for s in ("done", "blocked", "failed")}
     health = c.get("/health").status_code == 200
-    ok = bool(readback) and json.loads(readback.split("\n", 1)[1])["figures"] == recount and health
+    try:
+        figures_match = bool(readback) and json.loads(readback.split("\n", 1)[1])["figures"] == recount
+    except (ValueError, IndexError):
+        readback, figures_match = None, False  # malformed outbox file: treat as no-readback
+    ok = bool(readback) and figures_match and health
     return {"verdict": "pass" if ok else "fail", "readback": bool(readback),
-            "figures_match": bool(readback) and json.loads(readback.split("\n", 1)[1])["figures"] == recount,
+            "figures_match": figures_match,
             "health": health}
 
 

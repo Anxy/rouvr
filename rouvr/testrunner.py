@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
+import os
+import uuid
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Protocol
@@ -24,7 +26,7 @@ class TestRunner(Protocol):
     async def run(self, cwd: Path, command: list[str], timeout_s: int, run_key: str) -> TestRun: ...
 
 
-async def _exec(argv: list[str], cwd: Path, timeout_s: int) -> tuple[int, str]:
+async def _exec(argv: list[str], cwd: Path, timeout_s: int, *, container_name: str | None = None) -> tuple[int, str]:
     proc = await asyncio.create_subprocess_exec(*argv, cwd=str(cwd), stdout=asyncio.subprocess.PIPE,
                                                 stderr=asyncio.subprocess.STDOUT)
     try:
@@ -32,18 +34,20 @@ async def _exec(argv: list[str], cwd: Path, timeout_s: int) -> tuple[int, str]:
     except asyncio.TimeoutError as e:
         proc.kill()
         await proc.wait()
+        if container_name:  # killing the docker CLI leaves the container running
+            try:
+                rm = await asyncio.create_subprocess_exec("docker", "rm", "-f", container_name,
+                                                          stdout=asyncio.subprocess.DEVNULL,
+                                                          stderr=asyncio.subprocess.DEVNULL)
+                await asyncio.wait_for(rm.wait(), 10)
+            except Exception:
+                pass
         raise RouvrError(Code.DOWNSTREAM, "tests timed out") from e
     return proc.returncode or 0, sanitize_for_log(out.decode(errors="replace")[-4000:])
 
 
 def _run_id(prefix: str, run_key: str) -> str:
     return f"{prefix}-{hashlib.sha256(run_key.encode()).hexdigest()[:16]}"
-
-
-class LocalTestRunner:
-    async def run(self, cwd: Path, command: list[str], timeout_s: int, run_key: str) -> TestRun:
-        rc, tail = await _exec(command, cwd, timeout_s)
-        return TestRun(run_id=_run_id("local", run_key), passed=rc == 0, exit_code=rc, output_tail=tail)
 
 
 class ContainerTestRunner:
@@ -53,10 +57,11 @@ class ContainerTestRunner:
         self.image = image
 
     async def run(self, cwd: Path, command: list[str], timeout_s: int, run_key: str) -> TestRun:
-        argv = ["docker", "run", "--rm", "--network", "none", "--pull", "never",
+        name = f"{_run_id('rouvr', run_key)}-{os.getpid()}-{uuid.uuid4().hex[:8]}"
+        argv = ["docker", "run", "--rm", "--name", name, "--network", "none", "--pull", "never",
                "-v", f"{cwd}:/src:ro", "-w", "/src", self.image, *command]
         try:
-            rc, tail = await _exec(argv, cwd, timeout_s)
+            rc, tail = await _exec(argv, cwd, timeout_s, container_name=name)
         except FileNotFoundError as e:
             raise RouvrError(Code.DOWNSTREAM, "docker is not installed") from e
         return TestRun(run_id=_run_id("ctr", run_key), passed=rc == 0, exit_code=rc, output_tail=tail)

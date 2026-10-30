@@ -55,13 +55,33 @@ class Persona:
 
 class PersonaRegistry:
     def __init__(self, data: dict, base_dir: Path | None = None) -> None:
+        if not isinstance(data, dict):
+            raise RouvrError(Code.CONTRACT, "persona registry must be a mapping with 'tenants'")
+        tenants = data.get("tenants") or {}
+        if not isinstance(tenants, dict):
+            raise RouvrError(Code.CONTRACT, "persona registry 'tenants' must be a mapping")
         self._t: dict[str, dict[str, Persona]] = {}
-        for tenant, td in (data.get("tenants") or {}).items():
-            self._t[tenant] = {n: Persona(name=n, role=p["role"], principal=p["principal"],
-                                          muse_model=p["muse_model"], credential_file=Path(p["credential_file"]),
-                                          github_app=p.get("github_app"),
-                                          instructions=self._load_instructions(base_dir, n, p["role"]))
-                               for n, p in (td.get("personas") or {}).items()}
+        for tenant, td in tenants.items():
+            if not isinstance(td, dict) or not isinstance(td.get("personas") or {}, dict):
+                raise RouvrError(Code.CONTRACT, f"persona tenant {tenant!r} must be a mapping with 'personas'")
+            built: dict[str, Persona] = {}
+            for n, p in (td.get("personas") or {}).items():
+                if not isinstance(p, dict):
+                    raise RouvrError(Code.CONTRACT, f"persona {tenant}/{n} must be a mapping")
+                missing = [k for k in ("role", "principal", "muse_model", "credential_file") if k not in p]
+                if missing:
+                    raise RouvrError(Code.CONTRACT, f"persona {tenant}/{n} missing {missing}")
+                bad = [k for k in ("role", "principal", "muse_model", "credential_file")
+                       if not isinstance(p[k], str)]
+                if bad:
+                    raise RouvrError(Code.CONTRACT, f"persona {tenant}/{n} values must be strings: {bad}")
+                if p["role"] not in {"coder", "reviewer"}:
+                    raise RouvrError(Code.CONTRACT, f"persona {tenant}/{n} role must be coder|reviewer")
+                built[n] = Persona(name=n, role=p["role"], principal=p["principal"],
+                                   muse_model=p["muse_model"], credential_file=Path(p["credential_file"]),
+                                   github_app=p.get("github_app"),
+                                   instructions=self._load_instructions(base_dir, n, p["role"]))
+            self._t[tenant] = built
 
     @staticmethod
     def _load_instructions(base_dir: Path | None, name: str, role: str) -> str:
@@ -125,6 +145,8 @@ DEFAULT_MODELS = {"coder": "muse-wonder-1.0", "reviewer": "muse-spark"}
 
 
 def registry_from_aix_mapping(data: dict, tenant: str) -> PersonaRegistry:
+    if not isinstance(data, dict):
+        raise RouvrError(Code.CONTRACT, "AIX mapping must be a JSON object (see personas.py for the format)")
     roles = data.get("roles")
     if not isinstance(roles, dict):
         raise RouvrError(Code.CONTRACT, "AIX mapping has no 'roles' object (see personas.py for the format)")
@@ -133,11 +155,14 @@ def registry_from_aix_mapping(data: dict, tenant: str) -> PersonaRegistry:
         role = AIX_ROLE_MAP.get(aix_role)
         if role is None:
             continue  # closer etc.: not a Muse persona
+        if not isinstance(r, dict):
+            raise RouvrError(Code.CONTRACT, f"AIX mapping role {aix_role} must be a mapping")
         if "principal" not in r or "creds_file" not in r:
             raise RouvrError(Code.CONTRACT, f"AIX mapping role {aix_role} lacks principal/creds_file")
         personas[aix_role] = {"role": role, "principal": r["principal"],
                               "muse_model": r.get("model", DEFAULT_MODELS[role]),
                               "credential_file": r["creds_file"]}
+    # shortcut: AIX personas get no instructions (intentionally YAML-only), pass base_dir here if AIX-side *.md files ever exist
     return PersonaRegistry({"tenants": {tenant: {"personas": personas}}})
 
 

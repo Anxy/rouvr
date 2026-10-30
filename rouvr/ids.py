@@ -34,7 +34,17 @@ def handoff_fence(attempt: int, epoch: int) -> str:
     return f"temporal-handoff-{attempt}-e{epoch}"
 
 
-_SECRETS = re.compile(r"(?i)(bearer\s+[A-Za-z0-9._-]+|(api[_-]?key|token|secret|password)=\S+)")
+_KEY = (r"(?:access[ _-]?token|refresh[ _-]?token|id[ _-]?token|auth[ _-]?token|"
+        r"secret[ _-]?key|access[ _-]?key|private[ _-]?key|signing[ _-]?key|api[ _-]?key|"
+        r"client[ _-]?secret|token|secret|password|passwd|passphrase|pwd|credential)"
+        r"(?:[ _-]?[A-Za-z0-9]+)?")
+_SECRETS = re.compile(
+    r"(?i)(?:bearer\s+[A-Za-z0-9._~+/=-]+"
+    r"|authorization[\"']?\s*[:=]\s*[\"']?(?:[A-Za-z][\w.-]*\s+)?[\"']?[^\s\"',}\]]+"
+    r"|[\"']?" + _KEY + r"[\"']?\s*(?:=|:|\bis\b)\s*([\"'])[^\n]*?\1"
+    r"|\"?" + _KEY + r"\"?\s*(?:=|:|\bis\b)\s*\"?[^\s\"',}\]]+"
+    r"|'" + _KEY + r"'\s*(?:=|:|\bis\b)\s*'?[^\s\"',}\]]+"
+    r"|" + _KEY + r"\s*(?:=|:|\bis\b)\s*[^\s\"',}\]]+)")
 
 
 def sanitize_for_log(text: str, limit: int = 2000) -> str:

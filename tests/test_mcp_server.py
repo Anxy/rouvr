@@ -80,6 +80,18 @@ def test_mcp_agent_messages_roundtrip(monkeypatch, ledger_url):
     assert len(ms.workhub_read_messages(1)) == 2
 
 
+def test_live_peers_finds_later_attempts(tmp_path, monkeypatch):
+    import rouvr.muse as muse_mod
+    from rouvr.mcp_server import _live_peers
+    monkeypatch.setenv("WORKSPACE_ROOT", str(tmp_path))
+    monkeypatch.setattr(muse_mod, "discover_session_id", lambda ws: f"sid-{ws.name}")
+    (tmp_path / "rouvr__7__a2").mkdir()
+    (tmp_path / "rouvr__7__a2__verify").mkdir()
+    peers = _live_peers(7, {"evidence": []})
+    assert [(p["role"], p["session_id"]) for p in peers] == [
+        ("coder", "sid-rouvr__7__a2"), ("reviewer", "sid-rouvr__7__a2__verify")]
+
+
 def test_annotate_stuck_only_for_stale_nonterminal():
     from datetime import datetime, timedelta, timezone
     from rouvr.mcp_server import _annotate
@@ -108,3 +120,22 @@ def test_show_task_decodes_evidence(monkeypatch, ledger_url):
     msg = [e for e in shown["evidence"] if e.get("kind") == "agent_message"][0]
     assert msg["payload"] == {"from": "coder", "to": "reviewer", "text": "hello"}
     assert shown["stuck"] is False
+
+
+def test_message_agent_timeout_returns_error_status(monkeypatch, ledger_url):
+    monkeypatch.setenv("WORKHUB_BASE_URL", ledger_url)
+    import importlib
+    import subprocess
+
+    import rouvr.mcp_server as ms
+    importlib.reload(ms)
+    task = ms.workhub_create_task("t-timeout", "d", ["c1"])
+    monkeypatch.setattr(ms, "_live_peers",
+                        lambda tid, t: [{"role": "coder", "session_id": "sid-9"}])
+
+    def boom(*a, **kw):
+        raise subprocess.TimeoutExpired(cmd="muse", timeout=30)
+
+    monkeypatch.setattr(subprocess, "run", boom)
+    out = ms.workhub_message_agent(task["id"], "coder", "hi")
+    assert out == {"target": "sid-9", "status": "error", "detail": "timeout"}

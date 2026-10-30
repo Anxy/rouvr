@@ -20,6 +20,14 @@ with workflow.unsafe.imports_passed_through():
 Q_ORCH, Q_BUILD, Q_TEST, Q_VERIFY = "rouvr-orchestrator", "rouvr-coder", "rouvr-test", "rouvr-reviewer"
 
 
+def run_tests_timeout_s(spec_timeout_s: int) -> int:
+    return 2 * spec_timeout_s + 300  # two container runs at spec.timeout_s each, plus clone/diff/evidence overhead
+
+
+def verify_timeout_s(spec_timeout_s: int) -> int:
+    return spec_timeout_s + 300  # reviewer turn runs spec.timeout_s, plus overhead
+
+
 def _code(err: BaseException) -> str:
     c = err.cause if isinstance(err, ActivityError) else err
     return c.type if isinstance(c, ApplicationError) and c.type else "E_DOWNSTREAM"
@@ -57,15 +65,19 @@ class TaskWorkflow:
                     Activities.assign_task,
                     AssignInput(wf=wf, binding=b, attempt_no=self.attempt, rework_notes=notes,
                                 resume_session_id=resume),
-                    task_queue=Q_BUILD, start_to_close_timeout=timedelta(seconds=1800),
+                    task_queue=Q_BUILD, start_to_close_timeout=timedelta(seconds=wf.assign_start_to_close_s),
                     heartbeat_timeout=timedelta(seconds=90),
                     retry_policy=RetryPolicy(initial_interval=timedelta(seconds=10), backoff_coefficient=2.0,
                                              maximum_attempts=3, non_retryable_error_types=wh.non_retryable_error_types))
+                if self.cancel_requested:
+                    return await self._block(wf, "E_CANCELLED", built.attempt_id)
                 self.phase = "test"
-                tests = await workflow.execute_activity_method(Activities.run_tests, args=[wf, built],
-                                                               task_queue=Q_TEST,
-                                                               start_to_close_timeout=timedelta(seconds=1800),
-                                                               retry_policy=retry_policy_for("test"))
+                tests = await workflow.execute_activity_method(
+                    Activities.run_tests, args=[wf, built], task_queue=Q_TEST,
+                    start_to_close_timeout=timedelta(seconds=run_tests_timeout_s(wf.spec_timeout_s)),
+                    retry_policy=retry_policy_for("test"))
+                if self.cancel_requested:
+                    return await self._block(wf, "E_CANCELLED", built.attempt_id)
                 if not tests.passed:
                     notes = f"Tests failed:\n{tests.summary}"
                     resume = built.muse_session_id
@@ -73,10 +85,12 @@ class TaskWorkflow:
                 self.phase = "verify"
                 v = await workflow.execute_activity_method(Activities.verify, args=[wf, b, built, tests],
                                                            task_queue=Q_VERIFY,
-                                                           start_to_close_timeout=timedelta(seconds=1200),
+                                                           start_to_close_timeout=timedelta(seconds=verify_timeout_s(wf.spec_timeout_s)),
                                                            heartbeat_timeout=None,
                                                            retry_policy=retry_policy_for("verify"))
                 if v.verdict == "approve":
+                    if self.cancel_requested:
+                        return await self._block(wf, "E_CANCELLED", built.attempt_id)
                     self.phase = "close"
                     closed = await workflow.execute_activity_method(Activities.close_task,
                                                                     args=[wf, b, built.attempt_id], task_queue=Q_ORCH,

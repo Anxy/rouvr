@@ -26,7 +26,8 @@ StartFn = Callable[[TaskWorkflowInput], Awaitable[tuple[str, bool]]]
 REQUIRED = ("task_id", "contract_rev", "requested_by")
 
 
-def build_app(*, start: StartFn, token: str, tenant_id: str, project_id: str, max_rework: int = 2):
+def build_app(*, start: StartFn, token: str, tenant_id: str, project_id: str, max_rework: int = 2,
+              assign_start_to_close_s: int = 1800, spec_timeout_s: int = 1500):
     async def send_json(send, status: int, body: dict) -> None:
         raw = json.dumps(body).encode()
         await send({"type": "http.response.start", "status": status,
@@ -49,6 +50,8 @@ def build_app(*, start: StartFn, token: str, tenant_id: str, project_id: str, ma
         while True:
             m = await receive()
             body += m.get("body", b"")
+            if len(body) > 65536:
+                return await send_json(send, 400, {"error": "E_BAD_REQUEST", "message": "request body too large"})
             if not m.get("more_body"):
                 break
         try:
@@ -60,7 +63,8 @@ def build_app(*, start: StartFn, token: str, tenant_id: str, project_id: str, ma
             return await send_json(send, 400, {"error": "E_BAD_REQUEST", "message": f"missing: {missing}"})
         wf = TaskWorkflowInput(tenant_id=tenant_id, project_id=project_id, task_id=data["task_id"],
                                contract_rev=data["contract_rev"], requested_by=data["requested_by"],
-                               max_rework=max_rework)
+                               max_rework=max_rework, assign_start_to_close_s=assign_start_to_close_s,
+                               spec_timeout_s=spec_timeout_s)
         wid, started = await start(wf)
         return await send_json(send, 200, {"workflow_id": wid, "started": started})
 
@@ -77,10 +81,19 @@ def _make_default_app():  # pragma: no cover - wiring
     async def start(wf: TaskWorkflowInput) -> tuple[str, bool]:
         if "c" not in holder:
             holder["c"] = await Client.connect(s.temporal_address, namespace=s.temporal_namespace)
+        try:
+            from dataclasses import replace
+            from rouvr.execspec import LocalExecSpecProvider
+            spec = await LocalExecSpecProvider(s.spec_root).get(
+                s.tenant_id, {"id": wf.task_id, "project_id": wf.project_id})
+            wf = replace(wf, spec_timeout_s=spec.timeout_s)
+        except Exception:
+            pass  # missing/bad spec still fails in assign_task; keep the default here
         return await start_task_workflow(holder["c"], wf, report=True)
 
     return build_app(start=start, token=s.start_api_token_file.read_text().strip(),
-                     tenant_id=s.tenant_id, project_id=s.project_id, max_rework=s.max_rework)
+                     tenant_id=s.tenant_id, project_id=s.project_id, max_rework=s.max_rework,
+                     assign_start_to_close_s=s.assign_start_to_close_s)
 
 
 def __getattr__(name: str):  # lazy `rouvr.api:app` so imports in tests need no env

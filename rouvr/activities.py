@@ -267,7 +267,7 @@ class Activities:
             criteria=tuple(c["id"] if isinstance(c, dict) else str(c)
                            for c in task.get("acceptance_criteria") or []),
             evidence_refs=frozenset({tests.evidence_id, f"testrun:{tests.run_id}"}),
-            prior_submits=count_prior_submits(rows))
+            prior_submits=count_prior_submits(rows))  # task-wide: 3 judged rejects block (gate.py)
         submission = read_submission_file(ws)
         if submission and not submission.get("__malformed__"):
             # The system creates the PR after the coder turn (supervisor grant
@@ -281,16 +281,19 @@ class Activities:
                                                  "feedback": gv.feedback})
             return VerifyResult("reject", gv.feedback or gv.verdict, reviewer.principal, ev)
         if gv.verdict == "reject":
-            await wh.attach_evidence_exact(wf.task_id, SUBMIT_ATTEMPT_TYPE, f"{fence}:submit-{facts.prior_submits + 1}",
+            # Deterministic per attempt: a Temporal retry re-attaches the same
+            # fence and attach_evidence_exact dedups, instead of minting
+            # submit-{n+1} and burning another of the 3 submit rounds.
+            await wh.attach_evidence_exact(wf.task_id, SUBMIT_ATTEMPT_TYPE, f"{fence}:submit",
                                            {"verdict": "request_changes", "feedback": gv.feedback})
             ev = await wh.attach_evidence_exact(wf.task_id, "reviewer_report", fence,
                                                 {"verdict": "request_changes", "feedback": gv.feedback})
             return VerifyResult("request_changes", gv.feedback or "gate rejected", reviewer.principal, ev)
-        await wh.attach_evidence_exact(wf.task_id, SUBMIT_ATTEMPT_TYPE, f"{fence}:submit-{facts.prior_submits + 1}",
-                                       {"verdict": "approve"})
         diff = await diff_range(ws, f"origin/{spec.base_branch}", built.head_sha)
         vdir = ws.parent / f"{ws.name}__verify"
         vdir.mkdir(parents=True, exist_ok=True)
+        for stale in ("verdict.json", "message-coder.json"):
+            (vdir / stale).unlink(missing_ok=True)
         creds = reviewer.credentials()
         vprompt = build_reviewer_prompt(task, diff, tests.summary,
                                         messages_for(rows, "reviewer"))
@@ -312,6 +315,8 @@ class Activities:
             ev = await wh.attach_evidence_exact(wf.task_id, "reviewer_report", fence,
                                                 {"verdict": "reject", "verdict_error": str(e)})
             return VerifyResult("reject", f"reviewer output unusable: {e}", reviewer.principal, ev)
+        await wh.attach_evidence_exact(wf.task_id, SUBMIT_ATTEMPT_TYPE, f"{fence}:submit",
+                                       {"verdict": verdict})
         ev = await wh.attach_evidence_exact(wf.task_id, "reviewer_report", fence,
                                             {"verdict": verdict, "notes": notes})
         return VerifyResult(verdict, notes, reviewer.principal, ev)  # verdict in VERDICTS by read_verdict
@@ -350,7 +355,10 @@ class Activities:
     @activity.defn(name="escalate")
     @_wrap
     async def escalate(self, wf: TaskWorkflowInput, reason: str, attempt_id: str) -> bool:
-        raise NotImplementedError("P2")
+        wh = self.h.workhub_for(None)
+        await wh.attach_evidence_exact(wf.task_id, "escalation", f"escalate:{attempt_id}:{reason}",
+                                       {"reason": reason, "attempt_id": attempt_id})
+        return True
 
     @activity.defn(name="sign_receipt")
     @_wrap

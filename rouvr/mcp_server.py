@@ -46,11 +46,11 @@ def _prose_warnings(description: str, criteria: list[str]) -> list[str]:
 def workhub_create_task(title: str, description: str, acceptance_criteria: list[str]) -> dict:
     """Create a WorkHub task plus its contract. Returns the task (task_number = id)."""
     with _ledger() as c:
-        t = c.post("/v1/tasks", json={"title": title, "intent": "supervisor"}).raise_for_status().json()
-        c.post(f"/v1/tasks/{t['id']}/contracts", json={
-            "project_id": PROJECT, "description": description,
-            "acceptance_criteria": acceptance_criteria}).raise_for_status()
-        task = c.get(f"/v1/tasks/{t['id']}").raise_for_status().json()
+        task = c.post("/v1/tasks_with_contract", json={
+            "title": title, "intent": "supervisor", "contract": {
+                "project_id": PROJECT, "description": description,
+                "acceptance_criteria": acceptance_criteria}}).raise_for_status().json()
+        task = c.get(f"/v1/tasks/{task['id']}").raise_for_status().json()
         if (w := _prose_warnings(description, acceptance_criteria)):
             task["warnings"] = w
         return task
@@ -203,12 +203,12 @@ def _live_peers(task_id: int, task: dict) -> list[dict]:
     peers = _peer_sessions(task)
     root = Path(os.environ.get("WORKSPACE_ROOT", "/tmp/rouvr-supervisor/workspaces"))
     known = {p["session_id"] for p in peers}
-    for role, suffix in (("coder", f"rouvr__{task_id}__a1"), ("reviewer", f"rouvr__{task_id}__a1__verify")):
-        ws = root / suffix
-        if ws.exists():
-            sid = discover_session_id(ws)
-            if sid and sid not in known:
-                peers.append({"role": role, "session_id": sid, "workspace": str(ws), "live": True})
+    for ws in sorted(root.glob(f"rouvr__{task_id}__a*")) if root.exists() else []:
+        sid = discover_session_id(ws)
+        if sid and sid not in known:
+            known.add(sid)
+            role = "reviewer" if ws.name.endswith("__verify") else "coder"
+            peers.append({"role": role, "session_id": sid, "workspace": str(ws), "live": True})
     return peers
 
 
@@ -234,8 +234,11 @@ def workhub_message_agent(task_id: int, to_role: str, text: str) -> dict:
     if not peers:
         return {"status": "no_live_session", "to_role": to_role}
     target = peers[-1]["session_id"]
-    r = subprocess.run(["muse", "session-message", "send", "--target", target, "--json"],
-                       input=text, capture_output=True, text=True, timeout=30)
+    try:
+        r = subprocess.run(["muse", "session-message", "send", "--target", target, "--json"],
+                           input=text, capture_output=True, text=True, timeout=30)
+    except subprocess.TimeoutExpired:
+        return {"target": target, "status": "error", "detail": "timeout"}
     import json as _json
     try:
         return {"target": target, **_json.loads(r.stdout or "{}")}

@@ -55,6 +55,16 @@ def test_three_rejects_block():
     assert evaluate(sub(), facts(prior_submits=3)).verdict == "blocked"
 
 
+def test_prior_submits_counted_per_attempt():
+    rows = [{"type": "submit_attempt", "fence": "a1:verify:submit"},
+            {"type": "submit_attempt", "fence": "a2:verify:submit"},
+            {"type": "submit_attempt", "fence": "a1:verify:submit"},
+            {"type": "submit_attempt", "fence": "a10:verify:submit"}]
+    assert count_prior_submits(rows, "a1") == 2
+    assert count_prior_submits(rows, "a2") == 1
+    assert count_prior_submits(rows) == 4  # task-wide count used by verify: rejects accumulate across attempts
+
+
 def test_fail_closed_on_garbage():
     for bad in ({}, {"pr_url": 7}, {"claims": "x"}, {"__malformed__": True}):
         v = evaluate(bad, facts())

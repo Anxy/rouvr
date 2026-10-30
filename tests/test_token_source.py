@@ -71,6 +71,26 @@ def test_host_uses_token_source_for_service_credentials(tmp_path):
     assert isinstance(wh._token, TokenSource)
 
 
+@pytest.mark.parametrize("creds", [{}, {"service_credential_id": "c", "client_secret": "s"}])
+def test_host_missing_credential_keys_is_authz(tmp_path, creds):
+    from rouvr.errors import Code, RouvrError
+    registry, name = _persona(tmp_path, creds)
+    host = build_host(_settings(tmp_path, registry))
+    with pytest.raises(RouvrError) as e:
+        host.workhub_for(host.personas.get("hyeve-lane-ops", name, "coder"))
+    assert e.value.code is Code.AUTHZ
+
+
+def test_host_missing_orchestrator_token_file_is_authz(tmp_path, monkeypatch):
+    from rouvr.errors import Code, RouvrError
+    monkeypatch.setattr("rouvr.host.Path", lambda *a, **k: tmp_path / "missing.token")
+    registry, _ = _persona(tmp_path, {"workhub_token": "x"})
+    host = build_host(_settings(tmp_path, registry))
+    with pytest.raises(RouvrError) as e:
+        host.workhub_for(None)
+    assert e.value.code is Code.AUTHZ
+
+
 def test_host_keeps_static_workhub_token(tmp_path):
     registry, name = _persona(tmp_path, {"workhub_token": "static-tok", "meta_api_key": "k"})
     host = build_host(_settings(tmp_path, registry))

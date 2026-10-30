@@ -12,6 +12,7 @@ from typing import Any
 import httpx
 
 from rouvr.config import Settings
+from rouvr.errors import Code, RouvrError
 from rouvr.execspec import ExecSpecProvider, LocalExecSpecProvider
 from rouvr.muse import MuseLauncher
 from rouvr.personas import Persona, PersonaRegistry, load_aix_mapping
@@ -49,16 +50,23 @@ def build_host(s: Settings, *, transport: httpx.AsyncBaseTransport | None = None
             if p is None:
                 token = orchestrator_token
                 if token is None:
-                    token = Path("/srv/rouvr/keys/orchestrator.token").read_text().strip()
+                    try:
+                        token = Path("/srv/rouvr/keys/orchestrator.token").read_text().strip()
+                    except OSError as e:
+                        raise RouvrError(Code.AUTHZ, "orchestrator token file missing") from e
             else:
                 creds = p.credentials()
-                if creds.get("service_credential_id") and creds.get("client_secret"):
-                    # Service-credential file (e.g. creds-rouvr-worker.json): mint per-run, no static token.
-                    token = TokenSource(httpx.AsyncClient(timeout=15.0), creds["service_credential_id"],
-                                        creds["client_secret"], auth_base=creds["auth_base"],
-                                        tenant=creds.get("tenant", s.tenant_id), audience=creds["audience"])
-                else:
-                    token = creds["workhub_token"]
+                try:
+                    if creds.get("service_credential_id") and creds.get("client_secret"):
+                        # Service-credential file (e.g. creds-rouvr-worker.json): mint per-run, no static token.
+                        token = TokenSource(httpx.AsyncClient(timeout=15.0), creds["service_credential_id"],
+                                            creds["client_secret"], auth_base=creds["auth_base"],
+                                            tenant=creds.get("tenant", s.tenant_id), audience=creds["audience"])
+                    else:
+                        token = creds["workhub_token"]
+                except KeyError as e:
+                    raise RouvrError(Code.AUTHZ,
+                                     f"credential file for {p.name} missing {e.args[0]}") from e
             cache[key] = WorkHubClient(s.workhub_base_url, s.tenant_id, s.project_id, token,
                                        transport=transport)
         return cache[key]

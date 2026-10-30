@@ -15,6 +15,8 @@ class TaskWorkflowInput:
     contract_rev: str
     requested_by: str
     max_rework: int = 2
+    assign_start_to_close_s: int = 1800
+    spec_timeout_s: int = 1500  # ExecSpec.timeout_s: one container run; test activity runs two
 
 
 @dataclass

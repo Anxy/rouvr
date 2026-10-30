@@ -47,7 +47,7 @@ def discover_session_id(cwd: Path, root: Path | None = None) -> str:
     root = root or sessions_root()
     if not root.exists():
         return ""
-    needle = str(cwd).encode()  # logs escape quotes; the raw path is the stable marker
+    needle = (str(cwd) + '"').encode()  # closing quote: a __verify sibling must not prefix-match
     days = sorted(root.glob("*/*/*"), reverse=True)[:2]
     candidates = sorted((d for day in days for d in day.iterdir() if d.is_dir()),
                         key=lambda d: d.stat().st_mtime, reverse=True)
@@ -159,6 +159,16 @@ class MuseLauncher:
         sid = resume or str(uuid.uuid4())  # resume => same sid (R2); else fresh sid per leg
         prompt_file = cwd.parent / f".rouvr-prompt-{sid}.md"   # outside the repo worktree
         prompt_file.write_text(prompt)
+        try:
+            return await self._exec_turn(prompt, prompt_file, model, cwd, env, timeout_s,
+                                         resume, on_event, cancel, sid)
+        finally:
+            prompt_file.unlink(missing_ok=True)
+
+    async def _exec_turn(self, prompt: str, prompt_file: Path, model: str, cwd: Path,
+                         env: dict[str, str], timeout_s: int, resume: str | None,
+                         on_event: Callable[[dict], None], cancel: asyncio.Event | None,
+                         sid: str) -> MuseTurn:
         if self.launch_windows:
             chat = chat_command(f"Rouvr muse {sid[:8]}", cwd, prompt_file, model, self.bin,
                                 role=persona_role(prompt))
@@ -169,6 +179,7 @@ class MuseLauncher:
             env={"PATH": os.environ.get("PATH", ""), "HOME": str(cwd), **env},
             stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE, start_new_session=True)
         session_id, events, last = sid, 0, ""
+        stderr_tail = bytearray()  # capped: only a sanitized tail is ever used
 
         async def pump() -> None:
             nonlocal session_id, events, last
@@ -194,7 +205,14 @@ class MuseLauncher:
                     last = sanitize_for_log(text)
                 on_event(ev)
 
+        async def drain_stderr() -> None:
+            assert proc.stderr is not None
+            while (chunk := await proc.stderr.read(8192)):
+                stderr_tail.extend(chunk)
+                del stderr_tail[:-65536]
+
         pump_t = asyncio.ensure_future(pump())
+        stderr_t = asyncio.ensure_future(drain_stderr())
         waiters = {pump_t}
         cancel_t = asyncio.ensure_future(cancel.wait()) if cancel else None
         if cancel_t:
@@ -206,12 +224,21 @@ class MuseLauncher:
                 raise RouvrError(Code.CANCELLED if cancel_t in done else Code.DOWNSTREAM,
                                  "muse turn cancelled" if cancel_t in done else "muse turn timed out",
                                  details={"session_id": session_id})
-            rc = await proc.wait()
+            try:  # stdout closed but the process may linger: bound the exit wait too
+                rc = await asyncio.wait_for(proc.wait(), timeout=self.grace + 5)
+            except (asyncio.TimeoutError, TimeoutError):
+                await self._kill(proc)
+                raise RouvrError(Code.DOWNSTREAM, "muse turn timed out waiting for exit",
+                                 details={"session_id": session_id}) from None
         finally:
             if cancel_t:
                 cancel_t.cancel()
+            try:
+                await asyncio.wait_for(asyncio.shield(stderr_t), timeout=5)
+            except Exception:
+                stderr_t.cancel()
         if rc != 0:
-            err = sanitize_for_log((await proc.stderr.read()).decode(errors="replace")) if proc.stderr else ""
+            err = sanitize_for_log(bytes(stderr_tail).decode(errors="replace"))
             raise RouvrError(Code.DOWNSTREAM, f"muse exit {rc}: {err}", details={"session_id": session_id})
         if not session_id:
             raise RouvrError(Code.CONTRACT, "muse produced no session_id")
@@ -266,6 +293,10 @@ class MuseLauncher:
             watcher.cancel()
             if cancel_t:
                 cancel_t.cancel()
+        rc = proc.returncode
+        if not ((cwd / "submit.json").exists() or (cwd / "verdict.json").exists()):
+            raise RouvrError(Code.DOWNSTREAM, f"muse chat exited {rc} without output",
+                             details={"session_id": sid})
         return MuseTurn(session_id=sid, exit_code=0, events=0, last_message="")
 
     async def _kill(self, proc: asyncio.subprocess.Process) -> None:

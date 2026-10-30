@@ -62,8 +62,24 @@ def discover_session_id(cwd: Path, root: Path | None = None) -> str:
     return ""
 
 
+def persona_role(prompt: str) -> str:
+    head = prompt[:600]
+    return "Reviewer" if "Persona: Reviewer" in head else "Coder" if "Persona: Coder" in head else "Agent"
+
+
+def ready_line(prompt: str) -> str:
+    """Startup greeting a persona window shows first, like the supervisor's."""
+    import re
+    role = persona_role(prompt)
+    m = re.search(r"(?:Review task|Task) (\d+): ([^\n]+)", prompt)
+    if m:
+        verb = "Reviewing" if role == "Reviewer" else "Working on"
+        return f"{role} ready. {verb} task {m.group(1)}: {m.group(2)[:80]}"
+    return f"{role} ready."
+
+
 def chat_command(title: str, cwd: Path, prompt_file: Path, model: str,
-                 bin_path: str = "muse") -> list[str] | None:
+                 bin_path: str = "muse", role: str = "Agent") -> list[str] | None:
     """Argv opening an interactive muse chat session in a new terminal window.
 
     Returns None when no display/terminal is available (caller falls back to
@@ -75,8 +91,10 @@ def chat_command(title: str, cwd: Path, prompt_file: Path, model: str,
     import shutil
     if not os.environ.get("DISPLAY"):
         return None
-    seed = (f"Read the task instructions in {prompt_file} and complete them in this "
-            f"workspace. Follow the submission instructions in that file exactly, then exit.")
+    seed = (f"You are the Rouvr {role}. Read {prompt_file} now and follow it for the whole session. "
+            f"The full stack is already running: WorkHub, Temporal workers, and the submit gate. "
+            f"Your window closes automatically once your output file is written. "
+            f"Greet the supervisor briefly as the {role.lower()} ready for this task, then complete it.")
     # --yolo: no trust prompt, no approval/continue dialogs — the persona
     # window starts and runs unattended in its governed workspace.
     muse = f"{shlex.quote(bin_path)} --yolo --workspace {shlex.quote(str(cwd))}"
@@ -110,7 +128,8 @@ class MuseLauncher:
         prompt_file = cwd.parent / f".rouvr-prompt-{sid}.md"   # outside the repo worktree
         prompt_file.write_text(prompt)
         if self.launch_windows:
-            chat = chat_command(f"Rouvr muse {sid[:8]}", cwd, prompt_file, model, self.bin)
+            chat = chat_command(f"Rouvr muse {sid[:8]}", cwd, prompt_file, model, self.bin,
+                                role=persona_role(prompt))
             if chat is not None:
                 return await self._run_chat(chat, sid, cwd, env, timeout_s, cancel)
         proc = await asyncio.create_subprocess_exec(

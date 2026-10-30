@@ -57,21 +57,25 @@ def canonical_task(t: dict) -> dict:
     field present on both v1 and v2 reads (claims/evidence don't bump it)."""
     md = t.get("metadata_json") or {}
     contract_body: dict = {}
+    contract_sha: str | None = None
     for c in t.get("contracts") or []:  # ledger rows: the done-contract carries criteria
+        if not isinstance(c, dict):
+            continue
         b = c.get("body")
         try:
             b = json.loads(b) if isinstance(b, str) else b
         except ValueError:
             continue
         if isinstance(b, dict):
-            contract_body = b
-            break
-    raw = t.get("acceptance_criteria") or md.get("acceptance_criteria") or contract_body.get(
-        "acceptance_criteria") or []
-    criteria = [{"id": c["id"], "text": str(c.get("text", ""))} if isinstance(c, dict)
+            contract_body, contract_sha = b, c.get("sha256")
+    # The last valid contract body is authoritative for criteria (same body as
+    # description/project), with or without a sha; top-level may be stale.
+    raw = (contract_body.get("acceptance_criteria") or t.get("acceptance_criteria")
+           or md.get("acceptance_criteria") or [])
+    criteria = [{"id": str(c.get("id") or f"c{i + 1}"), "text": str(c.get("text", ""))} if isinstance(c, dict)
                 else {"id": f"c{i + 1}", "text": str(c)} for i, c in enumerate(raw)]
     return {**t, "id": str(t.get("id") or t.get("task_id")), "record_version": int(t.get("record_version") or 0),
-            "contract_rev": str(t.get("contract_rev") or t.get("record_version") or ""),
+            "contract_rev": str(t.get("contract_rev") or t.get("record_version") or contract_sha or ""),
             "description": str(t.get("description") or t.get("intent") or contract_body.get("description") or ""),
             "project_id": str(t.get("project_id") or contract_body.get("project_id") or ""),
             "acceptance_criteria": criteria}
@@ -178,10 +182,6 @@ class WorkHubClient:
                                 json={"evidence_type": evidence_type, "evidence_ref": fence,
                                       "evidence_json": payload},
                                 idem=idempotency_key("evidence", task_id, evidence_type, fence))
-
-    async def evaluate(self, task_id: str, contract_rev: str) -> dict:
-        return await self._call("POST", R.R7_EVALUATE.format(task_id=task_id), json={"contract_rev": contract_rev},
-                                idem=idempotency_key("evaluate", task_id, contract_rev))
 
     async def transition_batch(self, items: list[dict], key_parts: tuple) -> dict:
         """items: [{task_id, status, expected_record_version, reason}] — CAS on record_version."""

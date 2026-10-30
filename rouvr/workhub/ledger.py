@@ -6,7 +6,6 @@ from __future__ import annotations
 
 import json
 import os
-import uuid
 
 import httpx
 
@@ -31,7 +30,12 @@ class LedgerWorkHub:
             r = await self._http.request(method, path, json=body)
         except (httpx.TransportError, httpx.TimeoutException) as e:
             raise RouvrError(Code.TRANSPORT, type(e).__name__) from e
-        payload = r.json() if r.content else {}
+        try:
+            payload = r.json() if r.content else {}
+        except ValueError:
+            payload = {}
+        if not isinstance(payload, dict):
+            payload = {}
         if r.status_code == 404:
             raise RouvrError(Code.CONTRACT, f"not found: {path}")
         if r.status_code >= 400:
@@ -61,14 +65,14 @@ class LedgerWorkHub:
     async def claim(self, task_id: str, principal: str, attempt_no: int, ttl_s: int) -> dict:
         r = await self._call("POST", f"/v1/tasks/{task_id}/assignments/claim",
                              {"principal": principal, "attempt_no": attempt_no, "ttl_s": ttl_s,
-                              "key": f"rouvr-ledger-{uuid.uuid4().hex}"})
+                              "key": idempotency_key("claim", task_id, attempt_no, principal)})
         return {"assignment_id": str(r["assignment"]["id"]), "lease_epoch": int(r["lease_epoch"]),
                 "expires_at": str(r["lease"]["expires_at"])}
 
     async def open_attempt(self, task_id: str, attempt_no: int, epoch: int, assignment_id: str = "") -> dict:
         r = await self._call("POST", f"/v1/tasks/{task_id}/attempts",
                              {"attempt_no": attempt_no, "lease_epoch": epoch, "assignment_id": assignment_id,
-                              "key": f"rouvr-ledger-{uuid.uuid4().hex}"})
+                              "key": idempotency_key("attempt", task_id, attempt_no)})
         return {"attempt_id": str(r["attempt"]["id"]), "attempt_no": int(r["attempt"]["attempt_no"]),
                 "lease_epoch": int(r["attempt"]["lease_epoch"])}
 
@@ -78,12 +82,12 @@ class LedgerWorkHub:
             raise RouvrError(Code.CONTRACT, "renew with no active lease")
         r = await self._call("POST", f"/v1/tasks/{task_id}/leases/renew",
                              {"holder": binding["holder"], "expected_lease_epoch": epoch, "ttl_s": ttl_s,
-                              "key": f"rouvr-ledger-{uuid.uuid4().hex}"})
+                              "key": idempotency_key("renew", task_id, assignment_id, epoch, beat)})
         return {"lease_epoch": int(r["lease"]["lease_epoch"]), "expires_at": r["lease"]["expires_at"]}
 
     async def reclaim_dead(self, task_id: str, attempt_no: int, holder: str = "") -> dict:
         r = await self._call("POST", f"/v1/tasks/{task_id}/assignments/reclaim",
-                             {"key": f"rouvr-ledger-{uuid.uuid4().hex}"})
+                             {"key": idempotency_key("reclaim-dead", task_id, attempt_no)})
         return {"reclaimed": bool(r["reclaimed"])}
 
     async def attach_evidence(self, task_id: str, evidence_type: str, fence: str, payload: dict) -> dict:
@@ -124,14 +128,13 @@ class LedgerWorkHub:
 
     async def record_result(self, task_id: str, attempt_id: str, epoch: int, result: dict) -> dict:
         verdict = result.get("verdict") or result.get("status") or "recorded"
+        digest = idempotency_key("result", task_id, attempt_id,
+                                 json.dumps(result, sort_keys=True))
         r = await self._call("POST", f"/v1/tasks/{task_id}/results",
                              {"attempt_id": int(attempt_id), "lease_epoch": epoch,
                               "verdict": verdict, "result": result,
-                              "key": f"rouvr-ledger-{uuid.uuid4().hex}"})
+                              "key": digest})
         return {"result_id": str(r["result"]["id"])}
-
-    async def evaluate(self, task_id: str, contract_rev: str) -> dict:
-        raise NotImplementedError("R9: reviewer evaluation")
 
     async def transition_batch(self, items: list[dict], key_parts: tuple) -> dict:
         moved = []

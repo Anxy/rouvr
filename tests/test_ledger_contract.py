@@ -104,6 +104,41 @@ async def test_result_core_change_conflicts(backend):
     assert ei.value.code is Code.MOVED
 
 
+async def test_claim_replay_and_reclaim_reclaim_same_attempt(backend):
+    wh, tid, _number = backend
+    c1 = norm_claim(await wh.claim(tid, "coder-1", 1, 0))  # ttl 0: lease already expired
+    c2 = norm_claim(await wh.claim(tid, "coder-1", 1, 0))  # deterministic key: replay, same row
+    assert c1["assignment_id"] == c2["assignment_id"]
+    assert (await wh.reclaim_dead(tid, 1))["reclaimed"] is True
+    c4 = norm_claim(await wh.claim(tid, "coder-1", 1, 120))  # released row reactivated, no UNIQUE clash
+    assert c4["assignment_id"] == c1["assignment_id"]
+
+
+async def test_claim_by_other_principal_conflicts(backend):
+    wh, tid, _number = backend
+    await wh.claim(tid, "coder-1", 1, 120)
+    with pytest.raises(RouvrError) as ei:  # same attempt, different principal: not a replay
+        await wh.claim(tid, "coder-2", 1, 120)
+    assert ei.value.code is Code.MOVED
+
+
+@pytest.mark.parametrize("status,content,ctype", [
+    (502, b"<html>bad gateway</html>", "text/html"),
+    (500, b'["oops"]', "application/json"),
+])
+async def test_ledger_non_dict_error_bodies_become_rouvr_errors(status, content, ctype):
+    def handler(req: httpx.Request) -> httpx.Response:
+        return httpx.Response(status, content=content, headers={"content-type": ctype})
+
+    wh = LedgerWorkHub("http://ledger", transport=httpx.MockTransport(handler))
+    try:
+        with pytest.raises(RouvrError) as ei:
+            await wh.create_task("t", "i")
+        assert ei.value.code is Code.DOWNSTREAM
+    finally:
+        await wh.aclose()
+
+
 async def test_binding_empty_before_claim(backend):
     wh, _tid, number = backend
     if number is None:

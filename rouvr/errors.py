@@ -46,6 +46,7 @@ def from_http(status: int, body: dict | None) -> RouvrError:
     """Map a WorkHub HTTP response to a Rouvr code. Unknown 4xx => BAD_REQUEST (non-retryable)."""
     body = body or {}
     wh = str(body.get("code") or body.get("error") or "")
+    wh_u = wh.upper()
     msg = str(body.get("message") or wh or f"http {status}")
     if status == 429:
         return RouvrError(Code.THROTTLE, msg)
@@ -54,16 +55,16 @@ def from_http(status: int, body: dict | None) -> RouvrError:
     if status in (401, 403):
         return RouvrError(Code.AUTHZ, msg)
     if status == 409:
-        if "CONTRACT" in wh:
+        if "CONTRACT" in wh_u:
             return RouvrError(Code.CONTRACT_MOVED, msg)
         return RouvrError(Code.MOVED, msg)  # record_version / lease epoch CAS lost
-    if status == 422 and ("lease_" in wh or "LEASE_" in wh):
+    if status == 422 and "LEASE_" in wh_u:
         return RouvrError(Code.MOVED, msg)  # fencing lost: expired/held/conflict
-    if status == 422 and "EVIDENCE" in wh:
+    if status == 422 and "EVIDENCE" in wh_u:
         return RouvrError(Code.EVIDENCE, msg)
-    if status == 422 and "SELF" in wh:
+    if status == 422 and "SELF" in wh_u:
         return RouvrError(Code.SELF_REVIEW, msg)
-    if status == 400 and wh == "KEY.REQUIRED":
+    if status == 400 and wh_u == "KEY.REQUIRED":
         return RouvrError(Code.CONTRACT, "Idempotency-Key missing (client bug)")
     return RouvrError(Code.BAD_REQUEST, msg, details={"status": status, "workhub_code": wh})
 

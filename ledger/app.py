@@ -1,8 +1,10 @@
 """Rouvr ledger: a slim WorkHub-lite (first pass).
 
 Durable tasks, done-contracts, evidence and idempotent receipts over SQL.
-Set ROUVR_LEDGER_DATABASE_URL (e.g. postgresql+psycopg://...) or it defaults
-to a local SQLite file. Not hardened: no auth, no multi-tenancy.
+Set ROUVR_LEDGER_DATABASE_URL to a sqlite:/// URL or it defaults to a
+local SQLite file. SQLite only: a postgres URL fails fast in make_app
+(the schema and lastrowid usage are SQLite-specific). Not hardened:
+no auth beyond tokens, no multi-tenancy.
 """
 from __future__ import annotations
 
@@ -36,6 +38,9 @@ def _canon(obj) -> tuple[str, str]:
 
 
 def make_app(db_url: str = DB_URL) -> FastAPI:
+    if db_url.startswith("postgres"):  # advertised once, never worked: fail fast, not per-insert
+        raise ValueError("ledger supports SQLite only: set ROUVR_LEDGER_DATABASE_URL "
+                         "to a sqlite:/// URL (Postgres is not supported)")
     if db_url.startswith("sqlite:///./"):
         Path(db_url[len("sqlite:///"):]).parent.mkdir(parents=True, exist_ok=True)
     eng = create_engine(db_url)
@@ -56,6 +61,19 @@ def make_app(db_url: str = DB_URL) -> FastAPI:
         cols = [r[1] for r in c.execute(text("PRAGMA table_info(tasks)"))]
         if cols and "created_by" not in cols:
             c.execute(text("ALTER TABLE tasks ADD COLUMN created_by TEXT NOT NULL DEFAULT 'supervisor'"))
+        if db_url.startswith("sqlite"):
+            rsql = c.execute(text("SELECT sql FROM sqlite_master WHERE type='table' AND name='receipts'")).scalar()
+            norm = "".join((rsql or "").lower().split())
+            if rsql and "unique(task_id,idempotency_key)" not in norm and "unique" in norm:
+                c.execute(text("CREATE TABLE receipts_new (id INTEGER PRIMARY KEY,"
+                               " task_id INTEGER NOT NULL REFERENCES tasks(id),"
+                               " idempotency_key TEXT NOT NULL, action TEXT NOT NULL,"
+                               " body TEXT NOT NULL, created_at TEXT NOT NULL,"
+                               " UNIQUE (task_id, idempotency_key))"))
+                c.execute(text("INSERT INTO receipts_new(id,task_id,idempotency_key,action,body,created_at)"
+                               " SELECT id,task_id,idempotency_key,action,body,created_at FROM receipts"))
+                c.execute(text("DROP TABLE receipts"))
+                c.execute(text("ALTER TABLE receipts_new RENAME TO receipts"))
 
     # Token auth (S011 + S016): the shared stack token authenticates as
     # "supervisor" (stack/worker identity, sees all). A per-user token
@@ -143,11 +161,47 @@ def make_app(db_url: str = DB_URL) -> FastAPI:
     def create_task(body: dict, request: Request):
         with eng.begin() as c:
             n = _now()
-            c.execute(text("INSERT INTO tasks(title,intent,state,created_at,updated_at,created_by)"
-                           " VALUES(:t,:i,'open',:n,:n,:by)"),
-                      {"t": body.get("title", ""), "i": body.get("intent", ""), "n": n,
-                       "by": _identity(request)})
-            return row(c, "SELECT * FROM tasks ORDER BY id DESC LIMIT 1")
+            rid = c.execute(text("INSERT INTO tasks(title,intent,state,created_at,updated_at,created_by)"
+                                 " VALUES(:t,:i,'open',:n,:n,:by)"),
+                            {"t": body.get("title", ""), "i": body.get("intent", ""), "n": n,
+                             "by": _identity(request)}).lastrowid
+            return row(c, "SELECT * FROM tasks WHERE id=:i", i=rid)
+
+    def _int_field(body: dict, field: str, default=None):
+        # JSON ints only: int("1_0") == 10 and int(" 5 ") == 5 would
+        # silently accept strings no client should send.
+        v = body.get(field, default)
+        if v is None:
+            return None
+        if isinstance(v, bool) or not isinstance(v, int):
+            raise HTTPException(422, f"{field} must be an integer")
+        return v
+
+    def _ttl_field(body: dict) -> int:
+        ttl = _int_field(body, "ttl_s", 120)
+        if ttl is None or not 0 <= ttl <= 86400:  # negative = born expired; huge = _expiry OverflowError
+            raise HTTPException(422, "ttl_s must be between 0 and 86400")
+        return ttl
+
+    @app.post("/v1/tasks_with_contract")
+    def create_task_with_contract(body: dict, request: Request):
+        contract = body.get("contract")
+        ac = contract.get("acceptance_criteria") if isinstance(contract, dict) else None
+        if not isinstance(ac, list) or not ac or not all(isinstance(x, str) and x.strip() for x in ac):
+            raise HTTPException(422, "contract with acceptance_criteria is required")
+        with eng.begin() as c:
+            n = _now()
+            rid = c.execute(text("INSERT INTO tasks(title,intent,state,created_at,updated_at,created_by)"
+                                 " VALUES(:t,:i,'open',:n,:n,:by)"),
+                            {"t": body.get("title", ""), "i": body.get("intent", ""), "n": n,
+                             "by": _identity(request)}).lastrowid
+            s, h = _canon(contract)
+            c.execute(text("INSERT INTO contracts(task_id,body,sha256,created_at) VALUES(:i,:b,:h,:n)"),
+                      {"i": rid, "b": s, "h": h, "n": n})
+            t = row(c, "SELECT * FROM tasks WHERE id=:i", i=rid)
+            t["contracts"] = [dict(r) for r in c.execute(
+                text("SELECT * FROM contracts WHERE task_id=:i ORDER BY id"), {"i": rid}).mappings()]
+            return t
 
     @app.get("/v1/tasks")
     def list_tasks(request: Request, state: str | None = None):
@@ -205,9 +259,9 @@ def make_app(db_url: str = DB_URL) -> FastAPI:
         s, h = _canon(body.get("body", {}))
         with eng.begin() as c:
             _own_or_stack(c, tid, _identity(request))
-            c.execute(text("INSERT INTO evidence(task_id,kind,body,sha256,created_at) VALUES(:i,:k,:b,:h,:n)"),
-                      {"i": tid, "k": body.get("kind", "note"), "b": s, "h": h, "n": _now()})
-            return row(c, "SELECT * FROM evidence WHERE task_id=:i ORDER BY id DESC LIMIT 1", i=tid)
+            rid = c.execute(text("INSERT INTO evidence(task_id,kind,body,sha256,created_at) VALUES(:i,:k,:b,:h,:n)"),
+                            {"i": tid, "k": body.get("kind", "note"), "b": s, "h": h, "n": _now()}).lastrowid
+            return row(c, "SELECT * FROM evidence WHERE id=:i", i=rid)
 
     @app.post("/v1/tasks/{tid}/transition")
     def transition(tid: int, body: dict, request: Request):
@@ -219,8 +273,10 @@ def make_app(db_url: str = DB_URL) -> FastAPI:
         if not key or not to:
             raise HTTPException(422, "idempotency_key and to are required")
         with eng.begin() as c:
-            prior = row(c, "SELECT * FROM receipts WHERE idempotency_key=:k", k=key)
+            prior = row(c, "SELECT * FROM receipts WHERE task_id=:i AND idempotency_key=:k", i=tid, k=key)
             if prior:
+                if prior.get("action") != f"transition:{to}":
+                    raise HTTPException(409, f"idempotency key already used for {prior.get('action')}")
                 return {"replayed": True, "receipt": prior}
             t = task_or_404(c, tid)
             if to not in TRANSITIONS.get(t["state"], set()):
@@ -235,22 +291,54 @@ def make_app(db_url: str = DB_URL) -> FastAPI:
             s, _ = _canon({"from": t["state"], "to": to, "note": body.get("note")})
             c.execute(text("INSERT INTO receipts(task_id,idempotency_key,action,body,created_at) VALUES(:i,:k,:a,:b,:n)"),
                       {"i": tid, "k": key, "a": f"transition:{to}", "b": s, "n": _now()})
-            return {"replayed": False, "receipt": row(c, "SELECT * FROM receipts WHERE idempotency_key=:k", k=key)}
+            return {"replayed": False, "receipt": row(c, "SELECT * FROM receipts WHERE task_id=:i AND idempotency_key=:k", i=tid, k=key)}
 
     # ---- R3 parity: assignment / lease / attempt / result ----
     def _expiry(ttl_s) -> str:
         return (datetime.now(timezone.utc) + timedelta(seconds=ttl_s)).isoformat()
 
-    def _receipted(c, key):
-        prior = row(c, "SELECT * FROM receipts WHERE idempotency_key=:k", k=key)
+    def _receipted(c, tid, key):
+        prior = row(c, "SELECT * FROM receipts WHERE task_id=:tid AND idempotency_key=:k", tid=tid, k=key)
         if prior:
             return {"replayed": True, "row": json.loads(prior["body"])}
         return None
+
+    def _receipted_latest(c, tid, key):
+        # Newest receipt for key or its generation suffixes (see _remember_gen),
+        # scoped to this task: the same key on another task never replays here.
+        # Legacy ::gen suffixes stay readable; new generations use \x1f so a
+        # literal client key like K::gen1 cannot alias K's generations.
+        r = row(c, "SELECT * FROM receipts WHERE task_id=:tid AND (idempotency_key=:k"
+                   " OR (((substr(idempotency_key,1,length(:kpn))=:kpn"
+                   " AND substr(idempotency_key,length(:kpn)+1) NOT GLOB '*[^0-9]*'"
+                   " AND substr(idempotency_key,length(:kpn)+1) <> '')"
+                   " OR (substr(idempotency_key,1,length(:kpo))=:kpo"
+                   " AND substr(idempotency_key,length(:kpo)+1) NOT GLOB '*[^0-9]*'"
+                   " AND substr(idempotency_key,length(:kpo)+1) <> ''))"
+                   " AND EXISTS (SELECT 1 FROM receipts WHERE task_id=:tid AND idempotency_key=:k)))"
+                   " ORDER BY id DESC LIMIT 1",
+                tid=tid, k=key, kpn=key + "\x1fgen", kpo=key + "::gen")
+        return {"replayed": True, "row": json.loads(r["body"])} if r else None
 
     def _remember(c, tid, key, action, payload: dict):
         s, _ = _canon(payload)
         c.execute(text("INSERT INTO receipts(task_id,idempotency_key,action,body,created_at) VALUES(:i,:k,:a,:b,:n)"),
                   {"i": tid, "k": key, "a": action, "b": s, "n": _now()})
+
+    def _remember_gen(c, tid, key, action, payload: dict):
+        # Append-only re-execution: keep the original receipt, store the
+        # fresh one under a generation suffix counted from existing rows.
+        # \x1f keeps generations out of the client key namespace; legacy
+        # ::gen rows still count so numbering never collides with them.
+        n = row(c, "SELECT COUNT(*) AS n FROM receipts WHERE task_id=:i AND (idempotency_key=:k"
+                   " OR (substr(idempotency_key,1,length(:kpn))=:kpn"
+                   " AND substr(idempotency_key,length(:kpn)+1) NOT GLOB '*[^0-9]*'"
+                   " AND substr(idempotency_key,length(:kpn)+1) <> '')"
+                   " OR (substr(idempotency_key,1,length(:kpo))=:kpo"
+                   " AND substr(idempotency_key,length(:kpo)+1) NOT GLOB '*[^0-9]*'"
+                   " AND substr(idempotency_key,length(:kpo)+1) <> ''))",
+                i=tid, k=key, kpn=key + "\x1fgen", kpo=key + "::gen")["n"]
+        _remember(c, tid, f"{key}\x1fgen{n}", action, payload)
 
     @app.get("/v1/tasks/{tid}/binding")
     def get_binding(tid: int, request: Request):
@@ -266,22 +354,47 @@ def make_app(db_url: str = DB_URL) -> FastAPI:
     def claim_assignment(tid: int, body: dict, request: Request):
         _stack_only(_identity(request))
         key, principal = body.get("key"), body.get("principal", "")
-        attempt_no, ttl_s = int(body.get("attempt_no", 1)), int(body.get("ttl_s", 120))
+        attempt_no, ttl_s = _int_field(body, "attempt_no", 1), _ttl_field(body)
         if not key or not principal:
             raise HTTPException(422, "key and principal are required")
         with eng.begin() as c:
             task_or_404(c, tid)
-            if (hit := _receipted(c, key)):
-                return {"replayed": True, "assignment": hit["row"]}
+            stale_key = False
+            if (hit := _receipted_latest(c, tid, key)):
+                prev = (hit["row"] or {}).get("assignment") or hit["row"] or {}
+                if prev.get("principal") not in (None, principal):
+                    raise HTTPException(409, "claim key already used by another principal")
+                if prev.get("attempt_no") is not None and int(prev["attempt_no"]) != attempt_no:
+                    raise HTTPException(409, "claim key already used for another attempt_no")
+                cur = row(c, "SELECT * FROM assignments WHERE id=:a", a=prev.get("id"))
+                if cur and cur["status"] == "active":
+                    lease_now = row(c, "SELECT * FROM leases WHERE task_id=:i", i=tid)
+                    if cur.get("principal") != principal or not lease_now or lease_now.get("holder") != principal:
+                        raise HTTPException(409, "claim superseded by another principal")
+                    if lease_now.get("expires_at") and lease_now["expires_at"] > _now():
+                        return {"replayed": True, **hit["row"]}
+                    # live lease lapsed: stale fallthrough to re-claim (new TTL/epoch)
+                stale_key = True  # released since: fall through and re-claim
+                if row(c, "SELECT id FROM assignments WHERE task_id=:i AND status='active' AND id<>:a",
+                       i=tid, a=prev.get("id")):
+                    raise HTTPException(409, "another assignment is still active")
             lease = row(c, "SELECT * FROM leases WHERE task_id=:i", i=tid)
             if lease and lease["expires_at"] > _now() and lease["holder"] != principal:
                 raise HTTPException(409, "lease held by another holder")
             epoch = (lease["lease_epoch"] + 1) if lease else 1
-            try:
-                c.execute(text("INSERT INTO assignments(task_id,principal,attempt_no,created_at) VALUES(:i,:p,:n,:t)"),
-                          {"i": tid, "p": principal, "n": attempt_no, "t": _now()})
-            except Exception as exc:
-                raise HTTPException(409, f"attempt_no {attempt_no} already claimed") from exc
+            existing = row(c, "SELECT * FROM assignments WHERE task_id=:i AND attempt_no=:n",
+                           i=tid, n=attempt_no)
+            if existing and (existing["status"] == "released" or stale_key):
+                c.execute(text("UPDATE assignments SET status='active', principal=:p WHERE id=:a"),
+                          {"p": principal, "a": existing["id"]})
+            elif existing:
+                raise HTTPException(409, f"attempt_no {attempt_no} already claimed")
+            else:
+                try:
+                    c.execute(text("INSERT INTO assignments(task_id,principal,attempt_no,created_at) VALUES(:i,:p,:n,:t)"),
+                              {"i": tid, "p": principal, "n": attempt_no, "t": _now()})
+                except Exception as exc:
+                    raise HTTPException(409, f"attempt_no {attempt_no} already claimed") from exc
             c.execute(text("INSERT INTO leases(task_id,holder,lease_epoch,expires_at,updated_at) VALUES(:i,:h,:e,:x,:t) "
                             "ON CONFLICT(task_id) DO UPDATE SET holder=:h, lease_epoch=:e, expires_at=:x, updated_at=:t"),
                       {"i": tid, "h": principal, "e": epoch, "x": _expiry(ttl_s), "t": _now()})
@@ -290,32 +403,48 @@ def make_app(db_url: str = DB_URL) -> FastAPI:
             c.execute(text("UPDATE tasks SET state='claimed', updated_at=:t "
                            "WHERE id=:i AND state IN ('open','needs_review','claimed')"),
                       {"i": tid, "t": _now()})
-            _remember(c, tid, key, "claim", a)
             lease = row(c, "SELECT * FROM leases WHERE task_id=:i", i=tid)
-            return {"replayed": False, "assignment": a, "lease_epoch": epoch, "lease": lease}
+            payload = {"assignment": a, "lease_epoch": epoch, "lease": lease}
+            if stale_key:
+                _remember_gen(c, tid, key, "claim", payload)
+            else:
+                _remember(c, tid, key, "claim", payload)
+            return {"replayed": False, **payload}
 
     @app.post("/v1/tasks/{tid}/leases/renew")
     def renew_lease(tid: int, body: dict, request: Request):
         _stack_only(_identity(request))
         key, holder = body.get("key"), body.get("holder", "")
-        expected, ttl_s = body.get("expected_lease_epoch"), int(body.get("ttl_s", 120))
+        expected, ttl_s = _int_field(body, "expected_lease_epoch"), _ttl_field(body)
         if not key or not holder or expected is None:
             raise HTTPException(422, "key, holder and expected_lease_epoch are required")
         with eng.begin() as c:
             task_or_404(c, tid)
-            if (hit := _receipted(c, key)):
-                return {"replayed": True, "lease": hit["row"]}
+            stale_key = False
+            if (hit := _receipted_latest(c, tid, key)):
+                stored = hit["row"] or {}
+                if stored.get("holder") not in (None, holder) or (
+                        stored.get("lease_epoch") is not None and int(stored["lease_epoch"]) != int(expected)):
+                    raise HTTPException(409, "renew replay holder or epoch mismatch")
+                if stored.get("expires_at", "") > _now():
+                    return {"replayed": True, "lease": hit["row"]}
+                stale_key = True  # stored lease lapsed: fall through and extend
+                if not row(c, "SELECT id FROM assignments WHERE task_id=:i AND status='active'", i=tid):
+                    raise HTTPException(409, "no active assignment to renew")
             lease = row(c, "SELECT * FROM leases WHERE task_id=:i", i=tid)
             if not lease:
                 raise HTTPException(404, "no lease")
             if lease["holder"] != holder or int(lease["lease_epoch"]) != int(expected):
                 raise HTTPException(409, "stale epoch or wrong holder")
-            if lease["expires_at"] <= _now():
+            if lease["expires_at"] <= _now() and not stale_key:
                 raise HTTPException(409, "lease expired")
             c.execute(text("UPDATE leases SET expires_at=:x, updated_at=:t WHERE task_id=:i"),
                       {"x": _expiry(ttl_s), "t": _now(), "i": tid})
             lease = row(c, "SELECT * FROM leases WHERE task_id=:i", i=tid)
-            _remember(c, tid, key, "renew", lease)
+            if stale_key:
+                _remember_gen(c, tid, key, "renew", lease)
+            else:
+                _remember(c, tid, key, "renew", lease)
             return {"replayed": False, "lease": lease}
 
     @app.post("/v1/tasks/{tid}/assignments/reclaim")
@@ -326,34 +455,63 @@ def make_app(db_url: str = DB_URL) -> FastAPI:
             raise HTTPException(422, "key is required")
         with eng.begin() as c:
             task_or_404(c, tid)
-            if (hit := _receipted(c, key)):
-                return {"replayed": True, **hit["row"]}
+            stale_key = False
+            if (hit := _receipted(c, tid, key)):
+                lease0 = row(c, "SELECT * FROM leases WHERE task_id=:i", i=tid)
+                active = row(c, "SELECT id FROM assignments WHERE task_id=:i AND status='active'", i=tid)
+                if not (active and (lease0 is None or lease0["expires_at"] <= _now())):
+                    return {"replayed": True, **hit["row"]}
+                stale_key = True  # died again on a later cycle: re-execute below
             lease = row(c, "SELECT * FROM leases WHERE task_id=:i", i=tid)
             if lease and lease["expires_at"] > _now():
                 raise HTTPException(409, "lease still live")
             if lease:
-                c.execute(text("DELETE FROM leases WHERE task_id=:i"), {"i": tid})
-                c.execute(text("UPDATE assignments SET status='released' WHERE task_id=:i AND status='active'"), {"i": tid})
+                # Tombstone, not DELETE: next claim must increment the epoch (fencing).
+                c.execute(text("UPDATE leases SET expires_at='2000-01-01T00:00:00+00:00', updated_at=:t WHERE task_id=:i"),
+                          {"i": tid, "t": _now()})
+            c.execute(text("UPDATE assignments SET status='released' WHERE task_id=:i AND status='active'"), {"i": tid})
             out = {"reclaimed": True}
-            _remember(c, tid, key, "reclaim", out)
+            if stale_key:
+                _remember_gen(c, tid, key, "reclaim", out)
+            else:
+                _remember(c, tid, key, "reclaim", out)
             return {"replayed": False, **out}
 
     @app.post("/v1/tasks/{tid}/attempts")
     def open_attempt(tid: int, body: dict, request: Request):
         _stack_only(_identity(request))
-        key, attempt_no, epoch = body.get("key"), body.get("attempt_no"), body.get("lease_epoch")
+        key, attempt_no, epoch = body.get("key"), _int_field(body, "attempt_no"), _int_field(body, "lease_epoch")
         if not key or attempt_no is None or epoch is None:
             raise HTTPException(422, "key, attempt_no and lease_epoch are required")
         with eng.begin() as c:
             task_or_404(c, tid)
-            if (hit := _receipted(c, key)):
-                return {"replayed": True, "attempt": hit["row"]}
+
+            def _reuse(att):
+                # Resumed after reclaim: re-fence the reused attempt to the
+                # live epoch so record_result(epoch=live) can succeed.
+                if not att or att.get("id") is None:
+                    return att
+                lease = row(c, "SELECT * FROM leases WHERE task_id=:i", i=tid)
+                has_result = row(c, "SELECT id FROM results WHERE task_id=:i AND attempt_id=:a",
+                                 i=tid, a=att["id"])
+                if lease and not has_result and int(att["lease_epoch"]) != int(lease["lease_epoch"]):
+                    c.execute(text("UPDATE attempts SET lease_epoch=:e WHERE id=:a"),
+                              {"e": int(lease["lease_epoch"]), "a": att["id"]})
+                    return row(c, "SELECT * FROM attempts WHERE id=:a", a=att["id"])
+                return att
+
+            if (hit := _receipted(c, tid, key)):
+                stored = row(c, "SELECT * FROM attempts WHERE id=:a AND task_id=:i",
+                             a=(hit["row"] or {}).get("id"), i=tid) or hit["row"]
+                return {"replayed": True, "attempt": _reuse(stored)}
             existing = row(c, "SELECT * FROM attempts WHERE task_id=:i AND attempt_no=:n", i=tid, n=attempt_no)
             if existing:
-                return {"replayed": True, "attempt": existing}
+                return {"replayed": True, "attempt": _reuse(existing)}
             lease = row(c, "SELECT * FROM leases WHERE task_id=:i", i=tid)
             if not lease or int(lease["lease_epoch"]) != int(epoch):
                 raise HTTPException(409, "attempt epoch does not match live lease")
+            if lease["expires_at"] <= _now():
+                raise HTTPException(409, "lease expired")
             c.execute(text("INSERT INTO attempts(task_id,attempt_no,lease_epoch,created_at) VALUES(:i,:n,:e,:t)"),
                       {"i": tid, "n": attempt_no, "e": epoch, "t": _now()})
             a = row(c, "SELECT * FROM attempts WHERE task_id=:i AND attempt_no=:n", i=tid, n=attempt_no)
@@ -363,20 +521,28 @@ def make_app(db_url: str = DB_URL) -> FastAPI:
     @app.post("/v1/tasks/{tid}/results")
     def record_result(tid: int, body: dict, request: Request):
         _stack_only(_identity(request))
-        key, attempt_id, epoch = body.get("key"), body.get("attempt_id"), body.get("lease_epoch")
+        key, attempt_id, epoch = body.get("key"), _int_field(body, "attempt_id"), _int_field(body, "lease_epoch")
         verdict, result = body.get("verdict", ""), body.get("result", {})
         if not key or attempt_id is None or epoch is None or not verdict:
             raise HTTPException(422, "key, attempt_id, lease_epoch and verdict are required")
         core, _ = _canon({"attempt_id": attempt_id, "lease_epoch": epoch, "verdict": verdict, "result": result})
         with eng.begin() as c:
             task_or_404(c, tid)
-            if (hit := _receipted(c, key)):
+            if (hit := _receipted(c, tid, key)):
                 return {"replayed": True, "result": hit["row"]}
             existing = row(c, "SELECT * FROM results WHERE task_id=:i AND attempt_id=:a", i=tid, a=attempt_id)
             if existing:
                 if existing["body"] != core:
                     raise HTTPException(409, "REPLAY_CONFLICT: same attempt, different result core")
                 return {"replayed": True, "result": existing}
+            attempt = row(c, "SELECT * FROM attempts WHERE id=:a AND task_id=:i", a=attempt_id, i=tid)
+            if not attempt or int(attempt["lease_epoch"]) != int(epoch):
+                raise HTTPException(409, "attempt not found for task or epoch mismatch")
+            lease = row(c, "SELECT * FROM leases WHERE task_id=:i", i=tid)
+            if not lease or int(lease["lease_epoch"]) != epoch:
+                raise HTTPException(409, "result epoch does not match live lease")
+            if lease["expires_at"] <= _now():
+                raise HTTPException(409, "lease expired")
             c.execute(text("INSERT INTO results(task_id,attempt_id,lease_epoch,verdict,body,created_at) VALUES(:i,:a,:e,:v,:b,:t)"),
                       {"i": tid, "a": attempt_id, "e": epoch, "v": verdict, "b": core, "t": _now()})
             r = row(c, "SELECT * FROM results WHERE task_id=:i AND attempt_id=:a", i=tid, a=attempt_id)

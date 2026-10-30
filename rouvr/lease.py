@@ -80,14 +80,19 @@ class LeaseKeeper:
                     self.lost.set()
                     return
                 # transient: try again next tick; lease TTL (>=3 beats) absorbs one miss
+            except Exception:
+                pass  # transient: unknown renew errors must not kill fencing silently
 
     async def stop(self) -> None:
         if self._task:
             self._task.cancel()
             try:
                 await self._task
-            except asyncio.CancelledError:
-                pass
+            except (asyncio.CancelledError, Exception):
+                pass  # never mask the work's result with the keeper's failure
+            cur = asyncio.current_task()
+            if cur is not None and cur.cancelling():
+                raise asyncio.CancelledError()  # caller was cancelled while awaiting us: don't swallow it
 
 
 async def run_fenced(keeper: LeaseKeeper, work: Awaitable[object]) -> object:

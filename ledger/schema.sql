@@ -1,4 +1,6 @@
--- Rouvr ledger (WorkHub-lite) schema. Postgres, also runs on SQLite for tests.
+-- Rouvr ledger (WorkHub-lite) schema. SQLite only (Postgres is not
+-- supported: INTEGER PRIMARY KEY identity and cursor.lastrowid are
+-- SQLite-specific, and make_app fails fast on a postgres URL).
 -- Append-only by convention: evidence and receipts are never updated.
 CREATE TABLE IF NOT EXISTS tasks (
   id          INTEGER PRIMARY KEY,
@@ -28,10 +30,11 @@ CREATE TABLE IF NOT EXISTS evidence (
 CREATE TABLE IF NOT EXISTS receipts (
   id              INTEGER PRIMARY KEY,
   task_id         INTEGER NOT NULL REFERENCES tasks(id),
-  idempotency_key TEXT NOT NULL UNIQUE,
+  idempotency_key TEXT NOT NULL,
   action          TEXT NOT NULL,   -- the mutation this receipt proves
   body            TEXT NOT NULL,
-  created_at      TEXT NOT NULL
+  created_at      TEXT NOT NULL,
+  UNIQUE (task_id, idempotency_key)  -- keys replay per task, not globally
 );
 -- S016: local user registry. Only the token hash is stored server-side.
 CREATE TABLE IF NOT EXISTS users (

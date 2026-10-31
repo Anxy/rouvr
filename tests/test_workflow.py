@@ -110,6 +110,31 @@ async def test_rework_exhausted_blocks(env):
     assert r == {"state": "blocked", "reason": "rework_exhausted", "attempts": 2}
 
 
+async def test_escalate_failure_still_blocks(env):
+    """T1: a failing escalate must not turn the block path into a failed workflow."""
+
+    @activity.defn(name="escalate")
+    async def boom_escalate(wf, reason, attempt_id) -> bool:
+        raise ApplicationError("escalation down", type="E_DOWNSTREAM")
+
+    calls.clear(); verdicts[:] = ["request_changes"] * 3
+    workers = [Worker(env.client, task_queue=Q_ORCH, workflows=[TaskWorkflow],
+                      activities=[verify_binding, close_task, mark_blocked, boom_escalate, sign_receipt]),
+               Worker(env.client, task_queue=Q_BUILD, activities=[assign_task]),
+               Worker(env.client, task_queue=Q_TEST, activities=[run_tests]),
+               Worker(env.client, task_queue=Q_VERIFY, activities=[verify])]
+    for w in workers:
+        await w.__aenter__()
+    try:
+        r = await env.client.execute_workflow(
+            TaskWorkflow.run, TaskWorkflowInput("t", "p", "task1", "rev1", "dev", 1),
+            id=str(uuid.uuid4()), task_queue=Q_ORCH)
+    finally:
+        for w in workers:
+            await w.__aexit__(None, None, None)
+    assert r == {"state": "blocked", "reason": "rework_exhausted", "attempts": 2}
+
+
 def test_activity_timeout_covers_two_spec_runs():
     assert run_tests_timeout_s(1500) == 3300
     assert run_tests_timeout_s(10) == 320

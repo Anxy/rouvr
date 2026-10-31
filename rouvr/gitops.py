@@ -25,14 +25,44 @@ def workspace_path(root: Path, branch: str) -> Path:
     return root / branch.replace("/", "__")
 
 
-def clone_env() -> dict[str, str]:
-    """Environment for clone/fetch (S011): auth only via the stack's
-    explicit GH_TOKEN through the gh credential helper — never the host's
-    stored git credentials, never an interactive prompt."""
+def gh_token() -> str:
+    """Scoped clone/fetch credential (0600 file written by scripts/rouvr).
+
+    Empty when absent: public repos still clone, private ones fail closed —
+    never the host's stored git credentials, never exported stack-wide."""
     import os
-    env = {k: v for k, v in os.environ.items() if k != "ROUVR_LEDGER_TOKEN"}
-    env["GIT_TERMINAL_PROMPT"] = "0"
+    p = os.environ.get("ROUVR_GH_TOKEN_FILE", "")
+    if p:
+        try:
+            if Path(p).stat().st_mode & 0o077:
+                return ""
+            return Path(p).read_text().strip()
+        except OSError:
+            return ""
+    return os.environ.get("GH_TOKEN", "")
+
+
+def clone_env() -> dict[str, str]:
+    """Minimal environment for clone/fetch: PATH plus the scoped token only.
+
+    Nothing else from the worker process leaks into git/gh (no ledger token,
+    no model keys, no host credentials), and git never prompts."""
+    import os
+    env = {"PATH": os.environ.get("PATH", ""), "HOME": os.environ.get("HOME", ""),
+           "GIT_TERMINAL_PROMPT": "0", "GH_TOKEN": gh_token()}
+    for proxy in ("HTTP_PROXY", "HTTPS_PROXY", "NO_PROXY", "http_proxy", "https_proxy", "no_proxy"):
+        if os.environ.get(proxy):
+            env[proxy] = os.environ[proxy]
     return env
+
+
+def revoke_git_grant(root: Path, task_id: str) -> bool:
+    """Delete the per-task git grant file. Best-effort: False when absent."""
+    try:
+        (root / f".git-grant-{task_id}.json").unlink()
+        return True
+    except OSError:
+        return False
 
 
 _GH_HELPER = ("-c", "credential.helper=!gh auth git-credential")

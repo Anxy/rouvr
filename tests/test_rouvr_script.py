@@ -42,6 +42,14 @@ def test_script_operands_and_token_scoping():
     assert run.index("_pre_token") < run.index('. "$OPS/env.sh"') < run.index('ROUVR_LEDGER_TOKEN="$_pre_token"')
 
 
+def test_script_scopes_secrets_and_spec():
+    rouvr = (ROOT / "scripts/rouvr").read_text()
+    assert "export GH_TOKEN=" not in rouvr  # never stack-wide: scoped file + per-task grant
+    assert "export META_MODEL_API_KEY=" not in rouvr  # persona turns use 0600 creds files
+    assert "ROUVR_GH_TOKEN_FILE=$OPS/gh-token" in rouvr
+    assert "ROUVR_SPEC_REPO:-" in rouvr and "ROUVR_SPEC_BASE:-" in rouvr
+
+
 def test_stop_leaves_sibling_path_process(tmp_path):
     home = tmp_path / "home"; home.mkdir()
     ops = tmp_path / "ops"; pids = ops / "pids"; pids.mkdir(parents=True)

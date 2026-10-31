@@ -238,6 +238,33 @@ def make_app(db_url: str = DB_URL) -> FastAPI:
                       {"i": tid, "b": s, "h": h, "n": _now()})
             return row(c, "SELECT * FROM contracts WHERE task_id=:i AND sha256=:h", i=tid, h=h)
 
+    @app.post("/v1/grants")
+    def create_grant(body: dict, request: Request):
+        """Standing grant: owner-approved bounded permission (T5)."""
+        _stack_only(_identity(request))
+        scope = str(body.get("scope") or "").strip()
+        expires_at = str(body.get("expires_at") or "").strip()
+        approved_by = str(body.get("approved_by") or "").strip()
+        if not scope or not expires_at or not approved_by:
+            raise HTTPException(422, "scope, expires_at and approved_by are required")
+        with eng.begin() as c:
+            rid = c.execute(text("INSERT INTO grants(scope,contract_rev,expires_at,approved_by,created_at)"
+                                 " VALUES(:s,:r,:e,:a,:n)"),
+                            {"s": scope, "r": str(body.get("contract_rev") or ""),
+                             "e": expires_at, "a": approved_by, "n": _now()}).lastrowid
+            return row(c, "SELECT * FROM grants WHERE id=:i", i=rid)
+
+    @app.get("/v1/grants/active")
+    def active_grant(scope: str, contract_rev: str | None = None):
+        """Newest unexpired grant for scope (and contract_rev, when given)."""
+        with eng.begin() as c:
+            rows = [dict(r) for r in c.execute(
+                text("SELECT * FROM grants WHERE scope=:s AND expires_at>:n ORDER BY id DESC"),
+                {"s": scope, "n": _now()}).mappings()]
+        if contract_rev:
+            rows = [g for g in rows if not g["contract_rev"] or g["contract_rev"] == contract_rev]
+        return {"active": bool(rows), "grant": rows[0] if rows else None}
+
     @app.get("/v1/tasks/{tid}/evidence/lookup")
     def lookup_evidence(tid: int, kind: str, fence: str, request: Request):
         _stack_only(_identity(request))

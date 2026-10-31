@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "updated": "2026-10-30",
+  "updated": "2026-10-31",
   "machine": {
     "states": [
       "queued",
@@ -811,6 +811,72 @@
         "by": "supervisor-1",
         "ref": "docs/tasks/rouvr/S010-p2-receipts.md \u00a711"
       }
+    },
+    {
+      "id": "S017",
+      "file": "docs/tasks/rouvr/S017-loop-integrity-fixes.md",
+      "state": "running",
+      "worker": "coder-1",
+      "supervisor": null,
+      "pre_task": "TaskKinds IMPLEMENTATION; scope workflows.py _block/escalate, mcp_server create/waiting, activities verify diff, ids scheduled_child_id; negative probes: failing-escalate workflow test, locked-manifest skip",
+      "history": [
+        {
+          "state": "queued",
+          "at": "2026-10-31",
+          "by": "worker",
+          "ref": "review G1/G2/G7/G8 + review-004 item 4"
+        },
+        {
+          "state": "running",
+          "at": "2026-10-31",
+          "by": "worker",
+          "ref": "pre_task"
+        }
+      ]
+    },
+    {
+      "id": "S018",
+      "file": "docs/tasks/rouvr/S018-story-gaps-queued.md",
+      "state": "running",
+      "worker": null,
+      "supervisor": null,
+      "history": [
+        {
+          "state": "queued",
+          "at": "2026-10-31",
+          "by": "worker",
+          "ref": "T3/T4/T5 queued behind S017"
+        },
+        {
+          "state": "running",
+          "at": "2026-10-31",
+          "by": "worker",
+          "ref": "pre_task"
+        }
+      ],
+      "pre_task": "TaskKinds IMPLEMENTATION; scope ops.py, morning_report, contracts, activities ops_*, workflows OpsTaskWorkflow, ledger grants, mcp rouvr_schedule; negative probes: failing-verify fallback, revoked park, dup-tick dedup"
+    },
+    {
+      "id": "S019",
+      "file": "docs/tasks/rouvr/S019-launch-secrets-grants.md",
+      "state": "running",
+      "worker": "coder-1",
+      "supervisor": null,
+      "pre_task": "TaskKinds IMPLEMENTATION; scope scripts/rouvr, gitops clone_env/gh_token/revoke, activities push/close, muse fence, worker registration; negative probes: bad-perm token, needs_review keeps grant",
+      "history": [
+        {
+          "state": "queued",
+          "at": "2026-10-31",
+          "by": "worker",
+          "ref": "review Risks+G8"
+        },
+        {
+          "state": "running",
+          "at": "2026-10-31",
+          "by": "worker",
+          "ref": "pre_task"
+        }
+      ]
     }
   ]
 }

@@ -73,6 +73,22 @@ async def test_close_already_there_is_success():
     assert fake.batches == []
 
 
+async def test_close_terminal_revokes_grant_needs_review_keeps(tmp_path):
+    grant = tmp_path / ".git-grant-t1.json"
+    grant.write_text('{"github_token": "tok"}')
+    fake = FakeWH([{"record_version": 9, "status": "blocked"}])
+    acts = Activities(SimpleNamespace(workhub_for=lambda p: fake,
+                                       settings=SimpleNamespace(workspace_root=tmp_path)))
+    await acts._close_to("t1", "blocked", "r", ("block", "t1", "r"))
+    assert not grant.exists()  # terminal: plaintext token must not outlive the task
+    grant.write_text('{"github_token": "tok"}')
+    fake2 = FakeWH([{"record_version": 9, "status": "needs_review"}])
+    acts2 = Activities(SimpleNamespace(workhub_for=lambda p: fake2,
+                                        settings=SimpleNamespace(workspace_root=tmp_path)))
+    await acts2._close_to("t1", "needs_review", "verify entered", ("state", "t1", "a1"))
+    assert grant.exists()  # non-terminal hop keeps the grant for verify/close
+
+
 async def test_close_no_legal_hop_fails():
     fake = FakeWH([{"record_version": 3, "status": "done"}])
     acts = Activities(SimpleNamespace(workhub_for=lambda p: fake))
@@ -145,8 +161,13 @@ async def test_verify_writes_submit_after_reviewer_and_clears_stale_verdict(tmp_
     async def fake_diff(*a):
         return "diff"
 
+    async def fake_clone(repo, sha, base, dest, env=None):
+        dest.mkdir(parents=True, exist_ok=True)
+        return dest
+
     monkeypatch.setattr(act_mod, "pr_facts", fake_facts)
     monkeypatch.setattr(act_mod, "diff_range", fake_diff)
+    monkeypatch.setattr(act_mod, "clone_at", fake_clone)
     host = SimpleNamespace(
         settings=SimpleNamespace(workspace_root=tmp_path),
         personas=SimpleNamespace(role_pair=lambda t: (reviewer, reviewer)),
@@ -202,8 +223,13 @@ async def test_verify_retry_reuses_submit_fence(tmp_path, monkeypatch):
     async def fake_diff(*a):
         return "diff"
 
+    async def fake_clone(repo, sha, base, dest, env=None):
+        dest.mkdir(parents=True, exist_ok=True)
+        return dest
+
     monkeypatch.setattr(act_mod, "pr_facts", fake_facts)
     monkeypatch.setattr(act_mod, "diff_range", fake_diff)
+    monkeypatch.setattr(act_mod, "clone_at", fake_clone)
     host = SimpleNamespace(
         settings=SimpleNamespace(workspace_root=tmp_path),
         personas=SimpleNamespace(role_pair=lambda t: (reviewer, reviewer)),

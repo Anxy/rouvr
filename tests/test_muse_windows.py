@@ -14,6 +14,14 @@ def test_chat_command_gnome_terminal(monkeypatch, tmp_path):
     assert "--workspace" in joined and "--yolo" in joined and "p.md" in joined  # seeded chat, real session
 
 
+def test_chat_command_strips_all_worker_secrets(monkeypatch, tmp_path):
+    monkeypatch.setenv("DISPLAY", ":0")
+    monkeypatch.setattr("shutil.which", lambda t: "/usr/bin/" + t)
+    joined = " ".join(chat_command("t", tmp_path, tmp_path / "p.md", "", "muse"))
+    for var in ("GH_TOKEN", "ROUVR_LEDGER_TOKEN", "META_MODEL_API_KEY", "WORKHUB_JWT"):
+        assert f"-u {var}" in joined  # window agent never inherits worker secrets
+
+
 def test_chat_command_no_display_falls_back(monkeypatch, tmp_path):
     monkeypatch.delenv("DISPLAY", raising=False)
     assert chat_command("t", tmp_path, tmp_path / "p.md", "", "muse") is None

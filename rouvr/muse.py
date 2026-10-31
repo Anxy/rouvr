@@ -124,11 +124,11 @@ def chat_command(title: str, cwd: Path, prompt_file: Path, model: str,
     # --yolo: no trust prompt, no approval/continue dialogs — the persona
     # window starts and runs unattended in its governed workspace.
     # S011 fence: strip credential-bearing env vars the worker shell holds
-    # (GH_TOKEN, ledger token) so the window agent cannot use them.
+    # (GH_TOKEN, ledger token, model key, WorkHub JWT) so the window agent cannot use them.
     # shortcut: HOME stays real (muse login lives there), so file reads
     # outside the workspace are bounded by muse's sandbox, not by us —
     # revisit if muse supports a portable login dir.
-    muse = (f"env -u GH_TOKEN -u ROUVR_LEDGER_TOKEN -u META_MODEL_API_KEY "
+    muse = (f"env -u GH_TOKEN -u ROUVR_LEDGER_TOKEN -u META_MODEL_API_KEY -u WORKHUB_JWT "
             f"{shlex.quote(bin_path)} --yolo --workspace {shlex.quote(str(cwd))}")
     if model:
         muse += f" --model {shlex.quote(model)}"
@@ -144,8 +144,41 @@ def chat_command(title: str, cwd: Path, prompt_file: Path, model: str,
 
 class MuseLauncher:
     def __init__(self, bin_path: str = "muse", kill_grace_s: float = 10.0,
-                 launch_windows: bool = False) -> None:
+                 launch_windows: bool = False, sandbox: str = "host",
+                 coder_image: str = "rouvr-coder:py313") -> None:
         self.bin, self.grace, self.launch_windows = bin_path, kill_grace_s, launch_windows
+        self.sandbox, self.coder_image = sandbox, coder_image
+
+    @staticmethod
+    def prompt_path(cwd: Path, session_id: str, sandbox: str, launch_windows: bool) -> Path:
+        # Container turns mount only the workspace, so the prompt lives inside
+        # it; host turns keep it outside the repo worktree.
+        parent = cwd if (sandbox == "container" and not launch_windows) else cwd.parent
+        return parent / f".rouvr-prompt-{session_id}.md"
+
+    def container_argv(self, cwd: Path, muse_host_path: str, container_name: str,
+                       in_container_cmd: list[str], env: dict[str, str]) -> list[str]:
+        """Docker invocation for a coder turn. Only the workspace is mounted
+        and only the caller's explicit env is passed — host env, HOME, auth
+        files and sibling workspaces are never visible inside."""
+        uid, gid = os.getuid(), os.getgid()
+        argv = ["docker", "run", "--rm", "-i", "--name", container_name,
+                "-w", "/work", "-v", f"{cwd}:/work:rw",
+                "-v", f"{muse_host_path}:/usr/local/bin/rouvr-muse:ro",
+                "--user", f"{uid}:{gid}",
+                "-e", "HOME=/tmp", "-e", "PATH=/usr/local/bin:/usr/bin:/bin"]
+        for k, v in env.items():
+            argv += ["-e", f"{k}={v}"]
+        return argv + [self.coder_image, *in_container_cmd]
+
+    def ensure_coder_image(self) -> None:
+        import subprocess
+        r = subprocess.run(["docker", "image", "inspect", self.coder_image],
+                           capture_output=True, text=True, timeout=30)
+        if r.returncode != 0:
+            raise RouvrError(Code.DOWNSTREAM,
+                             f"coder image {self.coder_image} missing: build it with "
+                             f"`docker build -f coder.Dockerfile -t {self.coder_image} .`")
 
     def argv(self, prompt_file: Path, model: str, cwd: Path, session_id: str) -> list[str]:
         argv = [self.bin, "exec", FLAGS["json"], FLAGS["provider"], PROVIDER, FLAGS["session"], session_id,
@@ -157,7 +190,7 @@ class MuseLauncher:
                   resume: str | None = None, on_event: Callable[[dict], None] = lambda e: None,
                   cancel: asyncio.Event | None = None) -> MuseTurn:
         sid = resume or str(uuid.uuid4())  # resume => same sid (R2); else fresh sid per leg
-        prompt_file = cwd.parent / f".rouvr-prompt-{sid}.md"   # outside the repo worktree
+        prompt_file = self.prompt_path(cwd, sid, self.sandbox, self.launch_windows)
         prompt_file.write_text(prompt)
         try:
             return await self._exec_turn(prompt, prompt_file, model, cwd, env, timeout_s,
@@ -174,10 +207,29 @@ class MuseLauncher:
                                 role=persona_role(prompt))
             if chat is not None:
                 return await self._run_chat(chat, sid, cwd, env, timeout_s, cancel)
-        proc = await asyncio.create_subprocess_exec(
-            *self.argv(prompt_file, model, cwd, sid), cwd=str(cwd),
-            env={"PATH": os.environ.get("PATH", ""), "HOME": str(cwd), **env},
-            stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE, start_new_session=True)
+        container: str | None = None
+        if self.sandbox == "container":
+            # Container isolation for the coder turn: workspace-only mount,
+            # explicit env only. Network egress stays (model + git fetch need
+            # it); the boundary is filesystem + env, fail closed on no image.
+            import shutil
+            muse_host = shutil.which(self.bin)
+            if not muse_host:
+                raise RouvrError(Code.DOWNSTREAM, f"muse binary {self.bin!r} not found on host")
+            self.ensure_coder_image()
+            container = f"rouvr-coder-{sid[:8]}"
+            in_container = self.argv(Path("/work") / prompt_file.name, model, Path("/work"), sid)
+            in_container[0] = "/usr/local/bin/rouvr-muse"
+            cmd = self.container_argv(cwd, muse_host, container, in_container, env)
+            proc = await asyncio.create_subprocess_exec(
+                *cmd, cwd=str(cwd),
+                env={"PATH": os.environ.get("PATH", ""), "HOME": os.environ.get("HOME", "")},
+                stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE, start_new_session=True)
+        else:
+            proc = await asyncio.create_subprocess_exec(
+                *self.argv(prompt_file, model, cwd, sid), cwd=str(cwd),
+                env={"PATH": os.environ.get("PATH", ""), "HOME": str(cwd), **env},
+                stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE, start_new_session=True)
         session_id, events, last = sid, 0, ""
         stderr_tail = bytearray()  # capped: only a sanitized tail is ever used
 
@@ -220,14 +272,14 @@ class MuseLauncher:
         try:
             done, _ = await asyncio.wait(waiters, timeout=timeout_s, return_when=asyncio.FIRST_COMPLETED)
             if pump_t not in done:
-                await self._kill(proc)
+                await self._kill(proc, container)
                 raise RouvrError(Code.CANCELLED if cancel_t in done else Code.DOWNSTREAM,
                                  "muse turn cancelled" if cancel_t in done else "muse turn timed out",
                                  details={"session_id": session_id})
             try:  # stdout closed but the process may linger: bound the exit wait too
                 rc = await asyncio.wait_for(proc.wait(), timeout=self.grace + 5)
             except (asyncio.TimeoutError, TimeoutError):
-                await self._kill(proc)
+                await self._kill(proc, container)
                 raise RouvrError(Code.DOWNSTREAM, "muse turn timed out waiting for exit",
                                  details={"session_id": session_id}) from None
         finally:
@@ -299,7 +351,10 @@ class MuseLauncher:
                              details={"session_id": sid})
         return MuseTurn(session_id=sid, exit_code=0, events=0, last_message="")
 
-    async def _kill(self, proc: asyncio.subprocess.Process) -> None:
+    async def _kill(self, proc: asyncio.subprocess.Process, container: str | None = None) -> None:
+        if container:  # container outlives its docker client: kill it by name first
+            import subprocess
+            subprocess.run(["docker", "kill", container], capture_output=True, timeout=30)
         if proc.returncode is not None:
             return
         os.killpg(proc.pid, signal.SIGTERM)

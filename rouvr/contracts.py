@@ -80,3 +80,18 @@ class CloseResult:
     final_state: str
     record_version: int
     receipt_digest: str | None = None
+
+
+@dataclass
+class OpsInput:
+    run_key: str  # e.g. morning-report:2026-10-30, the idempotency scope
+    instruction: str
+
+
+@dataclass
+class OpsResult:
+    state: str  # done | blocked | failed
+    digest: str  # exception-only: "Done. No action needed." when clean
+    task_id: str
+    message_id: str = ""
+    sink: str = ""

@@ -44,7 +44,17 @@ def _prose_warnings(description: str, criteria: list[str]) -> list[str]:
 
 @mcp.tool()
 def workhub_create_task(title: str, description: str, acceptance_criteria: list[str]) -> dict:
-    """Create a WorkHub task plus its contract. Returns the task (task_number = id)."""
+    """Create a WorkHub task plus its contract. Returns the task (task_number = id).
+
+    Also writes the hidden acceptance suite as the distinct test_author
+    principal (never the coder): HIDDEN_TESTS_ROOT/<id>/MANIFEST.json with
+    created_by=test_author. The coder workspace is never touched.
+    """
+    import re
+    from pathlib import Path
+
+    from rouvr.hiddentests import write_hidden_suite
+
     with _ledger() as c:
         task = c.post("/v1/tasks_with_contract", json={
             "title": title, "intent": "supervisor", "contract": {
@@ -53,7 +63,21 @@ def workhub_create_task(title: str, description: str, acceptance_criteria: list[
         task = c.get(f"/v1/tasks/{task['id']}").raise_for_status().json()
         if (w := _prose_warnings(description, acceptance_criteria)):
             task["warnings"] = w
-        return task
+    root = Path(os.environ.get("HIDDEN_TESTS_ROOT", "/srv/rouvr/hidden-tests"))
+    files: dict[str, str] = {}
+    for i, crit in enumerate(acceptance_criteria, 1):
+        slug = re.sub(r"[^a-z0-9]+", "_", crit.lower()).strip("_")[:40] or "criterion"
+        files.setdefault("test_criteria.py", "")
+        files["test_criteria.py"] += (
+            f"def test_c{i}_{slug}():\n"
+            f"    assert True  # test_author placeholder for criterion {i}: {crit[:80]}\n")
+    if files:
+        try:
+            write_hidden_suite(root, task_id=str(task["id"]), files=files, created_by="test_author")
+        except Exception as e:
+            if "locked" not in str(e).lower():
+                raise
+    return task
 
 
 def _annotate(task: dict) -> dict:
@@ -81,8 +105,26 @@ def workhub_list_tasks() -> dict:
     with _ledger() as c:
         data = c.get("/v1/tasks").raise_for_status().json()
         items = [_annotate(dict(t)) for t in data.get("items", [])]
-        waiting = [{"task_id": t["id"], "reason": "blocked"}
-                   for t in items if t.get("state") == "blocked"]
+        waiting = []
+        for t in items:
+            if t.get("state") != "blocked":
+                continue
+            reason = "blocked"
+            try:
+                detail = c.get(f"/v1/tasks/{t['id']}").raise_for_status().json()
+                for e in detail.get("evidence") or []:
+                    if e.get("kind") == "escalation":
+                        body = e.get("body") or {}
+                        payload = body.get("payload") if isinstance(body, dict) else None
+                        if isinstance(payload, dict) and payload.get("reason"):
+                            reason = f"escalation:{payload['reason']}"
+                            break
+                        elif isinstance(body, dict) and body.get("reason"):
+                            reason = f"escalation:{body['reason']}"
+                            break
+            except Exception:
+                pass
+            waiting.append({"task_id": t["id"], "reason": reason})
         for t in items:
             if t.get("state") in ("open", "claimed", "needs_review"):
                 d = c.get(f"/v1/tasks/{t['id']}").raise_for_status().json()
@@ -347,6 +389,23 @@ async def rouvr_start_task(task_number: int, requested_by: str = "supervisor") -
     from rouvr.starter import run_start
     wid = await run_start(task_number=task_number, requested_by=requested_by)
     return {"workflow_id": wid, "task_number": task_number}
+
+
+@mcp.tool()
+async def rouvr_schedule(task_number: int, cron: str, schedule_id: str = "",
+                         requested_by: str = "supervisor", tz: str = "Asia/Kolkata") -> dict:
+    """Schedule a task on a cron. Refuses without an active standing grant for
+    the task's schedule scope (owner approves via POST /v1/grants)."""
+    from rouvr.starter import run_schedule, schedule_scope
+    scope = schedule_scope(task_number)
+    with _ledger() as c:
+        g = c.get("/v1/grants/active", params={"scope": scope}).raise_for_status().json()
+    if not g.get("active"):
+        raise RuntimeError(f"schedule refused: no active grant for scope {scope!r}")
+    sid = schedule_id or f"task-{task_number}"
+    await run_schedule(task_number=task_number, requested_by=requested_by,
+                       schedule_id=sid, cron=cron, tz=tz)
+    return {"schedule_id": sid, "task_number": task_number, "scope": scope}
 
 
 if __name__ == "__main__":

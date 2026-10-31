@@ -36,27 +36,9 @@ def ledger_client(url: str | None):
 
 
 def compile_contract(instruction: str) -> dict:
-    """Intent -> typed execution contract via the configured model provider."""
-    from backend.rouvr_models.providers import get_provider
-    p = get_provider()
-    if os.environ.get("ROUVR_INJECT") == "revoked_key":
-        raise RuntimeError("model credential revoked (injected)")
-    raw = p.chat([{"role": "system", "content": "Return a JSON execution contract."},
-                  {"role": "user", "content": instruction}])
-    contract = {
-        "steps": ["health_probe", "compile_report", "deliver", "verify"],
-        "success_criteria": ["report delivered and read back", "figures match ledger", "health ok"],
-        "side_effects": ["write one message to stakeholder outbox"],
-        "escalation": "owner",
-        "expires_in_hours": 24,
-        "provider": p.name,
-    }
-    if p.name != "stub":
-        try:
-            contract.update(json.loads(raw))
-        except (ValueError, TypeError):
-            contract["model_notes"] = raw[:500]
-    return contract
+    """Intent -> validated execution contract; invalid model output is refused, never merged."""
+    from rouvr.ops import compile_ops_contract
+    return compile_ops_contract(instruction)
 
 
 def deliver(report: str, key: str, sink: str) -> dict:
@@ -73,17 +55,13 @@ def deliver(report: str, key: str, sink: str) -> dict:
 
 def verify(c, msg_id: str, figures: dict) -> dict:
     """Independent checks: read back the delivered message, recheck figures, probe health."""
-    path = OUTBOX / f"{msg_id}.txt"
-    readback = path.read_text() if path.exists() else None
+    from rouvr.ops import check_readback
     items = c.get("/v1/tasks").json()["items"]
     recount = {s: sum(1 for t in items if t["state"] == s) for s in ("done", "blocked", "failed")}
     health = c.get("/health").status_code == 200
-    try:
-        figures_match = bool(readback) and json.loads(readback.split("\n", 1)[1])["figures"] == recount
-    except (ValueError, IndexError):
-        readback, figures_match = None, False  # malformed outbox file: treat as no-readback
-    ok = bool(readback) and figures_match and health
-    return {"verdict": "pass" if ok else "fail", "readback": bool(readback),
+    readback, figures_match = check_readback(OUTBOX, msg_id, recount)
+    ok = readback and figures_match and health
+    return {"verdict": "pass" if ok else "fail", "readback": readback,
             "figures_match": figures_match,
             "health": health}
 

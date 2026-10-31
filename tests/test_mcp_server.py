@@ -34,7 +34,7 @@ async def test_mcp_tools_registered():
                      "workhub_show_task", "workhub_post_message",
                      "workhub_read_messages", "workhub_peer_sessions",
                      "workhub_message_agent", "workhub_agent_windows",
-                     "workhub_reap_windows", "rouvr_start_task"]
+                     "workhub_reap_windows", "rouvr_start_task", "rouvr_schedule"]
 
 
 def test_parse_windows_matches_muse_and_terminal_not_server():
@@ -56,8 +56,9 @@ def test_stale_windows_terminal_and_orphan_only():
     assert [w["pid"] for w in _stale_windows(wins, states)] == [1, 2, 5]
 
 
-def test_mcp_create_and_show(monkeypatch, ledger_url):
+def test_mcp_create_and_show(monkeypatch, ledger_url, tmp_path):
     monkeypatch.setenv("WORKHUB_BASE_URL", ledger_url)
+    monkeypatch.setenv("HIDDEN_TESTS_ROOT", str(tmp_path / "hidden"))
     import importlib
     import rouvr.mcp_server as ms
     importlib.reload(ms)
@@ -67,8 +68,27 @@ def test_mcp_create_and_show(monkeypatch, ledger_url):
     assert shown["contracts"] and shown["contracts"][0]["body"]
 
 
-def test_mcp_agent_messages_roundtrip(monkeypatch, ledger_url):
+def test_mcp_create_writes_hidden_suite_as_test_author(monkeypatch, ledger_url, tmp_path):
+    import json
     monkeypatch.setenv("WORKHUB_BASE_URL", ledger_url)
+    monkeypatch.setenv("HIDDEN_TESTS_ROOT", str(tmp_path / "hidden"))
+    import importlib
+    import rouvr.mcp_server as ms
+    importlib.reload(ms)
+    task = ms.workhub_create_task("t-hidden", "do the thing", ["returns 200"])
+    manifest = json.loads((tmp_path / "hidden" / str(task["id"]) / "MANIFEST.json").read_text())
+    assert manifest["created_by"] == "test_author"
+    assert any(name.startswith("test_") for name in manifest["files"])
+    from rouvr.hiddentests import assert_coder_clean, fetch_hidden_suite
+    hidden_dir, manifest_obj = fetch_hidden_suite(tmp_path / "hidden", str(task["id"]))
+    coder_ws = tmp_path / "coder_ws"
+    coder_ws.mkdir()
+    assert_coder_clean(coder_ws, hidden_dir, manifest_obj)  # coder ws untouched
+
+
+def test_mcp_agent_messages_roundtrip(monkeypatch, ledger_url, tmp_path):
+    monkeypatch.setenv("WORKHUB_BASE_URL", ledger_url)
+    monkeypatch.setenv("HIDDEN_TESTS_ROOT", str(tmp_path / "hidden"))
     import importlib
     import rouvr.mcp_server as ms
     importlib.reload(ms)
@@ -109,8 +129,9 @@ def test_prose_warning_only_for_unpromoted_instructions():
     assert _prose_warnings("Add f and message the reviewer.", ["message sent to reviewer"]) == []
 
 
-def test_show_task_decodes_evidence(monkeypatch, ledger_url):
+def test_show_task_decodes_evidence(monkeypatch, ledger_url, tmp_path):
     monkeypatch.setenv("WORKHUB_BASE_URL", ledger_url)
+    monkeypatch.setenv("HIDDEN_TESTS_ROOT", str(tmp_path / "hidden"))
     import importlib
     import rouvr.mcp_server as ms
     importlib.reload(ms)
@@ -122,8 +143,9 @@ def test_show_task_decodes_evidence(monkeypatch, ledger_url):
     assert shown["stuck"] is False
 
 
-def test_message_agent_timeout_returns_error_status(monkeypatch, ledger_url):
+def test_message_agent_timeout_returns_error_status(monkeypatch, ledger_url, tmp_path):
     monkeypatch.setenv("WORKHUB_BASE_URL", ledger_url)
+    monkeypatch.setenv("HIDDEN_TESTS_ROOT", str(tmp_path / "hidden"))
     import importlib
     import subprocess
 

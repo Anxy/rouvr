@@ -1,6 +1,6 @@
 # Rouvr sprint index summary
 
-Generated from `ROUVR-SPRINT-INDEX.json` — 10 sprints.
+Generated from `ROUVR-SPRINT-INDEX.json` — 13 sprints.
 
 | ID | Title | Status | Confidence | Known gaps |
 |----|-------|--------|------------|------------|
@@ -14,3 +14,6 @@ Generated from `ROUVR-SPRINT-INDEX.json` — 10 sprints.
 | S008 | Stage promotion (A2, human-gated) | PASS | medium | workhub:attempt:open grant still pending for external stage arm; local ledger arm PASS 2026-10-30 (docs/r10-runs/20261030T1247). |
 | S009 | hyeve-lane back-port (A2) | PASS | medium | Lane-host run against external staging deferred with S008 stage arm; local ledger arm PASS 2026-10-30. |
 | S010 | P2 receipt signing | PASS | high | — |
+| S017 | Loop-integrity fixes (review-004 item 4 + T1/T2/T6/T7-small) | RUNNING | medium | T3/T4/T5 queued in S018; risks (secrets, host coder) noted not fixed. |
+| S018 | Governed ops + story gaps (queued) | RUNNING | medium | — |
+| S019 | Scoped stack secrets, grant revocation, spec path config | RUNNING | medium | Coder still host-run (shortcut); api-token 0600 residual. |

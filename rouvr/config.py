@@ -53,6 +53,8 @@ class Settings:
     start_api_token_file: Path = Path("/srv/rouvr/start_api.token")
     workhub_backend: str = "stage"      # "stage" | "ledger" (R10 rehearsal runs the local ledger)
     launch_windows: bool = False         # ROUVR_LAUNCH_WINDOWS=1: interactive muse chat per turn in a new terminal window
+    coder_sandbox: str = "host"          # "host" | "container": docker isolation for the coder turn
+    coder_image: str = "rouvr-coder:py313"  # coder.Dockerfile build; muse runs inside, workspace-only mount
     spec_root: Path = Path("/srv/rouvr/specs")
 
     @staticmethod
@@ -85,8 +87,12 @@ class Settings:
             runner_image=_env("RUNNER_IMAGE", "rouvr-runner:py313-p9"),
             workhub_backend=_env("WORKHUB_BACKEND", "stage"),
             launch_windows=_bool("ROUVR_LAUNCH_WINDOWS", False),
+            coder_sandbox=_env("ROUVR_CODER_SANDBOX", "host"),
+            coder_image=_env("ROUVR_CODER_IMAGE", "rouvr-coder:py313"),
             spec_root=Path(_env("SPEC_ROOT", "/srv/rouvr/specs")),
         )
+        if s.coder_sandbox not in ("host", "container"):
+            raise RuntimeError("ROUVR_CODER_SANDBOX must be host|container")
         if s.max_rework < 0:
             raise RuntimeError("MAX_REWORK must be >= 0")
         if s.coder_concurrency < 1:

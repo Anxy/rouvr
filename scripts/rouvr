@@ -48,14 +48,21 @@ EOF
   for md in coder.md reviewer.md; do
     [ -f "$OPS/personas/$md" ] || cp "$ROOT/personas/$md" "$OPS/personas/$md"
   done
-  [ -f "$OPS/specs/supervisor/scratch.yaml" ] || cat > "$OPS/specs/supervisor/scratch.yaml" <<'EOF'
-repo: ebiz-backend-developer/rouvr-r10-scratch
-base_branch: main
+  [ -f "$OPS/specs/supervisor/scratch.yaml" ] || cat > "$OPS/specs/supervisor/scratch.yaml" <<EOF
+repo: ${ROUVR_SPEC_REPO:-ebiz-backend-developer/rouvr-r10-scratch}
+base_branch: ${ROUVR_SPEC_BASE:-main}
 test_command: ["python", "-m", "pytest", "-q"]
 timeout_s: 900
 EOF
   if [ ! -f "$OPS/api-token" ]; then
     (umask 077; head -c 32 /dev/urandom | od -An -tx1 | tr -d ' \n' > "$OPS/api-token")
+  fi
+  # Scoped git credential: the host's `gh auth token` is written once to a
+  # 0600 file for clone/fetch only. It is never exported stack-wide, so
+  # workers and persona turns cannot inherit it; pushes use the per-task
+  # grant file instead. Absent token = public repos only (fail closed).
+  if token="$(gh auth token 2>/dev/null)" && [ -n "$token" ]; then
+    (umask 077; printf %s "$token" > "$OPS/gh-token")
   fi
   if [ ! -f "$OPS/keys/receipt_ed25519.pem" ]; then
     (umask 077; RECEIPT_KEY_PATH="$OPS/keys/receipt_ed25519.pem" .venv/bin/python -c "
@@ -71,6 +78,8 @@ os.chmod(p, 0o600)
 export WORKHUB_BACKEND=ledger WORKHUB_BASE_URL=http://127.0.0.1:8221 ROUVR_TENANT_ID=supervisor ROUVR_PROJECT_ID=scratch PERSONA_SOURCE=yaml PERSONA_REGISTRY_PATH=$OPS/personas/tenants.yaml SPEC_ROOT=$OPS/specs WORKSPACE_ROOT=$OPS/workspaces EVIDENCE_ROOT=$OPS/evidence HIDDEN_TESTS_ROOT=$OPS/hidden-tests TEMPORAL_ADDRESS=127.0.0.1:7233 TEMPORAL_NAMESPACE=default ORCHESTRATOR_TOKEN=ledger LEASE_TTL_S=180 HEARTBEAT_S=30 MAX_REWORK=2 MUSE_BIN=muse
 export ROUVR_LEDGER_TOKEN="\$(cat $OPS/api-token)"
 export RECEIPT_SIGNING_KEY_PATH=$OPS/keys/receipt_ed25519.pem
+export ROUVR_GH_TOKEN_FILE=$OPS/gh-token
+export ROUVR_LAUNCH_WINDOWS="${ROUVR_LAUNCH_WINDOWS:-1}"
 EOF
 }
 
@@ -78,9 +87,10 @@ load_env() {
   write_operands
   set -a; . "$OPS/env.sh"; set +a
   export PYTHONPATH="$ROOT"
-  export META_MODEL_API_KEY="${META_MODEL_API_KEY:-$(grep -E '^META_MODEL_API_KEY=' .env | cut -d= -f2-)}"
-  export GH_TOKEN="${GH_TOKEN:-$(gh auth token 2>/dev/null || true)}"
-  export ROUVR_LAUNCH_WINDOWS="${ROUVR_LAUNCH_WINDOWS:-1}"
+  # No stack-wide GH_TOKEN or META_MODEL_API_KEY: persona turns already run
+  # with minimal env (creds come from 0600 files), and every git subprocess
+  # takes an explicit token. Exporting host secrets here would hand them to
+  # all workers and every child process.
 }
 
 # Checkout-scoped process tracking: pids started here are recorded in

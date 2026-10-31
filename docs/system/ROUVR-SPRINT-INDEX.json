@@ -155,6 +155,57 @@
       ],
       "confidence": "high",
       "known_gaps": []
+    },
+    {
+      "id": "S017",
+      "title": "Loop-integrity fixes (review-004 item 4 + T1/T2/T6/T7-small)",
+      "goal": "Clean block path, hidden suite at create, reviewer fresh clone, per-tick schedule ids, hygiene.",
+      "sprint_file": "docs/tasks/rouvr/S017-loop-integrity-fixes.md",
+      "status": "RUNNING",
+      "commit": "443d715+uncommitted",
+      "confidence": "medium",
+      "tasks": [
+        "17.1 Single-attempt escalate",
+        "17.2 Test-author on create",
+        "17.3 Reviewer fresh clone",
+        "17.4 Scheduled per-tick ids",
+        "17.5 Hygiene small"
+      ],
+      "known_gaps": [
+        "T3/T4/T5 queued in S018; risks (secrets, host coder) noted not fixed."
+      ]
+    },
+    {
+      "id": "S018",
+      "title": "Governed ops + story gaps (queued)",
+      "goal": "OpsTaskWorkflow, Meta judge, standing grants (plan only).",
+      "sprint_file": "docs/tasks/rouvr/S018-story-gaps-queued.md",
+      "status": "RUNNING",
+      "commit": "443d715+uncommitted",
+      "confidence": "medium",
+      "tasks": [
+        "T3 OpsTaskWorkflow",
+        "T4 Meta judge",
+        "T5 Grants + schedule tool"
+      ],
+      "known_gaps": []
+    },
+    {
+      "id": "S019",
+      "title": "Scoped stack secrets, grant revocation, spec path config",
+      "goal": "No stack-wide secrets; grants revoked at close; spec path configurable.",
+      "sprint_file": "docs/tasks/rouvr/S019-launch-secrets-grants.md",
+      "status": "RUNNING",
+      "commit": "443d715+uncommitted",
+      "confidence": "medium",
+      "tasks": [
+        "19.1 Scoped launch secrets",
+        "19.2 Grant revocation on close",
+        "19.3 Spec path config"
+      ],
+      "known_gaps": [
+        "Coder still host-run (shortcut); api-token 0600 residual."
+      ]
     }
   ]
 }

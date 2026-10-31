@@ -9,6 +9,7 @@ hypothesis
 jsonschema
 langgraph==0.3.34
 libcst==1.8.6
+mcp
 mypy==1.8.0
 prometheus-client
 pydantic-settings==2.15.0

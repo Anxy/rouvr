@@ -18,8 +18,8 @@ from pathlib import Path
 from temporalio import activity
 
 from rouvr.cheatscan import scan_diff
-from rouvr.contracts import (AssignInput, AssignResult, Binding, CloseResult, TaskWorkflowInput, TestResult,
-                             VerifyResult)
+from rouvr.contracts import (AssignInput, AssignResult, Binding, CloseResult, OpsInput, OpsResult,
+                             TaskWorkflowInput, TestResult, VerifyResult)
 from rouvr.errors import Code, RouvrError
 from rouvr.gate import (SUBMIT_ATTEMPT_TYPE, GateEvidence, count_prior_submits, evaluate,
                         read_submission_file)
@@ -33,7 +33,31 @@ from rouvr.lease import (LeaseKeeper, claim_assignment_and_lease, open_or_reuse_
                          run_fenced)
 from rouvr.messages import MESSAGE_TYPE, messages_for, read_message_file
 from rouvr.muse import build_task_prompt, build_reviewer_prompt, read_verdict
+from rouvr.ops import OPS_EXECUTOR
 from rouvr.receipts import build_links, load_private_key, sign_links
+
+
+def _ops_ledger():
+    """Sync ledger client for the ops leg (same endpoints demo/morning_report.py uses)."""
+    import demo.morning_report as m
+    return m.ledger_client(os.environ.get("ROUVR_LEDGER_URL"))
+
+
+def _ops_post(c, path: str, body: dict) -> dict:
+    r = c.post(path, json=body)
+    if r.status_code >= 400:
+        raise RouvrError(Code.DOWNSTREAM, f"ops ledger POST {path}: {r.status_code} {str(r.text)[:200]}")
+    return r.json()
+
+
+def _evidence_payload(e: dict) -> dict | list | str | None:
+    body = e.get("body")
+    if isinstance(body, str):
+        try:
+            return json.loads(body)
+        except ValueError:
+            return None
+    return body
 
 
 def _wrap(fn):
@@ -195,9 +219,10 @@ class Activities:
                          details={"task_id": task_id})
 
     async def _push_branch(self, ws, branch: str, token: str) -> None:
-        env = {**os.environ, "GH_TOKEN": token} if token else dict(os.environ)
-        # Push auth comes only from the granted token (gh credential helper
-        # serves GH_TOKEN), never the host's stored git credentials.
+        from rouvr.gitops import clone_env
+        env = clone_env()
+        env["GH_TOKEN"] = token  # push auth is the granted token only, never worker env
+        # (gh credential helper serves GH_TOKEN), never the host's stored git credentials.
         args = ["git"] + (["-c", "credential.helper=!gh auth git-credential"] if token else []) \
             + ["push", "origin", branch]
         proc = await asyncio.create_subprocess_exec(
@@ -289,7 +314,11 @@ class Activities:
             ev = await wh.attach_evidence_exact(wf.task_id, "reviewer_report", fence,
                                                 {"verdict": "request_changes", "feedback": gv.feedback})
             return VerifyResult("request_changes", gv.feedback or "gate rejected", reviewer.principal, ev)
-        diff = await diff_range(ws, f"origin/{spec.base_branch}", built.head_sha)
+        # Reviewer diff comes from a fresh clone at head_sha, never the coder
+        # workspace: mutating the coder ws after submit cannot change review.
+        with tempfile.TemporaryDirectory(prefix="rouvr-review-") as rtmp:
+            rclone = await clone_at(spec.repo, built.head_sha, spec.base_branch, Path(rtmp) / "src")
+            diff = await diff_range(rclone, f"origin/{spec.base_branch}", built.head_sha)
         vdir = ws.parent / f"{ws.name}__verify"
         vdir.mkdir(parents=True, exist_ok=True)
         for stale in ("verdict.json", "message-coder.json"):
@@ -327,12 +356,22 @@ class Activities:
               "needs_enrichment": "running", "needs_human_intervention": "running",
               "execution_failed": "running", "open": "claimed", "claimed": "needs_review"}
 
+    def _revoke_grant(self, task_id: str, to_state: str) -> None:
+        # Terminal states retire the per-task git grant: a plaintext token
+        # must not outlive the task it was issued for. Best-effort, never
+        # fails the close. Non-terminal hops (needs_review) keep it.
+        root = getattr(getattr(self.h, "settings", None), "workspace_root", None)
+        if to_state in ("done", "blocked", "failed") and root is not None:
+            from rouvr.gitops import revoke_git_grant
+            revoke_git_grant(root, task_id)
+
     async def _close_to(self, task_id: str, to_state: str, reason: str, key: tuple) -> CloseResult:
         wh = self.h.workhub_for(None)  # closer principal (canary closeout used the coordinator JWT)
         for hop in range(6):  # walk legal hops; every hop is CAS + read back
             task = await wh.get_task(task_id)
             cur = task.get("status") or task.get("state")
             if cur == to_state:
+                self._revoke_grant(task_id, to_state)
                 return CloseResult(final_state=cur, record_version=int(task["record_version"]))
             nxt = to_state if to_state == "blocked" and cur not in ("done", "archived") else self._HOPS.get(str(cur))
             if nxt is None:
@@ -371,3 +410,109 @@ class Activities:
                             verdict=v.verdict, reviewer=v.reviewer_principal, verify_evidence_id=v.evidence_id)
         signed = sign_links(links, load_private_key(s.receipt_key_path), s.receipt_key_id)
         return {"digest": signed.digest, "signature": signed.signature, "key_id": signed.key_id}
+
+    # Ops leg (T3): the morning_report flow as activities. Every step keys off
+    # run_key, so a kill mid-step resumes without double-send or double-claim.
+
+    @activity.defn(name="ops_prepare")
+    @_wrap
+    async def ops_prepare(self, inp: OpsInput) -> dict:
+        c = _ops_ledger()
+        items = c.get("/v1/tasks").json()["items"]
+        match = [t for t in items if t["title"] == inp.run_key]
+        if match:
+            tid = str(match[0]["id"])
+        else:
+            tid = str(c.post("/v1/tasks", json={"title": inp.run_key, "intent": inp.instruction}).json()["id"])
+        task = c.get(f"/v1/tasks/{tid}").json()
+        out = {"task_id": tid, "state": task["state"], "message_id": "", "sink": ""}
+        if task["state"] == "done":  # rerun after completion: hand back the receipt
+            for e in task.get("evidence") or []:
+                if e.get("kind") == "ops_receipt" and isinstance(_evidence_payload(e), dict):
+                    out["message_id"] = _evidence_payload(e).get("message_id", "")
+                    out["sink"] = _evidence_payload(e).get("sink", "")
+        return out
+
+    @activity.defn(name="ops_compile")
+    @_wrap
+    async def ops_compile(self, inp: OpsInput, task_id: str) -> dict:
+        import demo.morning_report as m
+        c = _ops_ledger()
+        contract = m.compile_contract(inp.instruction)  # revoked/invalid raises before any claim
+        _ops_post(c, f"/v1/tasks/{task_id}/contracts", contract)  # ledger dedups by sha
+        return contract
+
+    @activity.defn(name="ops_claim")
+    @_wrap
+    async def ops_claim(self, inp: OpsInput, task_id: str) -> dict:
+        c = _ops_ledger()
+        r = c.post(f"/v1/tasks/{task_id}/transition",
+                   json={"to": "claimed", "idempotency_key": f"{inp.run_key}:claim",
+                         "owner": OPS_EXECUTOR})
+        if r.status_code == 409 and r.json().get("detail", "").startswith("illegal transition"):
+            pass  # already past claimed (retry after kill): the key replay or a later state
+        elif r.status_code >= 400:
+            raise RouvrError(Code.DOWNSTREAM, f"ops claim: {r.status_code} {str(r.text)[:200]}")
+        items = c.get("/v1/tasks").json()["items"]
+        figures = {s: sum(1 for t in items if t["state"] == s) for s in ("done", "blocked", "failed")}
+        day = inp.run_key.split(":", 1)[-1]
+        return {"figures": figures,
+                "report": f"Lane report for {day}\n" + json.dumps({"figures": figures}, sort_keys=True)}
+
+    @activity.defn(name="ops_deliver")
+    @_wrap
+    async def ops_deliver(self, inp: OpsInput, task_id: str, sink: str, report: str) -> dict:
+        import demo.morning_report as m
+        c = _ops_ledger()
+        sent = m.deliver(report, inp.run_key, sink)  # file-exists check: kill+retry sends once
+        _ops_post(c, f"/v1/tasks/{task_id}/evidence",
+                  {"kind": "delivery", "body": {"sink": sink, **sent}})
+        return sent
+
+    @activity.defn(name="ops_verify")
+    @_wrap
+    async def ops_verify(self, inp: OpsInput, task_id: str, sink: str, msg_id: str) -> dict:
+        import demo.morning_report as m
+        from backend.rouvr_models.providers import get_provider
+        from rouvr.ops import OPS_EXECUTOR, OPS_JUDGE, check_readback
+        c = _ops_ledger()
+        items = c.get("/v1/tasks").json()["items"]
+        figures = {s: sum(1 for t in items if t["state"] == s) for s in ("done", "blocked", "failed")}
+        health = c.get("/health").status_code == 200
+        readback, figures_match = check_readback(m.OUTBOX, msg_id, figures)
+        verdict = "pass" if (readback and figures_match and health) else "fail"
+        _ops_post(c, f"/v1/tasks/{task_id}/evidence",
+                  {"kind": "reviewer",
+                   "body": {"sink": sink, "verdict": verdict, "readback": readback,
+                            "figures_match": figures_match, "health": health,
+                            "judge_principal": OPS_JUDGE, "executor": OPS_EXECUTOR,
+                            "model": get_provider().name}})
+        return {"verdict": verdict, "figures": figures}
+
+    @activity.defn(name="ops_close")
+    @_wrap
+    async def ops_close(self, inp: OpsInput, task_id: str, verdict: str, sink: str, msg_id: str,
+                        figures: dict) -> OpsResult:
+        from rouvr.ops import OPS_DIGEST_DONE
+        c = _ops_ledger()
+        if verdict == "pass":
+            _ops_post(c, f"/v1/tasks/{task_id}/transition",
+                      {"to": "done", "idempotency_key": f"{inp.run_key}:done"})
+            _ops_post(c, f"/v1/tasks/{task_id}/evidence",
+                      {"kind": "ops_receipt",
+                       "body": {"sink": sink, "message_id": msg_id, "figures": figures,
+                                "digest": OPS_DIGEST_DONE}})
+            return OpsResult("done", OPS_DIGEST_DONE, task_id, msg_id, sink)
+        _ops_post(c, f"/v1/tasks/{task_id}/transition",
+                  {"to": "failed", "idempotency_key": f"{inp.run_key}:fail"})
+        return OpsResult("failed", "ESCALATED: verification failed on all sinks", task_id, msg_id, sink)
+
+    @activity.defn(name="ops_block")
+    @_wrap
+    async def ops_block(self, inp: OpsInput, task_id: str, reason: str) -> OpsResult:
+        c = _ops_ledger()
+        _ops_post(c, f"/v1/tasks/{task_id}/evidence",
+                  {"kind": "escalation", "body": {"reason": reason, "run_key": inp.run_key}})
+        _ops_post(c, f"/v1/tasks/{task_id}/transition",
+                  {"to": "blocked", "idempotency_key": f"{inp.run_key}:park"})
+        return OpsResult("blocked", f"ESCALATED: {reason}", task_id)

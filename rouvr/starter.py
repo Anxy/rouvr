@@ -46,6 +46,20 @@ async def run_start(*, task_number: int, requested_by: str) -> str:
     return await start_task_workflow(client, wf)
 
 
+def schedule_scope(task_number: int) -> str:
+    """Grant scope a schedule for this task requires (T5)."""
+    return f"schedule:task:{task_number}"
+
+
+async def run_schedule(*, task_number: int, requested_by: str, schedule_id: str,
+                       cron: str, tz: str = "Asia/Kolkata") -> str:
+    """Create the Temporal schedule. Callers must hold an active grant for schedule_scope()."""
+    wf, s = await _input_for(task_number, requested_by)
+    client = await Client.connect(s.temporal_address, namespace=s.temporal_namespace)
+    await create_schedule(client, wf, schedule_id, cron, tz)
+    return schedule_id
+
+
 async def _input_for(task_number: int, requested_by: str) -> tuple[TaskWorkflowInput, Settings]:
     s = Settings.from_env()
     if s.workhub_backend == "ledger":

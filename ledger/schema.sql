@@ -36,6 +36,16 @@ CREATE TABLE IF NOT EXISTS receipts (
   created_at      TEXT NOT NULL,
   UNIQUE (task_id, idempotency_key)  -- keys replay per task, not globally
 );
+-- T5: standing grants. Owner-approved bounded permission: scope + optional
+-- contract_rev + expiry + approver. Schedules refuse to run without one.
+CREATE TABLE IF NOT EXISTS grants (
+  id           INTEGER PRIMARY KEY,
+  scope        TEXT NOT NULL,
+  contract_rev TEXT NOT NULL DEFAULT '',
+  expires_at   TEXT NOT NULL,  -- UTC ISO, lexical compare is chronological
+  approved_by  TEXT NOT NULL,
+  created_at   TEXT NOT NULL
+);
 -- S016: local user registry. Only the token hash is stored server-side.
 CREATE TABLE IF NOT EXISTS users (
   username    TEXT PRIMARY KEY,

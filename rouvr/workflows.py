@@ -9,13 +9,14 @@ from datetime import timedelta
 
 from temporalio import workflow
 from temporalio.common import RetryPolicy, WorkflowIDReusePolicy
-from temporalio.exceptions import ActivityError, ApplicationError
+from temporalio.exceptions import ActivityError, ApplicationError, WorkflowAlreadyStartedError
 
 with workflow.unsafe.imports_passed_through():
     from rouvr.activities import Activities
-    from rouvr.contracts import AssignInput, TaskWorkflowInput
+    from rouvr.contracts import AssignInput, OpsInput, OpsResult, TaskWorkflowInput
     from rouvr.errors import retry_policy_for
-    from rouvr.ids import workflow_id
+    from rouvr.ids import scheduled_child_id, workflow_id
+    from rouvr.ops import OPS_DIGEST_DONE
 
 Q_ORCH, Q_BUILD, Q_TEST, Q_VERIFY = "rouvr-orchestrator", "rouvr-coder", "rouvr-test", "rouvr-reviewer"
 
@@ -115,20 +116,92 @@ class TaskWorkflow:
         wh = retry_policy_for("workhub")
         await workflow.execute_activity_method(Activities.mark_blocked, args=[wf, reason], task_queue=Q_ORCH,
                                                start_to_close_timeout=timedelta(seconds=120), retry_policy=wh)
-        await workflow.execute_activity_method(Activities.escalate, args=[wf, reason, attempt_id], task_queue=Q_ORCH,
-                                               start_to_close_timeout=timedelta(seconds=60), retry_policy=wh)
+        # Single-attempt escalate: the escalation receipt must not retry the
+        # block path into a failed workflow. Swallow-after-evidence: a failed
+        # escalate still returns a clean blocked result (mark_blocked above
+        # already parked the task).
+        escalate_once = RetryPolicy(initial_interval=timedelta(seconds=2),
+                                    maximum_interval=timedelta(seconds=10),
+                                    maximum_attempts=1)
+        try:
+            await workflow.execute_activity_method(Activities.escalate, args=[wf, reason, attempt_id],
+                                                   task_queue=Q_ORCH,
+                                                   start_to_close_timeout=timedelta(seconds=60),
+                                                   retry_policy=escalate_once)
+        except ActivityError:
+            pass
         return {"state": "blocked", "reason": reason, "attempts": self.attempt}
+
+
+@workflow.defn(name="OpsTaskWorkflow")
+class OpsTaskWorkflow:
+    """Governed ops task (T3): morning_report as activities with run_key idempotency.
+
+    Delivery readback is the verifier step; silent_delivery falls through to the
+    fallback sink. A kill mid-step resumes without double-send (file-exists
+    delivery, replayed transitions). Revoked/invalid contract parks pre-claim.
+    """
+
+    @workflow.run
+    async def run(self, inp: OpsInput) -> OpsResult:
+        wh = retry_policy_for("workhub")
+        ops = timedelta(seconds=60)
+        prep = await workflow.execute_activity_method(
+            Activities.ops_prepare, inp, task_queue=Q_ORCH,
+            start_to_close_timeout=ops, retry_policy=wh)
+        if prep["state"] == "done":  # rerun after completion: hand back the receipt
+            return OpsResult("done", OPS_DIGEST_DONE, prep["task_id"],
+                             prep["message_id"], prep["sink"])
+        try:
+            await workflow.execute_activity_method(
+                Activities.ops_compile, args=[inp, prep["task_id"]], task_queue=Q_ORCH,
+                start_to_close_timeout=ops, retry_policy=wh)
+            claimed = await workflow.execute_activity_method(
+                Activities.ops_claim, args=[inp, prep["task_id"]], task_queue=Q_ORCH,
+                start_to_close_timeout=ops, retry_policy=wh)
+            for sink in ("primary", "fallback"):
+                sent = await workflow.execute_activity_method(
+                    Activities.ops_deliver, args=[inp, prep["task_id"], sink, claimed["report"]],
+                    task_queue=Q_ORCH, start_to_close_timeout=ops, retry_policy=wh)
+                v = await workflow.execute_activity_method(
+                    Activities.ops_verify,
+                    args=[inp, prep["task_id"], sink, sent["message_id"]],
+                    task_queue=Q_ORCH, start_to_close_timeout=ops, retry_policy=wh)
+                if v["verdict"] == "pass":
+                    return await workflow.execute_activity_method(
+                        Activities.ops_close,
+                        args=[inp, prep["task_id"], "pass", sink, sent["message_id"], v["figures"]],
+                        task_queue=Q_ORCH, start_to_close_timeout=ops, retry_policy=wh)
+            return await workflow.execute_activity_method(
+                Activities.ops_close,
+                args=[inp, prep["task_id"], "fail", "fallback", sent["message_id"], v["figures"]],
+                task_queue=Q_ORCH, start_to_close_timeout=ops, retry_policy=wh)
+        except ActivityError as e:
+            return await self._park(inp, prep["task_id"], _code(e), wh, ops)
+
+    async def _park(self, inp: OpsInput, task_id: str, reason: str, wh, ops) -> OpsResult:
+        try:
+            return await workflow.execute_activity_method(
+                Activities.ops_block, args=[inp, task_id, reason], task_queue=Q_ORCH,
+                start_to_close_timeout=ops, retry_policy=wh)
+        except ActivityError:
+            return OpsResult("blocked", f"ESCALATED: {reason}", task_id)
 
 
 @workflow.defn(name="ScheduledRunWorkflow")
 class ScheduledRunWorkflow:
     """Started by a Temporal Schedule. Fires one TaskWorkflow child per tick for an approved template revision.
-    Child id is deterministic per (task, revision, tick) so overlapping ticks cannot double-run."""
+    Child id is deterministic per (task, revision, tick) via scheduled_child_id so overlapping ticks cannot
+    double-run. It never reuses workflow_id (the one-task-one-workflow id ignores the revision)."""
 
     @workflow.run
     async def run(self, wf: TaskWorkflowInput) -> dict:
         tick = workflow.now().strftime("%Y%m%dT%H%M")
-        child_id = workflow_id(wf.tenant_id, wf.task_id, f"{wf.contract_rev}@{tick}")
-        result = await workflow.execute_child_workflow(TaskWorkflow.run, wf, id=child_id, task_queue=Q_ORCH,
-                                                       id_reuse_policy=WorkflowIDReusePolicy.REJECT_DUPLICATE)
+        child_id = scheduled_child_id(wf.tenant_id, wf.task_id, wf.contract_rev, tick)
+        try:
+            result = await workflow.execute_child_workflow(TaskWorkflow.run, wf, id=child_id,
+                                                           task_queue=Q_ORCH,
+                                                           id_reuse_policy=WorkflowIDReusePolicy.REJECT_DUPLICATE)
+        except WorkflowAlreadyStartedError:
+            return {"tick": tick, "child": child_id, "result": None, "deduped": True}  # dup tick: no 2nd child
         return {"tick": tick, "child": child_id, "result": result}

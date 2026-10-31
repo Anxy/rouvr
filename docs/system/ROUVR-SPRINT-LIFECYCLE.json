@@ -1479,13 +1479,22 @@
     {
       "id": "S021",
       "file": "docs/tasks/rouvr/S021-decomposer-lite.md",
-      "state": "needs_review",
+      "state": "done",
       "worker": "coder-1",
       "supervisor": null,
       "depends_on": [
         "S020"
       ],
-      "cycles": [],
+      "cycles": [
+        {
+          "round": 1,
+          "verdict": "approved",
+          "at": "2026-10-31",
+          "by": "verifier",
+          "comment": "review-009 VERDICT ACCEPT + CLOSEOUT; verifier re-ran full gate set at 4fa6b06",
+          "ref": "review"
+        }
+      ],
       "history": [
         {
           "state": "queued",
@@ -1504,12 +1513,36 @@
           "at": "2026-10-31",
           "by": "worker",
           "ref": "tests"
+        },
+        {
+          "state": "closeout",
+          "at": "2026-10-31",
+          "by": "supervisor",
+          "ref": "review"
+        },
+        {
+          "state": "done",
+          "at": "2026-10-31",
+          "by": "supervisor",
+          "ref": "closeout"
         }
       ],
       "claimed_at": "2026-10-31",
       "pre_task": "IMPLEMENTATION; STEP 1 roadmap.json plus validator dogfood, STEP 2 run gate plus parent plus decompose plus demo; tests-first",
       "tests": "tests/test_decompose.py 9 passed; tests/ 305 passed +1 flake green-alone; broad 400 passed 2 skipped",
-      "evidence": "commit 2edbf0a; validator fail-mode T3 FAIL_ASSERT-x3 valid; pass-mode T1,T2,T4,T5,T6 valid T3 INVALID(tree-confinement, stay-outs+sibling files); demo exit 0 + transcript; hygiene clean; lifecycle valid(21)"
+      "evidence": "commit 2edbf0a; validator fail-mode T3 FAIL_ASSERT-x3 valid; pass-mode T1,T2,T4,T5,T6 valid T3 INVALID(tree-confinement, stay-outs+sibling files); demo exit 0 + transcript; hygiene clean; lifecycle valid(21)",
+      "review": {
+        "verdict": "approve",
+        "at": "2026-10-31",
+        "by": "verifier",
+        "ref": "review"
+      },
+      "verification": "tests/ 306; broad 399+2skip+1known-flake-green-solo; hygiene clean; lifecycle valid; demo exit0 4beats; validator fail T3-valid, pass 5/6-valid T3-confinement",
+      "closeout": {
+        "at": "2026-10-31",
+        "by": "coder",
+        "ref": "review-009 VERDICT ACCEPT + CLOSEOUT at 4fa6b06"
+      }
     }
   ]
 }

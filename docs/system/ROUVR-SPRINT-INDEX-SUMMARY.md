@@ -1,6 +1,6 @@
 # Rouvr sprint index summary
 
-Generated from `ROUVR-SPRINT-INDEX.json` — 20 sprints.
+Generated from `ROUVR-SPRINT-INDEX.json` — 21 sprints.
 
 | ID | Title | Status | Confidence | Known gaps |
 |----|-------|--------|------------|------------|
@@ -24,3 +24,4 @@ Generated from `ROUVR-SPRINT-INDEX.json` — 20 sprints.
 | S018 | Governed ops + story gaps (queued) | PASS | medium | — |
 | S019 | Scoped stack secrets, grant revocation, spec path config | PASS | medium | Coder still host-run (shortcut); api-token 0600 residual. |
 | S020 | Review-10-31 trust + packaging fixes (F1/F2/F3/F6/F7) | PASS | medium | F5 default-container (post-demo per review); F8 machine defaults (dev ergonomics); F4/F9/F10 live Meta / real WorkHub / recordings (owner/external) |
+| S021 | Decomposer-lite (task creation calls the decomposer) | PASS | medium | — |

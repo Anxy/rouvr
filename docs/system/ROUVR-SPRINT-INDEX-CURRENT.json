@@ -1,7 +1,7 @@
 {
-  "generated_at": "2026-10-31T12:05:25.544629+00:00",
+  "generated_at": "2026-10-31T12:26:11.371457+00:00",
   "counts": {
-    "PASS": 20
+    "PASS": 21
   },
   "sprints": [
     {
@@ -334,6 +334,24 @@
         "F8 machine defaults (dev ergonomics)",
         "F4/F9/F10 live Meta / real WorkHub / recordings (owner/external)"
       ]
+    },
+    {
+      "id": "S021",
+      "title": "Decomposer-lite (task creation calls the decomposer)",
+      "goal": "Brief in, verifiable tasks out: mini-language, validator dogfood, run gate, parent check, demo.",
+      "sprint_file": "docs/tasks/rouvr/S021-decomposer-lite.md",
+      "status": "PASS",
+      "commit": "2edbf0a",
+      "confidence": "medium",
+      "tasks": [
+        "21.1 roadmap.json contract",
+        "21.2 Mini-language + validator",
+        "21.3 Run gate",
+        "21.4 Parent check",
+        "21.5 Decompose + integration",
+        "21.6 Demo script"
+      ],
+      "known_gaps": []
     }
   ]
 }

@@ -815,7 +815,7 @@
     {
       "id": "S017",
       "file": "docs/tasks/rouvr/S017-loop-integrity-fixes.md",
-      "state": "running",
+      "state": "needs_review",
       "worker": "coder-1",
       "supervisor": null,
       "pre_task": "TaskKinds IMPLEMENTATION; scope workflows.py _block/escalate, mcp_server create/waiting, activities verify diff, ids scheduled_child_id; negative probes: failing-escalate workflow test, locked-manifest skip",
@@ -831,13 +831,21 @@
           "at": "2026-10-31",
           "by": "worker",
           "ref": "pre_task"
+        },
+        {
+          "state": "needs_review",
+          "at": "2026-10-31",
+          "by": "worker",
+          "ref": "tests"
         }
-      ]
+      ],
+      "tests": "tests/ 289 passed (incl. test_unit.py rev-ignored/per-tick/start-twice, test_workflow.py escalate-failure-blocks, test_mcp_server.py, test_r9_close.py fresh-clone); broad set 383 passed 2 skipped; hygiene clean (2005 files)",
+      "evidence": "af83bb4 (ids.py one-task-one-workflow + scheduled_child_id) + 68ba6e0 (workflows._block single-attempt/swallow, test_author hidden suite on create, reviewer clone_at(head_sha), escalation waiting-reason, mcp in requirements); sheet S017 landed in b6a50cf; review-004 ACCEPT + CLOSEOUT"
     },
     {
       "id": "S018",
       "file": "docs/tasks/rouvr/S018-story-gaps-queued.md",
-      "state": "running",
+      "state": "needs_review",
       "worker": null,
       "supervisor": null,
       "history": [
@@ -852,14 +860,22 @@
           "at": "2026-10-31",
           "by": "worker",
           "ref": "pre_task"
+        },
+        {
+          "state": "needs_review",
+          "at": "2026-10-31",
+          "by": "worker",
+          "ref": "tests"
         }
       ],
-      "pre_task": "TaskKinds IMPLEMENTATION; scope ops.py, morning_report, contracts, activities ops_*, workflows OpsTaskWorkflow, ledger grants, mcp rouvr_schedule; negative probes: failing-verify fallback, revoked park, dup-tick dedup"
+      "pre_task": "TaskKinds IMPLEMENTATION; scope ops.py, morning_report, contracts, activities ops_*, workflows OpsTaskWorkflow, ledger grants, mcp rouvr_schedule; negative probes: failing-verify fallback, revoked park, dup-tick dedup",
+      "tests": "tests/test_ops.py (OpsTaskWorkflow prepare/claim/deliver/verify/close, kill-resume, silent-delivery fallback, revoked-key block, dup-tick dedup) green within tests/ 289 passed; broad set 383 passed 2 skipped; hygiene clean",
+      "evidence": "68ba6e0: rouvr/ops.py, OpsTaskWorkflow, compile_ops_contract (invalid refused) + judge-principal reviewer evidence, grants table + grant-gated rouvr_schedule + Done digest, morning_report on ops helpers; sheet S018 landed in b6a50cf"
     },
     {
       "id": "S019",
       "file": "docs/tasks/rouvr/S019-launch-secrets-grants.md",
-      "state": "running",
+      "state": "needs_review",
       "worker": "coder-1",
       "supervisor": null,
       "pre_task": "TaskKinds IMPLEMENTATION; scope scripts/rouvr, gitops clone_env/gh_token/revoke, activities push/close, muse fence, worker registration; negative probes: bad-perm token, needs_review keeps grant",
@@ -875,8 +891,16 @@
           "at": "2026-10-31",
           "by": "worker",
           "ref": "pre_task"
+        },
+        {
+          "state": "needs_review",
+          "at": "2026-10-31",
+          "by": "worker",
+          "ref": "tests"
         }
-      ]
+      ],
+      "tests": "tests/test_git_grant.py, test_rouvr_script.py, test_muse_windows.py green within tests/ 289 passed; broad set 383 passed 2 skipped; hygiene clean",
+      "evidence": "68ba6e0: scripts/rouvr no stack-wide GH_TOKEN/META_MODEL_API_KEY + 0600 gh-token file, gitops minimal clone_env + per-task grant revocation at terminal close, muse strips WORKHUB_JWT + container-sandbox option, SPEC_REPO/BASE env; sheet S019 landed in 68ba6e0"
     }
   ]
 }

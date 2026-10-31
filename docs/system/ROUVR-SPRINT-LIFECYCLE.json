@@ -1475,6 +1475,33 @@
         "by": "supervisor",
         "ref": "rouvr/rouvr-lane/tasks/review-008/CLOSEOUT.md"
       }
+    },
+    {
+      "id": "S021",
+      "file": "docs/tasks/rouvr/S021-decomposer-lite.md",
+      "state": "running",
+      "worker": "coder-1",
+      "supervisor": null,
+      "depends_on": [
+        "S020"
+      ],
+      "cycles": [],
+      "history": [
+        {
+          "state": "queued",
+          "at": "2026-10-31",
+          "by": "worker",
+          "ref": "registered"
+        },
+        {
+          "state": "running",
+          "at": "2026-10-31",
+          "by": "worker",
+          "ref": "claim"
+        }
+      ],
+      "claimed_at": "2026-10-31",
+      "pre_task": "IMPLEMENTATION; STEP 1 roadmap.json plus validator dogfood, STEP 2 run gate plus parent plus decompose plus demo; tests-first"
     }
   ]
 }

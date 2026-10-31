@@ -1003,6 +1003,410 @@
         "by": "reviewer",
         "ref": "docs/tasks/rouvr/S019-launch-secrets-grants.md \u00a76"
       }
+    },
+    {
+      "id": "S011",
+      "file": "docs/tasks/rouvr/S011-trust-boundaries.md",
+      "state": "done",
+      "worker": "coder-1",
+      "supervisor": null,
+      "depends_on": [],
+      "cycles": [
+        {
+          "round": 1,
+          "verdict": "approved",
+          "at": "2026-10-31",
+          "by": "supervisor",
+          "comment": "User direct order 2026-10-31 (supervisor principal): complete and mark done; retrospective registration, sheet SS11 PASS stands as review record",
+          "ref": "review"
+        }
+      ],
+      "history": [
+        {
+          "state": "queued",
+          "at": "2026-10-31",
+          "by": "worker",
+          "ref": "registered"
+        },
+        {
+          "state": "running",
+          "at": "2026-10-31",
+          "by": "worker",
+          "ref": "claim"
+        },
+        {
+          "state": "needs_review",
+          "at": "2026-10-31",
+          "by": "worker",
+          "ref": "tests"
+        },
+        {
+          "state": "closeout",
+          "at": "2026-10-31",
+          "by": "supervisor",
+          "ref": "review"
+        },
+        {
+          "state": "done",
+          "at": "2026-10-31",
+          "by": "supervisor",
+          "ref": "closeout"
+        }
+      ],
+      "claimed_at": "2026-10-31",
+      "pre_task": "IMPLEMENTATION; port auth, fenced persona windows, clone credential discipline",
+      "tests": "Sheet S011 SS11 contemporaneous results; re-verified at e2b493c: tests/ 289 passed; broad set 383 passed 2 skipped; hygiene clean (2005 files)",
+      "evidence": "Sheet SS11 PASS closeout (auth, windows, clone discipline; files, tests, non-happy-path, gaps) + SS12 task reports; scope in tree at e2b493c",
+      "review": {
+        "verdict": "approve",
+        "at": "2026-10-31",
+        "by": "supervisor",
+        "ref": "review"
+      },
+      "verification": "Re-ran at e2b493c: tests/ 289 passed; broad set 383 passed 2 skipped; hygiene clean; validator valid",
+      "closeout": {
+        "at": "2026-10-31",
+        "by": "supervisor",
+        "ref": "docs/tasks/rouvr/S011-trust-boundaries.md SS11"
+      }
+    },
+    {
+      "id": "S012",
+      "file": "docs/tasks/rouvr/S012-session-lifecycle-resilience.md",
+      "state": "done",
+      "worker": "coder-1",
+      "supervisor": null,
+      "depends_on": [
+        "S011"
+      ],
+      "cycles": [
+        {
+          "round": 1,
+          "verdict": "approved",
+          "at": "2026-10-31",
+          "by": "supervisor",
+          "comment": "User direct order 2026-10-31 (supervisor principal): complete and mark done; retrospective registration, sheet SS11 PASS stands as review record",
+          "ref": "review"
+        }
+      ],
+      "history": [
+        {
+          "state": "queued",
+          "at": "2026-10-31",
+          "by": "worker",
+          "ref": "registered"
+        },
+        {
+          "state": "running",
+          "at": "2026-10-31",
+          "by": "worker",
+          "ref": "claim"
+        },
+        {
+          "state": "needs_review",
+          "at": "2026-10-31",
+          "by": "worker",
+          "ref": "tests"
+        },
+        {
+          "state": "closeout",
+          "at": "2026-10-31",
+          "by": "supervisor",
+          "ref": "review"
+        },
+        {
+          "state": "done",
+          "at": "2026-10-31",
+          "by": "supervisor",
+          "ref": "closeout"
+        }
+      ],
+      "claimed_at": "2026-10-31",
+      "pre_task": "IMPLEMENTATION; MCP reconnect, stuck visibility plus rollup, worker liveness",
+      "tests": "Sheet S012 SS11 contemporaneous results; re-verified at e2b493c: tests/ 289 passed; broad set 383 passed 2 skipped; hygiene clean (2005 files)",
+      "evidence": "Sheet SS11 PASS closeout (reconnect loop, stuck flags, rollup; files, tests, non-happy-path, gaps) + SS12 task reports; scope in tree at e2b493c",
+      "review": {
+        "verdict": "approve",
+        "at": "2026-10-31",
+        "by": "supervisor",
+        "ref": "review"
+      },
+      "verification": "Re-ran at e2b493c: tests/ 289 passed; broad set 383 passed 2 skipped; hygiene clean; validator valid",
+      "closeout": {
+        "at": "2026-10-31",
+        "by": "supervisor",
+        "ref": "docs/tasks/rouvr/S012-session-lifecycle-resilience.md SS11"
+      }
+    },
+    {
+      "id": "S013",
+      "file": "docs/tasks/rouvr/S013-review-loop-integrity.md",
+      "state": "done",
+      "worker": "coder-1",
+      "supervisor": null,
+      "depends_on": [
+        "S012"
+      ],
+      "cycles": [
+        {
+          "round": 1,
+          "verdict": "approved",
+          "at": "2026-10-31",
+          "by": "supervisor",
+          "comment": "User direct order 2026-10-31 (supervisor principal): complete and mark done; retrospective registration, sheet SS11 PASS stands as review record",
+          "ref": "review"
+        }
+      ],
+      "history": [
+        {
+          "state": "queued",
+          "at": "2026-10-31",
+          "by": "worker",
+          "ref": "registered"
+        },
+        {
+          "state": "running",
+          "at": "2026-10-31",
+          "by": "worker",
+          "ref": "claim"
+        },
+        {
+          "state": "needs_review",
+          "at": "2026-10-31",
+          "by": "worker",
+          "ref": "tests"
+        },
+        {
+          "state": "closeout",
+          "at": "2026-10-31",
+          "by": "supervisor",
+          "ref": "review"
+        },
+        {
+          "state": "done",
+          "at": "2026-10-31",
+          "by": "supervisor",
+          "ref": "closeout"
+        }
+      ],
+      "claimed_at": "2026-10-31",
+      "pre_task": "IMPLEMENTATION; verdict vocabulary, PR hygiene, readable evidence",
+      "tests": "Sheet S013 SS11 contemporaneous results; re-verified at e2b493c: tests/ 289 passed; broad set 383 passed 2 skipped; hygiene clean (2005 files)",
+      "evidence": "Sheet SS11 PASS closeout (vocabulary, PR supersede, decoded evidence, prose warnings; files, tests, non-happy-path, gaps) + SS12 task reports; scope in tree at e2b493c",
+      "review": {
+        "verdict": "approve",
+        "at": "2026-10-31",
+        "by": "supervisor",
+        "ref": "review"
+      },
+      "verification": "Re-ran at e2b493c: tests/ 289 passed; broad set 383 passed 2 skipped; hygiene clean; validator valid",
+      "closeout": {
+        "at": "2026-10-31",
+        "by": "supervisor",
+        "ref": "docs/tasks/rouvr/S013-review-loop-integrity.md SS11"
+      }
+    },
+    {
+      "id": "S014",
+      "file": "docs/tasks/rouvr/S014-storage-scale.md",
+      "state": "done",
+      "worker": "coder-1",
+      "supervisor": null,
+      "depends_on": [
+        "S013"
+      ],
+      "cycles": [
+        {
+          "round": 1,
+          "verdict": "approved",
+          "at": "2026-10-31",
+          "by": "supervisor",
+          "comment": "User direct order 2026-10-31 (supervisor principal): complete and mark done; retrospective registration, sheet SS11 PASS stands as review record",
+          "ref": "review"
+        }
+      ],
+      "history": [
+        {
+          "state": "queued",
+          "at": "2026-10-31",
+          "by": "worker",
+          "ref": "registered"
+        },
+        {
+          "state": "running",
+          "at": "2026-10-31",
+          "by": "worker",
+          "ref": "claim"
+        },
+        {
+          "state": "needs_review",
+          "at": "2026-10-31",
+          "by": "worker",
+          "ref": "tests"
+        },
+        {
+          "state": "closeout",
+          "at": "2026-10-31",
+          "by": "supervisor",
+          "ref": "review"
+        },
+        {
+          "state": "done",
+          "at": "2026-10-31",
+          "by": "supervisor",
+          "ref": "closeout"
+        }
+      ],
+      "claimed_at": "2026-10-31",
+      "pre_task": "IMPLEMENTATION; fence lookup, WAL mode",
+      "tests": "Sheet S014 SS11 contemporaneous results; re-verified at e2b493c: tests/ 289 passed; broad set 383 passed 2 skipped; hygiene clean (2005 files)",
+      "evidence": "Sheet SS11 PASS closeout (lookup endpoint, WAL mode; files, tests, non-happy-path, gaps) + SS12 task reports; scope in tree at e2b493c",
+      "review": {
+        "verdict": "approve",
+        "at": "2026-10-31",
+        "by": "supervisor",
+        "ref": "review"
+      },
+      "verification": "Re-ran at e2b493c: tests/ 289 passed; broad set 383 passed 2 skipped; hygiene clean; validator valid",
+      "closeout": {
+        "at": "2026-10-31",
+        "by": "supervisor",
+        "ref": "docs/tasks/rouvr/S014-storage-scale.md SS11"
+      }
+    },
+    {
+      "id": "S015",
+      "file": "docs/tasks/rouvr/S015-proof-and-hygiene.md",
+      "state": "done",
+      "worker": "coder-1",
+      "supervisor": null,
+      "depends_on": [
+        "S014"
+      ],
+      "cycles": [
+        {
+          "round": 1,
+          "verdict": "approved",
+          "at": "2026-10-31",
+          "by": "supervisor",
+          "comment": "User direct order 2026-10-31 (supervisor principal): complete and mark done; retrospective registration, sheet SS11 PASS stands as review record",
+          "ref": "review"
+        }
+      ],
+      "history": [
+        {
+          "state": "queued",
+          "at": "2026-10-31",
+          "by": "worker",
+          "ref": "registered"
+        },
+        {
+          "state": "running",
+          "at": "2026-10-31",
+          "by": "worker",
+          "ref": "claim"
+        },
+        {
+          "state": "needs_review",
+          "at": "2026-10-31",
+          "by": "worker",
+          "ref": "tests"
+        },
+        {
+          "state": "closeout",
+          "at": "2026-10-31",
+          "by": "supervisor",
+          "ref": "review"
+        },
+        {
+          "state": "done",
+          "at": "2026-10-31",
+          "by": "supervisor",
+          "ref": "closeout"
+        }
+      ],
+      "claimed_at": "2026-10-31",
+      "pre_task": "IMPLEMENTATION; crash-recovery test, repo shape, cost visibility",
+      "tests": "Sheet S015 SS11 contemporaneous results; re-verified at e2b493c: tests/ 289 passed; broad set 383 passed 2 skipped; hygiene clean (2005 files)",
+      "evidence": "Sheet SS11 PASS closeout (crash drill fix, repo slimming, cost visibility; files, tests, non-happy-path, gaps) + SS12 task reports; scope in tree at e2b493c",
+      "review": {
+        "verdict": "approve",
+        "at": "2026-10-31",
+        "by": "supervisor",
+        "ref": "review"
+      },
+      "verification": "Re-ran at e2b493c: tests/ 289 passed; broad set 383 passed 2 skipped; hygiene clean; validator valid",
+      "closeout": {
+        "at": "2026-10-31",
+        "by": "supervisor",
+        "ref": "docs/tasks/rouvr/S015-proof-and-hygiene.md SS11"
+      }
+    },
+    {
+      "id": "S016",
+      "file": "docs/tasks/rouvr/S016-user-profiles.md",
+      "state": "done",
+      "worker": "coder-1",
+      "supervisor": null,
+      "depends_on": [],
+      "cycles": [
+        {
+          "round": 1,
+          "verdict": "approved",
+          "at": "2026-10-31",
+          "by": "supervisor",
+          "comment": "User direct order 2026-10-31 (supervisor principal): complete and mark done; retrospective registration, sheet SS11 PASS stands as review record",
+          "ref": "review"
+        }
+      ],
+      "history": [
+        {
+          "state": "queued",
+          "at": "2026-10-31",
+          "by": "worker",
+          "ref": "registered"
+        },
+        {
+          "state": "running",
+          "at": "2026-10-31",
+          "by": "worker",
+          "ref": "claim"
+        },
+        {
+          "state": "needs_review",
+          "at": "2026-10-31",
+          "by": "worker",
+          "ref": "tests"
+        },
+        {
+          "state": "closeout",
+          "at": "2026-10-31",
+          "by": "supervisor",
+          "ref": "review"
+        },
+        {
+          "state": "done",
+          "at": "2026-10-31",
+          "by": "supervisor",
+          "ref": "closeout"
+        }
+      ],
+      "claimed_at": "2026-10-31",
+      "pre_task": "IMPLEMENTATION; user registry plus tokens, seed CLI profiles, ownership scoping, docs",
+      "tests": "Sheet S016 SS11 contemporaneous results; re-verified at e2b493c: tests/ 289 passed; broad set 383 passed 2 skipped; hygiene clean (2005 files)",
+      "evidence": "Sheet SS11 PASS closeout (registry, seed script, scoping, docs; files, tests, non-happy-path, live proof) + SS12 task reports; scope in tree at e2b493c",
+      "review": {
+        "verdict": "approve",
+        "at": "2026-10-31",
+        "by": "supervisor",
+        "ref": "review"
+      },
+      "verification": "Re-ran at e2b493c: tests/ 289 passed; broad set 383 passed 2 skipped; hygiene clean; validator valid",
+      "closeout": {
+        "at": "2026-10-31",
+        "by": "supervisor",
+        "ref": "docs/tasks/rouvr/S016-user-profiles.md SS11"
+      }
     }
   ]
 }

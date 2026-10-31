@@ -1,8 +1,7 @@
 {
-  "generated_at": "2026-10-31T10:34:27.680108+00:00",
+  "generated_at": "2026-10-31T11:12:52.350010+00:00",
   "counts": {
-    "PASS": 10,
-    "RUNNING": 3
+    "PASS": 19
   },
   "sprints": [
     {
@@ -162,11 +161,113 @@
       "known_gaps": []
     },
     {
+      "id": "S011",
+      "title": "Auth on local ports, fenced persona windows, clone credential discipline",
+      "goal": "Close the three trust-boundary holes: port auth, fenced persona windows, clone credential discipline.",
+      "sprint_file": "docs/tasks/rouvr/S011-trust-boundaries.md",
+      "status": "PASS",
+      "commit": "e2b493c",
+      "confidence": "medium",
+      "tasks": [
+        "11.1 Port auth",
+        "11.2 Fenced persona windows",
+        "11.3 Clone credential discipline"
+      ],
+      "known_gaps": [
+        "Retrospective registration 2026-10-31: scope verified present at e2b493c with green gates; no contemporaneous ledger record; sheet SS11 PASS closeout stands as the review record."
+      ]
+    },
+    {
+      "id": "S012",
+      "title": "MCP reconnect, stuck-task visibility, supervisor waiting-on-you rollup",
+      "goal": "Fix silent-failure modes: MCP reconnect, stuck-task flags, supervisor waiting-on-you rollup.",
+      "sprint_file": "docs/tasks/rouvr/S012-session-lifecycle-resilience.md",
+      "status": "PASS",
+      "commit": "e2b493c",
+      "confidence": "medium",
+      "tasks": [
+        "12.1 MCP reconnect",
+        "12.2 Stuck visibility + rollup",
+        "12.3 Worker liveness check"
+      ],
+      "known_gaps": [
+        "Retrospective registration 2026-10-31: scope verified present at e2b493c with green gates; no contemporaneous ledger record; sheet SS11 PASS closeout stands as the review record."
+      ]
+    },
+    {
+      "id": "S013",
+      "title": "One verdict vocabulary, PR hygiene on rework, readable evidence",
+      "goal": "Single verdict vocabulary, no abandoned PRs on rework, readable evidence.",
+      "sprint_file": "docs/tasks/rouvr/S013-review-loop-integrity.md",
+      "status": "PASS",
+      "commit": "e2b493c",
+      "confidence": "medium",
+      "tasks": [
+        "13.1 One verdict vocabulary",
+        "13.2 PR hygiene on rework",
+        "13.3 Readable evidence + prose guard"
+      ],
+      "known_gaps": [
+        "Retrospective registration 2026-10-31: scope verified present at e2b493c with green gates; no contemporaneous ledger record; sheet SS11 PASS closeout stands as the review record."
+      ]
+    },
+    {
+      "id": "S014",
+      "title": "Indexed evidence dedupe and WAL-mode ledger",
+      "goal": "Evidence lookup by (kind, fence); WAL-mode ledger.",
+      "sprint_file": "docs/tasks/rouvr/S014-storage-scale.md",
+      "status": "PASS",
+      "commit": "e2b493c",
+      "confidence": "medium",
+      "tasks": [
+        "14.1 Fence lookup",
+        "14.2 WAL mode"
+      ],
+      "known_gaps": [
+        "Retrospective registration 2026-10-31: scope verified present at e2b493c with green gates; no contemporaneous ledger record; sheet SS11 PASS closeout stands as the review record."
+      ]
+    },
+    {
+      "id": "S015",
+      "title": "Crash-recovery test, repo slimming decision, task cost visibility",
+      "goal": "Crash-recovery proof, honest repo shape, task cost visibility.",
+      "sprint_file": "docs/tasks/rouvr/S015-proof-and-hygiene.md",
+      "status": "PASS",
+      "commit": "e2b493c",
+      "confidence": "medium",
+      "tasks": [
+        "15.1 Crash-recovery test",
+        "15.2 Repo shape",
+        "15.3 Cost visibility + fixture dedupe"
+      ],
+      "known_gaps": [
+        "Retrospective registration 2026-10-31: scope verified present at e2b493c with green gates; no contemporaneous ledger record; sheet SS11 PASS closeout stands as the review record."
+      ]
+    },
+    {
+      "id": "S016",
+      "title": "Saved user profiles, per-user WorkHub tokens, and task ownership",
+      "goal": "Local user profiles, per-user tokens, task ownership.",
+      "sprint_file": "docs/tasks/rouvr/S016-user-profiles.md",
+      "status": "PASS",
+      "commit": "e2b493c",
+      "confidence": "medium",
+      "tasks": [
+        "16.1 User registry + per-user token auth",
+        "16.2 Seed script + CLI profiles",
+        "16.3 Task ownership and scoping",
+        "16.4 Supervisor UX + docs"
+      ],
+      "known_gaps": [
+        "Retrospective registration 2026-10-31: scope verified present at e2b493c with green gates; no contemporaneous ledger record; sheet SS11 PASS closeout stands as the review record."
+      ]
+    },
+    {
       "id": "S017",
       "title": "Loop-integrity fixes (review-004 item 4 + T1/T2/T6/T7-small)",
       "goal": "Clean block path, hidden suite at create, reviewer fresh clone, per-tick schedule ids, hygiene.",
       "sprint_file": "docs/tasks/rouvr/S017-loop-integrity-fixes.md",
-      "status": "RUNNING",
+      "status": "PASS",
       "commit": "68ba6e0",
       "confidence": "medium",
       "tasks": [
@@ -185,7 +286,7 @@
       "title": "Governed ops + story gaps (queued)",
       "goal": "OpsTaskWorkflow, Meta judge, standing grants (plan only).",
       "sprint_file": "docs/tasks/rouvr/S018-story-gaps-queued.md",
-      "status": "RUNNING",
+      "status": "PASS",
       "commit": "68ba6e0",
       "confidence": "medium",
       "tasks": [
@@ -200,7 +301,7 @@
       "title": "Scoped stack secrets, grant revocation, spec path config",
       "goal": "No stack-wide secrets; grants revoked at close; spec path configurable.",
       "sprint_file": "docs/tasks/rouvr/S019-launch-secrets-grants.md",
-      "status": "RUNNING",
+      "status": "PASS",
       "commit": "68ba6e0",
       "confidence": "medium",
       "tasks": [

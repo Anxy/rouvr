@@ -1,6 +1,6 @@
 # Rouvr sprint index summary
 
-Generated from `ROUVR-SPRINT-INDEX.json` — 13 sprints.
+Generated from `ROUVR-SPRINT-INDEX.json` — 19 sprints.
 
 | ID | Title | Status | Confidence | Known gaps |
 |----|-------|--------|------------|------------|
@@ -14,6 +14,12 @@ Generated from `ROUVR-SPRINT-INDEX.json` — 13 sprints.
 | S008 | Stage promotion (A2, human-gated) | PASS | medium | workhub:attempt:open grant still pending for external stage arm; local ledger arm PASS 2026-10-30 (docs/r10-runs/20261030T1247). |
 | S009 | hyeve-lane back-port (A2) | PASS | medium | Lane-host run against external staging deferred with S008 stage arm; local ledger arm PASS 2026-10-30. |
 | S010 | P2 receipt signing | PASS | high | — |
-| S017 | Loop-integrity fixes (review-004 item 4 + T1/T2/T6/T7-small) | RUNNING | medium | T3/T4/T5 queued in S018; risks (secrets, host coder) noted not fixed. |
-| S018 | Governed ops + story gaps (queued) | RUNNING | medium | — |
-| S019 | Scoped stack secrets, grant revocation, spec path config | RUNNING | medium | Coder still host-run (shortcut); api-token 0600 residual. |
+| S011 | Auth on local ports, fenced persona windows, clone credential discipline | PASS | medium | Retrospective registration 2026-10-31: scope verified present at e2b493c with green gates; no contemporaneous ledger record; sheet SS11 PASS closeout stands as the review record. |
+| S012 | MCP reconnect, stuck-task visibility, supervisor waiting-on-you rollup | PASS | medium | Retrospective registration 2026-10-31: scope verified present at e2b493c with green gates; no contemporaneous ledger record; sheet SS11 PASS closeout stands as the review record. |
+| S013 | One verdict vocabulary, PR hygiene on rework, readable evidence | PASS | medium | Retrospective registration 2026-10-31: scope verified present at e2b493c with green gates; no contemporaneous ledger record; sheet SS11 PASS closeout stands as the review record. |
+| S014 | Indexed evidence dedupe and WAL-mode ledger | PASS | medium | Retrospective registration 2026-10-31: scope verified present at e2b493c with green gates; no contemporaneous ledger record; sheet SS11 PASS closeout stands as the review record. |
+| S015 | Crash-recovery test, repo slimming decision, task cost visibility | PASS | medium | Retrospective registration 2026-10-31: scope verified present at e2b493c with green gates; no contemporaneous ledger record; sheet SS11 PASS closeout stands as the review record. |
+| S016 | Saved user profiles, per-user WorkHub tokens, and task ownership | PASS | medium | Retrospective registration 2026-10-31: scope verified present at e2b493c with green gates; no contemporaneous ledger record; sheet SS11 PASS closeout stands as the review record. |
+| S017 | Loop-integrity fixes (review-004 item 4 + T1/T2/T6/T7-small) | PASS | medium | T3/T4/T5 queued in S018; risks (secrets, host coder) noted not fixed. |
+| S018 | Governed ops + story gaps (queued) | PASS | medium | — |
+| S019 | Scoped stack secrets, grant revocation, spec path config | PASS | medium | Coder still host-run (shortcut); api-token 0600 residual. |

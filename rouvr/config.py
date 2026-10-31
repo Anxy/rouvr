@@ -63,7 +63,7 @@ class Settings:
             temporal_address=_env("TEMPORAL_ADDRESS", "localhost:7233"),
             temporal_namespace=_env("TEMPORAL_NAMESPACE", "default"),
             workhub_base_url=_env("WORKHUB_BASE_URL").rstrip("/"),
-            database_url=_env("ROUVR_DATABASE_URL", "postgresql://rouvr:rouvr@localhost:5432/rouvr"),
+            database_url=_env("ROUVR_DATABASE_URL"),
             persona_registry_path=Path(_env("PERSONA_REGISTRY_PATH", "/srv/rouvr/personas/tenants.yaml")),
             persona_source=_env("PERSONA_SOURCE", "aix"),
             aix_mapping_path=Path(_env("AIX_MAPPING_PATH", "/srv/rouvr/personas/aix_mapping.json")),

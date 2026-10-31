@@ -20,6 +20,7 @@ from rouvr.workhub.client import WorkHubClient
 
 def test_config_rejects_bad_numeric_env(monkeypatch):
     monkeypatch.setenv("WORKHUB_BASE_URL", "http://wh")
+    monkeypatch.setenv("ROUVR_DATABASE_URL", "postgresql://u:p@localhost/db")
     for name, value in (("LEASE_TTL_S", "abc"), ("HEARTBEAT_S", "0"), ("LEASE_TTL_S", "0")):
         monkeypatch.setenv(name, value)
         with pytest.raises(RuntimeError, match=name):
@@ -29,6 +30,7 @@ def test_config_rejects_bad_numeric_env(monkeypatch):
 
 def test_config_rejects_negative_tuning(monkeypatch):
     monkeypatch.setenv("WORKHUB_BASE_URL", "http://wh")
+    monkeypatch.setenv("ROUVR_DATABASE_URL", "postgresql://u:p@localhost/db")
     for name, value in (("MAX_REWORK", "-1"), ("CODER_CONCURRENCY", "0"), ("ASSIGN_START_TO_CLOSE_S", "0")):
         monkeypatch.setenv(name, value)
         with pytest.raises(RuntimeError, match=name):
@@ -64,6 +66,48 @@ def test_ids_deterministic():
     assert len(a.rsplit("-", 1)[1]) == 16
     assert len(activity_id("assign", 1).rsplit("-", 1)[1]) == 20
     assert handoff_fence(2, 7) == "temporal-handoff-2-e7"
+
+
+def test_workflow_id_ignores_contract_rev():
+    assert workflow_id("t1", "42", "r1") == workflow_id("t1", "42", "r2")
+
+
+def test_scheduled_child_ids_distinct_per_tick():
+    from rouvr.ids import scheduled_child_id
+    tick1 = scheduled_child_id("t", "42", "r1", "20251030T1200")
+    tick2 = scheduled_child_id("t", "42", "r1", "20251030T1201")
+    assert tick1 != tick2  # tick 2 must start under REJECT_DUPLICATE
+    assert tick1 != workflow_id("t", "42", "r1")  # never reuse the task id
+    assert tick1 == scheduled_child_id("t", "42", "r1", "20251030T1200")  # deterministic
+
+
+def test_config_requires_database_url(monkeypatch):
+    monkeypatch.setenv("WORKHUB_BASE_URL", "http://wh")
+    monkeypatch.delenv("ROUVR_DATABASE_URL", raising=False)
+    with pytest.raises(RuntimeError, match="ROUVR_DATABASE_URL"):
+        Settings.from_env()
+
+
+async def test_start_task_workflow_idempotent():
+    from temporalio.exceptions import WorkflowAlreadyStartedError
+
+    from rouvr.contracts import TaskWorkflowInput
+    from rouvr.starter import start_task_workflow
+
+    class FakeClient:
+        def __init__(self):
+            self.started = set()
+
+        async def start_workflow(self, *a, id, **kw):
+            if id in self.started:
+                raise WorkflowAlreadyStartedError(id, "TaskWorkflow")
+            self.started.add(id)
+
+    client = FakeClient()
+    wf = TaskWorkflowInput("t", "p", "42", "r1", "dev")
+    assert await start_task_workflow(client, wf, report=True) == (workflow_id("t", "42", "r1"), True)
+    wf2 = TaskWorkflowInput("t", "p", "42", "r2", "dev")
+    assert await start_task_workflow(client, wf2, report=True) == (workflow_id("t", "42", "r1"), False)
 
 
 @pytest.mark.parametrize("status,body,code", [
@@ -120,6 +164,7 @@ def test_sanitize_redacts_quoted_multiword_values():
 
 def test_config_rejects_bad_persona_source(monkeypatch):
     monkeypatch.setenv("WORKHUB_BASE_URL", "http://wh")
+    monkeypatch.setenv("ROUVR_DATABASE_URL", "postgresql://u:p@localhost/db")
     monkeypatch.setenv("PERSONA_SOURCE", "yaml-typo")
     with pytest.raises(RuntimeError, match="PERSONA_SOURCE"):
         Settings.from_env()

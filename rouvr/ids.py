@@ -18,8 +18,18 @@ def sha(obj: Any, n: int) -> str:
     return hashlib.sha256(data).hexdigest()[:n]
 
 
-def workflow_id(tenant: str, task_id: str, contract_rev: str) -> str:
-    return f"rouvr-task-{_SAFE.sub('_', tenant)}-{_SAFE.sub('_', task_id)}-{sha([tenant, task_id, contract_rev], 16)}"
+def workflow_id(tenant: str, task_id: str, contract_rev: str = "") -> str:
+    # One task, one workflow: contract_rev excluded so REJECT_DUPLICATE dedupes
+    # a revised contract; verify_binding fences the rev move inside the workflow.
+    return f"rouvr-task-{_SAFE.sub('_', tenant)}-{_SAFE.sub('_', task_id)}-{sha([tenant, task_id], 16)}"
+
+
+def scheduled_child_id(tenant: str, task_id: str, contract_rev: str, tick: str) -> str:
+    # Distinct from workflow_id: the tick is hashed in so each schedule tick
+    # gets its own child id under REJECT_DUPLICATE (never reuse the
+    # one-task-one-workflow id here, or tick 2 can never start).
+    return (f"rouvr-sched-{_SAFE.sub('_', tenant)}-{_SAFE.sub('_', task_id)}-"
+            f"{sha([tenant, task_id, contract_rev, tick], 16)}")
 
 
 def activity_id(name: str, *parts: Any) -> str:

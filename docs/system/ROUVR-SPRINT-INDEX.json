@@ -354,8 +354,8 @@
       "title": "Tenant/project partitions in WorkHub",
       "goal": "Mandatory tenant/project scope on every task and workflow; tenant-scoped visibility.",
       "sprint_file": "docs/tasks/rouvr/S022-tenant-project-partitions.md",
-      "status": "RUNNING",
-      "commit": "2edbf0a+uncommitted",
+      "status": "PASS",
+      "commit": "f06d529",
       "confidence": "medium",
       "tasks": [
         "22.1 Ledger partitions",

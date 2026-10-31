@@ -1547,13 +1547,22 @@
     {
       "id": "S022",
       "file": "docs/tasks/rouvr/S022-tenant-project-partitions.md",
-      "state": "needs_review",
+      "state": "done",
       "worker": "coder-1",
       "supervisor": null,
       "depends_on": [
         "S021"
       ],
-      "cycles": [],
+      "cycles": [
+        {
+          "round": 1,
+          "verdict": "approved",
+          "at": "2026-10-31",
+          "by": "verifier",
+          "comment": "review-010 VERDICT ACCEPT + CLOSEOUT; verifier re-ran full gate set at 14770e5, all outputs match DONE",
+          "ref": "review"
+        }
+      ],
       "history": [
         {
           "state": "queued",
@@ -1572,12 +1581,36 @@
           "at": "2026-10-31",
           "by": "worker",
           "ref": "tests"
+        },
+        {
+          "state": "closeout",
+          "at": "2026-10-31",
+          "by": "supervisor",
+          "ref": "review"
+        },
+        {
+          "state": "done",
+          "at": "2026-10-31",
+          "by": "supervisor",
+          "ref": "closeout"
         }
       ],
       "claimed_at": "2026-10-31",
       "pre_task": "IMPLEMENTATION; ledger tenants/projects tables plus mandatory task scope plus tenant visibility; MCP/binding/starter/api/ops/demo scope wiring; tests-first per task",
       "tests": "tests/ 312 passed; broad 406 passed 2 skipped; ledger 30 incl new scope suites",
-      "evidence": "commit f06d529; lifecycle valid(22); hygiene clean; fixes: schema.sql comment-semicolons + regression test, app.py receipts-migration begin-commit, scoped legacy demo row in local dev DB, test-side scope updates (ledger/r5/mcp/demo)"
+      "evidence": "commit f06d529; lifecycle valid(22); hygiene clean; fixes: schema.sql comment-semicolons + regression test, app.py receipts-migration begin-commit, scoped legacy demo row in local dev DB, test-side scope updates (ledger/r5/mcp/demo)",
+      "review": {
+        "verdict": "approve",
+        "at": "2026-10-31",
+        "by": "verifier",
+        "ref": "review"
+      },
+      "verification": "tests/ 312; broad 406+2skip; hygiene clean; lifecycle valid(22)",
+      "closeout": {
+        "at": "2026-10-31",
+        "by": "coder",
+        "ref": "review-010 VERDICT ACCEPT + CLOSEOUT at 14770e5"
+      }
     }
   ]
 }

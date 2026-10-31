@@ -93,3 +93,14 @@ rouvr/tests/test_r9_close.py, rouvr/tests/test_mcp_server.py
 - AC: `mcp` importable from requirements; comment no longer claims
   ROUVR_TENANT_ID has no default; tasks-are-slices documented in S018.
 - Tests-first: n/a (config/text); validation = `test-public` subset green.
+
+## 7. Closeout Report
+
+- Review: APPROVED by reviewer (rouvr-lane review-006, AGENTS.md rule 15).
+- Verification: gates at 2bec7fd — tests/ 289 passed; broad set 383 passed,
+  2 skipped (1 temporalio flake cleared on isolation + re-run); hygiene
+  clean; lifecycle valid; diff lifecycle-JSON-only.
+- Ledger: needs_review → closeout (review) → done (closeout), 2026-10-31;
+  INDEX companions regenerated.
+- Evidence: af83bb4 + 68ba6e0 (scope) + b6a50cf (sheets landed) + 2bec7fd
+  (submit); lane VERDICT ACCEPT + CLOSEOUT in tasks/review-006/.

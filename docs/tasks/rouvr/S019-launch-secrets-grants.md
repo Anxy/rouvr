@@ -63,3 +63,14 @@ Related components: scripts/rouvr, rouvr/gitops.py (gh_token, clone_env,
 
 - AC: `ROUVR_SPEC_REPO`/`ROUVR_SPEC_BASE` override the scratch defaults.
 - Tests-first: script static test.
+
+## 6. Closeout Report
+
+- Review: APPROVED by reviewer (rouvr-lane review-006, AGENTS.md rule 15).
+- Verification: gates at 2bec7fd — tests/ 289 passed; broad set 383 passed,
+  2 skipped (1 temporalio flake cleared on isolation + re-run); hygiene
+  clean; lifecycle valid; diff lifecycle-JSON-only.
+- Ledger: needs_review → closeout (review) → done (closeout), 2026-10-31;
+  INDEX companions regenerated.
+- Evidence: 68ba6e0 (scope) + b6a50cf (sheet landed) + 2bec7fd (submit);
+  lane VERDICT ACCEPT + CLOSEOUT in tasks/review-006/.

@@ -40,3 +40,14 @@ schema and none is planned: each task carries acceptance criteria and its
 rework state is visible in task state (`open → claimed → needs_review →
 done/blocked`), not in a `changes_required` state (request_changes loops to
 the coder). This sheet records the decision so G6 stays closed.
+
+## 5. Closeout Report
+
+- Review: APPROVED by reviewer (rouvr-lane review-006, AGENTS.md rule 15).
+- Verification: gates at 2bec7fd — tests/ 289 passed; broad set 383 passed,
+  2 skipped (1 temporalio flake cleared on isolation + re-run); hygiene
+  clean; lifecycle valid; diff lifecycle-JSON-only.
+- Ledger: needs_review → closeout (review) → done (closeout), 2026-10-31;
+  INDEX companions regenerated.
+- Evidence: 68ba6e0 (scope) + b6a50cf (sheet landed) + 2bec7fd (submit);
+  lane VERDICT ACCEPT + CLOSEOUT in tasks/review-006/.

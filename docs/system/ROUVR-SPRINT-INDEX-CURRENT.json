@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-10-31T09:20:28.050404+00:00",
+  "generated_at": "2026-10-31T10:34:27.680108+00:00",
   "counts": {
     "PASS": 10,
     "RUNNING": 3
@@ -167,7 +167,7 @@
       "goal": "Clean block path, hidden suite at create, reviewer fresh clone, per-tick schedule ids, hygiene.",
       "sprint_file": "docs/tasks/rouvr/S017-loop-integrity-fixes.md",
       "status": "RUNNING",
-      "commit": "443d715+uncommitted",
+      "commit": "68ba6e0",
       "confidence": "medium",
       "tasks": [
         "17.1 Single-attempt escalate",
@@ -186,7 +186,7 @@
       "goal": "OpsTaskWorkflow, Meta judge, standing grants (plan only).",
       "sprint_file": "docs/tasks/rouvr/S018-story-gaps-queued.md",
       "status": "RUNNING",
-      "commit": "443d715+uncommitted",
+      "commit": "68ba6e0",
       "confidence": "medium",
       "tasks": [
         "T3 OpsTaskWorkflow",
@@ -201,7 +201,7 @@
       "goal": "No stack-wide secrets; grants revoked at close; spec path configurable.",
       "sprint_file": "docs/tasks/rouvr/S019-launch-secrets-grants.md",
       "status": "RUNNING",
-      "commit": "443d715+uncommitted",
+      "commit": "68ba6e0",
       "confidence": "medium",
       "tasks": [
         "19.1 Scoped launch secrets",

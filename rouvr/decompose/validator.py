@@ -15,8 +15,12 @@ A task is valid only if: it parses; allowed/pinned paths do not overlap
 runs on the current head all FAIL as assertions with identical detail
 (a verifier that passes on baseline is hollow; disagreement is flaky).
 
-Usage: python rouvr/decompose/validator.py roadmap.json [--runs N]
+Usage: python rouvr/decompose/validator.py roadmap.json [--runs N] [--expect fail|pass]
 Exit 0 iff every task is valid and every requirement is covered.
+--expect fail (default): the TDD gate — verifiers must fail as assertions,
+  unanimously, proving they catch the bug before the fix.
+--expect pass: the completion gate — verifiers must pass unanimously,
+  proving the work is done and deterministic.
 """
 
 from __future__ import annotations
@@ -145,7 +149,8 @@ def paths_overlap(allowed: list, pinned: list) -> str | None:
     return None
 
 
-def validate_task(task: dict, requirement_ids: set[str], root: Path, runs: int = RUNS) -> tuple[bool, list[str]]:
+def validate_task(task: dict, requirement_ids: set[str], root: Path,
+                  runs: int = RUNS, expect: str = "fail") -> tuple[bool, list[str]]:
     problems: list[str] = []
     try:
         node = parse_verifier(task.get("verifier"))
@@ -161,23 +166,28 @@ def validate_task(task: dict, requirement_ids: set[str], root: Path, runs: int =
         return False, problems
     results = [run_verifier(node, root) for _ in range(runs)]
     outcomes = {r[0] for r in results}
+    details = {d for _, d in results}
+    if expect == "pass":
+        if outcomes == {"PASS"} and len(details) == 1:
+            return True, [f"passes x{runs}, unanimous: {results[0][1][:160]}"]
+        return False, [f"not-green: {results}"]
     if outcomes == {"PASS"}:
         return False, ["hollow: verifier passes on the current head"]
     if "ERROR" in outcomes:
         return False, [f"error-class: {sorted({d for o, d in results if o == 'ERROR'})}"]
-    if outcomes != {"FAIL_ASSERT"} or len({d for _, d in results}) != 1:
+    if outcomes != {"FAIL_ASSERT"} or len(details) != 1:
         return False, [f"flaky: {results}"]
     if task.get("verifier_fails_on_head") != "assertion":
         return False, ["contract: verifier_fails_on_head must be 'assertion'"]
     return True, [f"fails-as-assertion x{runs}, unanimous: {results[0][1][:160]}"]
 
 
-def validate_doc(doc: dict, root: Path, runs: int = RUNS) -> tuple[bool, dict]:
+def validate_doc(doc: dict, root: Path, runs: int = RUNS, expect: str = "fail") -> tuple[bool, dict]:
     requirement_ids = {r["id"] for r in doc.get("requirements", [])}
     report: dict = {"tasks": {}, "coverage": []}
     ok = True
     for task in doc.get("tasks", []):
-        valid, notes = validate_task(task, requirement_ids, root, runs)
+        valid, notes = validate_task(task, requirement_ids, root, runs, expect)
         report["tasks"][task.get("id", "?")] = {"valid": valid, "notes": notes}
         ok = ok and valid
     covered: dict[str, list] = {}
@@ -197,15 +207,26 @@ def validate_doc(doc: dict, root: Path, runs: int = RUNS) -> tuple[bool, dict]:
 
 def main(argv: list[str]) -> int:
     if len(argv) < 2:
-        print("usage: validator.py roadmap.json [--runs N]", file=sys.stderr)
+        print("usage: validator.py roadmap.json [--runs N] [--expect fail|pass]", file=sys.stderr)
         return 2
-    runs = RUNS
-    if len(argv) > 3 and argv[2] == "--runs":
-        runs = int(argv[3])
+    runs, expect = RUNS, "fail"
+    rest = list(argv[2:])
+    while rest:
+        flag = rest.pop(0)
+        if flag == "--runs":
+            runs = int(rest.pop(0))
+        elif flag == "--expect":
+            expect = rest.pop(0)
+            if expect not in ("fail", "pass"):
+                print("validator ERROR: --expect must be fail|pass", file=sys.stderr)
+                return 2
+        else:
+            print(f"validator ERROR: unknown flag {flag}", file=sys.stderr)
+            return 2
     try:
         doc = json.loads(Path(argv[1]).read_text())
         root = repo_root()
-        ok, report = validate_doc(doc, root, runs)
+        ok, report = validate_doc(doc, root, runs, expect)
     except (OSError, ValueError, VerifierParseError) as e:
         print(f"validator ERROR: {e}", file=sys.stderr)
         return 2

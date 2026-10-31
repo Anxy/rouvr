@@ -90,6 +90,11 @@ def workhub_create_task(title: str, description: str, acceptance_criteria: list[
     from rouvr.hiddentests import write_hidden_suite
 
     files = _author_hidden_suite(acceptance_criteria)  # fail closed before any ledger write
+    try:
+        candidate = _decompose_brief(title, description, acceptance_criteria)
+        decomposition: dict = {"status": "enriched", "candidate": candidate}
+    except Exception as e:  # enrichment is best-effort; the suite stays fail-closed
+        decomposition = {"status": "skipped", "reason": f"{type(e).__name__}: {e}"[:200]}
     with _ledger() as c:
         task = c.post("/v1/tasks_with_contract", json={
             "title": title, "intent": "supervisor", "contract": {
@@ -98,6 +103,9 @@ def workhub_create_task(title: str, description: str, acceptance_criteria: list[
         task = c.get(f"/v1/tasks/{task['id']}").raise_for_status().json()
         if (w := _prose_warnings(description, acceptance_criteria)):
             task["warnings"] = w
+        c.post(f"/v1/tasks/{task['id']}/evidence",
+               json={"kind": "decomposition", "fence": f"{task['id']}:decompose",
+                     "body": decomposition}).raise_for_status()
     root = Path(os.environ.get("HIDDEN_TESTS_ROOT", "/srv/rouvr/hidden-tests"))
     if files:
         try:
@@ -106,6 +114,19 @@ def workhub_create_task(title: str, description: str, acceptance_criteria: list[
             if "locked" not in str(e).lower():
                 raise
     return task
+
+
+def _decompose_brief(title: str, description: str, criteria: list[str]) -> dict:
+    """Enrich a creation brief into a v1.3 candidate (S021).
+
+    Override point for tests: monkeypatch rouvr.mcp_server._decompose_brief.
+    Runs the real decompose_brief model call; the coder stays blind (the
+    candidate lands as task evidence, never in the workspace).
+    """
+    from rouvr.decompose import decompose_brief
+    brief = (f"Title: {title}\nDescription: {description}\nAcceptance criteria:\n"
+             + "\n".join(f"- {c}" for c in criteria))
+    return decompose_brief(brief)
 
 
 def _escalation_reason(evidence: list | None) -> str:

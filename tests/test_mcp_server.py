@@ -252,3 +252,45 @@ def test_mcp_http_auth_gate(monkeypatch):
     monkeypatch.delenv("ROUVR_ALLOW_ANON", raising=False)
     with pytest.raises(RuntimeError, match="ROUVR_LEDGER_TOKEN"):
         ms._mcp_http_auth()
+
+
+def test_create_attaches_decomposition_evidence(monkeypatch, ledger_url, tmp_path):
+    """T21.5: create calls the decomposer; enrichment recorded, coder blind."""
+    monkeypatch.setenv("WORKHUB_BASE_URL", ledger_url)
+    monkeypatch.setenv("HIDDEN_TESTS_ROOT", str(tmp_path / "hidden"))
+    import importlib
+    import rouvr.mcp_server as ms
+    importlib.reload(ms)
+    _inject_fake_author(monkeypatch, ms)
+    candidate = {"requirements": [{"id": "R1", "text": "t", "source_ref": "s"}],
+                 "tasks": [{"id": "T1"}], "coverage_ledger": {"R1": ["T1"]},
+                 "dropped_content": []}
+    monkeypatch.setattr(ms, "_decompose_brief", lambda *a: candidate)
+    task = ms.workhub_create_task("t-decomp", "do the thing", ["returns 200"])
+    detail = ms.workhub_show_task(task["id"])
+    kinds = [e.get("kind") for e in detail.get("evidence") or []]
+    assert "decomposition" in kinds
+    bodies = [e.get("body") for e in detail.get("evidence") or []
+              if e.get("kind") == "decomposition"]
+    assert bodies and bodies[0].get("status") == "enriched"
+    assert bodies[0]["candidate"] == candidate
+
+
+def test_create_records_skipped_decomposition_without_model(monkeypatch, ledger_url, tmp_path):
+    """T21.5: no model for decompose -> recorded skip, suite still enforced."""
+    monkeypatch.setenv("WORKHUB_BASE_URL", ledger_url)
+    monkeypatch.setenv("HIDDEN_TESTS_ROOT", str(tmp_path / "hidden"))
+    monkeypatch.setenv("ROUVR_MODEL_PROVIDER", "stub")
+    import importlib
+    import rouvr.mcp_server as ms
+    importlib.reload(ms)
+    _inject_fake_author(monkeypatch, ms)
+
+    def boom(*a):
+        raise RuntimeError("no model")
+    monkeypatch.setattr(ms, "_decompose_brief", boom)
+    task = ms.workhub_create_task("t-decomp-skip", "d", ["c1"])
+    detail = ms.workhub_show_task(task["id"])
+    bodies = [e.get("body") for e in detail.get("evidence") or []
+              if e.get("kind") == "decomposition"]
+    assert bodies and bodies[0].get("status") == "skipped"

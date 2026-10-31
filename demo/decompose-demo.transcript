@@ -1,0 +1,25 @@
+BEAT 1: a good split validates
+T1: valid
+  - fails-as-assertion x3, unanimous: /tmp/demo-never-created absent; /tmp/tmp.LHRNW9Hjkj/demofix/test_good.py::test_ok_addition: 1 failed
+roadmap VALID
+BEAT 2: a hollow verifier is rejected
+T1: INVALID
+  - hollow: verifier passes on the current head
+roadmap INVALID
+BEAT 3: a pinned-path edit fails the run gate
+{
+ "head_sha": "c5ccc475772e00342886bb458e63e8e1c18dd778",
+ "task": "T",
+ "verdict": "fail",
+ "reason": "nothing-here absent; pinned touched: ['pinned_test.py']",
+ "bundle_hashes": {},
+ "pinned_touched": [
+  "pinned_test.py"
+ ],
+ "changed": [
+  "pinned_test.py"
+ ]
+}
+BEAT 4: green children plus a red parent flag DECOMPOSITION_FAILURE
+DECOMPOSITION_FAILURE - re-decompose
+demo complete: good split valid; hollow rejected; pinned edit failed; non-composing split flagged

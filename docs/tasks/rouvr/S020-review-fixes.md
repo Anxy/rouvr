@@ -118,4 +118,6 @@ docs/tasks/rouvr/S017-loop-integrity-fixes.md (one known_gaps line)
 
 ## 7. Closeout Report
 
-(Reviewer fills at closeout per guidelines.)
+SPRINT CLOSEOUT REPORT — S020: PASS (scribed from review-008 VERDICT ACCEPT + CLOSEOUT, 2026-10-31).
+Implementation: F1 test_author hook + refusal, F2a compose sqlite, F2b token gate, F3 inbox reasons, F6 doc sync, F7 coding-only docs; F5/F8/F4/F9/F10 deferred per sheet §4.
+Verification: at ca53884 — tests/ 295 passed; broad set 389 passed, 2 skipped; hygiene clean; lifecycle valid. Ledger review approved + closeout recorded with review-008 as authority. No code beyond the sheet scope.

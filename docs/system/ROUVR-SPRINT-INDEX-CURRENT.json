@@ -1,7 +1,7 @@
 {
-  "generated_at": "2026-10-31T11:12:52.350010+00:00",
+  "generated_at": "2026-10-31T12:05:25.544629+00:00",
   "counts": {
-    "PASS": 19
+    "PASS": 20
   },
   "sprints": [
     {
@@ -278,7 +278,7 @@
         "17.5 Hygiene small"
       ],
       "known_gaps": [
-        "T3/T4/T5 queued in S018; risks (secrets, host coder) noted not fixed."
+        "T3/T4/T5 shipped in S018; secrets scoped in S019; host-coder default remains an explicit documented choice."
       ]
     },
     {
@@ -311,6 +311,28 @@
       ],
       "known_gaps": [
         "Coder still host-run (shortcut); api-token 0600 residual."
+      ]
+    },
+    {
+      "id": "S020",
+      "title": "Review-10-31 trust + packaging fixes (F1/F2/F3/F6/F7)",
+      "goal": "Real hidden suites, compose sqlite, fail-closed MCP token, inbox reasons, docs sync.",
+      "sprint_file": "docs/tasks/rouvr/S020-review-fixes.md",
+      "status": "PASS",
+      "commit": "ca53884",
+      "confidence": "medium",
+      "tasks": [
+        "20.1 Real hidden suites or refusal",
+        "20.2 Compose sqlite ledger",
+        "20.3 MCP token fail-closed",
+        "20.4 Inbox escalation reasons",
+        "20.5 Docs sync",
+        "20.6 Schedules documented coding-only"
+      ],
+      "known_gaps": [
+        "F5 default-container (post-demo per review)",
+        "F8 machine defaults (dev ergonomics)",
+        "F4/F9/F10 live Meta / real WorkHub / recordings (owner/external)"
       ]
     }
   ]

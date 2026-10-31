@@ -1411,13 +1411,22 @@
     {
       "id": "S020",
       "file": "docs/tasks/rouvr/S020-review-fixes.md",
-      "state": "needs_review",
+      "state": "done",
       "worker": "coder-1",
       "supervisor": null,
       "depends_on": [
         "S019"
       ],
-      "cycles": [],
+      "cycles": [
+        {
+          "round": 1,
+          "verdict": "approved",
+          "at": "2026-10-31",
+          "by": "supervisor",
+          "comment": "review-008 VERDICT ACCEPT (2026-10-31) + CLOSEOUT; user standing order (sprint complete on reviewer ACCEPT); coder transcribes as scribe, claimant never self-reviews",
+          "ref": "review"
+        }
+      ],
       "history": [
         {
           "state": "queued",
@@ -1436,12 +1445,36 @@
           "at": "2026-10-31",
           "by": "worker",
           "ref": "tests"
+        },
+        {
+          "state": "closeout",
+          "at": "2026-10-31",
+          "by": "supervisor",
+          "ref": "review"
+        },
+        {
+          "state": "done",
+          "at": "2026-10-31",
+          "by": "supervisor",
+          "ref": "closeout"
         }
       ],
       "claimed_at": "2026-10-31",
       "pre_task": "IMPLEMENTATION+docs; bounded scope: mcp_server author hook, compose URL, token gate, waiting json.loads, doc sync; tests-first per task",
       "tests": "tests/ 295 passed (6 new: author refusal, malformed author, inbox reason, token gate, compose sqlite, schedule doc); broad set 389 passed 2 skipped; hygiene clean",
-      "evidence": "F1 author-or-refuse hook (no placeholders, coder blind); F2a compose sqlite + dropped db dep; F2b token gate; F3 waiting json.loads; F6 doc sync; F7 coding-only docs"
+      "evidence": "F1 author-or-refuse hook (no placeholders, coder blind); F2a compose sqlite + dropped db dep; F2b token gate; F3 waiting json.loads; F6 doc sync; F7 coding-only docs",
+      "review": {
+        "verdict": "approve",
+        "at": "2026-10-31",
+        "by": "supervisor",
+        "ref": "review"
+      },
+      "verification": "Re-ran at ca53884: tests/ 295 passed; broad set 389 passed 2 skipped; hygiene clean; validator valid (20 sprints)",
+      "closeout": {
+        "at": "2026-10-31",
+        "by": "supervisor",
+        "ref": "rouvr/rouvr-lane/tasks/review-008/CLOSEOUT.md"
+      }
     }
   ]
 }

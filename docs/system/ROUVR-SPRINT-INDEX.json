@@ -314,8 +314,8 @@
       "title": "Review-10-31 trust + packaging fixes (F1/F2/F3/F6/F7)",
       "goal": "Real hidden suites, compose sqlite, fail-closed MCP token, inbox reasons, docs sync.",
       "sprint_file": "docs/tasks/rouvr/S020-review-fixes.md",
-      "status": "RUNNING",
-      "commit": "3ab4af0+uncommitted",
+      "status": "PASS",
+      "commit": "ca53884",
       "confidence": "medium",
       "tasks": [
         "20.1 Real hidden suites or refusal",

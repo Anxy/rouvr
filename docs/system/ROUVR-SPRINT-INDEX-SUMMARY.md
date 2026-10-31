@@ -1,6 +1,6 @@
 # Rouvr sprint index summary
 
-Generated from `ROUVR-SPRINT-INDEX.json` — 19 sprints.
+Generated from `ROUVR-SPRINT-INDEX.json` — 20 sprints.
 
 | ID | Title | Status | Confidence | Known gaps |
 |----|-------|--------|------------|------------|
@@ -20,6 +20,7 @@ Generated from `ROUVR-SPRINT-INDEX.json` — 19 sprints.
 | S014 | Indexed evidence dedupe and WAL-mode ledger | PASS | medium | Retrospective registration 2026-10-31: scope verified present at e2b493c with green gates; no contemporaneous ledger record; sheet SS11 PASS closeout stands as the review record. |
 | S015 | Crash-recovery test, repo slimming decision, task cost visibility | PASS | medium | Retrospective registration 2026-10-31: scope verified present at e2b493c with green gates; no contemporaneous ledger record; sheet SS11 PASS closeout stands as the review record. |
 | S016 | Saved user profiles, per-user WorkHub tokens, and task ownership | PASS | medium | Retrospective registration 2026-10-31: scope verified present at e2b493c with green gates; no contemporaneous ledger record; sheet SS11 PASS closeout stands as the review record. |
-| S017 | Loop-integrity fixes (review-004 item 4 + T1/T2/T6/T7-small) | PASS | medium | T3/T4/T5 queued in S018; risks (secrets, host coder) noted not fixed. |
+| S017 | Loop-integrity fixes (review-004 item 4 + T1/T2/T6/T7-small) | PASS | medium | T3/T4/T5 shipped in S018; secrets scoped in S019; host-coder default remains an explicit documented choice. |
 | S018 | Governed ops + story gaps (queued) | PASS | medium | — |
 | S019 | Scoped stack secrets, grant revocation, spec path config | PASS | medium | Coder still host-run (shortcut); api-token 0600 residual. |
+| S020 | Review-10-31 trust + packaging fixes (F1/F2/F3/F6/F7) | PASS | medium | F5 default-container (post-demo per review); F8 machine defaults (dev ergonomics); F4/F9/F10 live Meta / real WorkHub / recordings (owner/external) |

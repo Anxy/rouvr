@@ -1479,7 +1479,7 @@
     {
       "id": "S021",
       "file": "docs/tasks/rouvr/S021-decomposer-lite.md",
-      "state": "running",
+      "state": "needs_review",
       "worker": "coder-1",
       "supervisor": null,
       "depends_on": [
@@ -1498,10 +1498,18 @@
           "at": "2026-10-31",
           "by": "worker",
           "ref": "claim"
+        },
+        {
+          "state": "needs_review",
+          "at": "2026-10-31",
+          "by": "worker",
+          "ref": "tests"
         }
       ],
       "claimed_at": "2026-10-31",
-      "pre_task": "IMPLEMENTATION; STEP 1 roadmap.json plus validator dogfood, STEP 2 run gate plus parent plus decompose plus demo; tests-first"
+      "pre_task": "IMPLEMENTATION; STEP 1 roadmap.json plus validator dogfood, STEP 2 run gate plus parent plus decompose plus demo; tests-first",
+      "tests": "tests/test_decompose.py 9 passed; tests/ 305 passed +1 flake green-alone; broad 400 passed 2 skipped",
+      "evidence": "commit 2edbf0a; validator fail-mode T3 FAIL_ASSERT-x3 valid; pass-mode T1,T2,T4,T5,T6 valid T3 INVALID(tree-confinement, stay-outs+sibling files); demo exit 0 + transcript; hygiene clean; lifecycle valid(21)"
     }
   ]
 }

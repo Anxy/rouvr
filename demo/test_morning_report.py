@@ -7,7 +7,14 @@ def demo(tmp_path, monkeypatch):
     monkeypatch.setenv("ROUVR_DEMO_OUTBOX", str(tmp_path / "outbox"))
     monkeypatch.setenv("ROUVR_LEDGER_DATABASE_URL", f"sqlite:///{tmp_path}/d.db")
     monkeypatch.setenv("ROUVR_MODEL_PROVIDER", "stub")
+    monkeypatch.setenv("ROUVR_TENANT_ID", "acme")
+    monkeypatch.setenv("ROUVR_PROJECT_ID", "site")
     monkeypatch.delenv("ROUVR_INJECT", raising=False)
+    from fastapi.testclient import TestClient
+    from ledger.app import make_app
+    with TestClient(make_app(f"sqlite:///{tmp_path}/d.db")) as c:
+        c.post("/v1/tenants", json={"tenant": "acme"})
+        c.post("/v1/projects", json={"tenant": "acme", "project": "site"})
     import demo.morning_report as m
     return importlib.reload(m), tmp_path
 

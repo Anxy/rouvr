@@ -24,7 +24,11 @@ def ops_env(tmp_path, monkeypatch):
     monkeypatch.delenv("ROUVR_LEDGER_URL", raising=False)
     monkeypatch.delenv("ROUVR_INJECT", raising=False)
     import demo.morning_report as m
-    return importlib.reload(m), tmp_path
+    m = importlib.reload(m)
+    c = m.ledger_client(None)  # S022: register the partition ops tasks run inside
+    c.post("/v1/tenants", json={"tenant": "acme"}).raise_for_status()
+    c.post("/v1/projects", json={"tenant": "acme", "project": "site"}).raise_for_status()
+    return m, tmp_path
 
 
 @pytest.fixture
@@ -36,7 +40,7 @@ def acts():
 
 def _run_key_in():
     from rouvr.contracts import OpsInput
-    return OpsInput(RUN_KEY, INSTRUCTION)
+    return OpsInput(RUN_KEY, INSTRUCTION, "acme", "site")
 
 
 async def _full_flow(acts, inp):
@@ -291,7 +295,7 @@ async def test_ops_workflow_done_digest(env, ops_env):
                                 _op_verify, _op_close, _op_block])
     async with worker:
         r = await env.client.execute_workflow(
-            OpsTaskWorkflow.run, OpsInput(RUN_KEY, INSTRUCTION),
+            OpsTaskWorkflow.run, OpsInput(RUN_KEY, INSTRUCTION, "acme", "site"),
             id=str(uuid.uuid4()), task_queue=Q_ORCH)
     assert r.state == "done" and r.digest == "Done. No action needed."
 

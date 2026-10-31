@@ -86,6 +86,8 @@ class CloseResult:
 class OpsInput:
     run_key: str  # e.g. morning-report:2026-10-30, the idempotency scope
     instruction: str
+    tenant: str  # S022: partition scope, mandatory, no default
+    project: str  # S022: partition scope, mandatory, no default
 
 
 @dataclass

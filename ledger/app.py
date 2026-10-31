@@ -4,7 +4,8 @@ Durable tasks, done-contracts, evidence and idempotent receipts over SQL.
 Set ROUVR_LEDGER_DATABASE_URL to a sqlite:/// URL or it defaults to a
 local SQLite file. SQLite only: a postgres URL fails fast in make_app
 (the schema and lastrowid usage are SQLite-specific). Not hardened:
-no auth beyond tokens, no multi-tenancy.
+no auth beyond tokens. Tenants own projects own tasks (S022 partitions);
+both scope fields are mandatory on every create, never defaulted.
 """
 from __future__ import annotations
 
@@ -61,6 +62,28 @@ def make_app(db_url: str = DB_URL) -> FastAPI:
         cols = [r[1] for r in c.execute(text("PRAGMA table_info(tasks)"))]
         if cols and "created_by" not in cols:
             c.execute(text("ALTER TABLE tasks ADD COLUMN created_by TEXT NOT NULL DEFAULT 'supervisor'"))
+    # S022 partitions on pre-S022 databases: new tables plus scope columns.
+    # No silent backfill — unscoped rows refuse startup with an explicit
+    # assignment message instead of a default.
+    with eng.begin() as c:
+        c.execute(text("CREATE TABLE IF NOT EXISTS tenants(tenant TEXT PRIMARY KEY,"
+                       " created_at TEXT NOT NULL)"))
+        c.execute(text("CREATE TABLE IF NOT EXISTS projects(tenant TEXT NOT NULL REFERENCES tenants(tenant),"
+                       " project TEXT NOT NULL, created_at TEXT NOT NULL,"
+                       " PRIMARY KEY (tenant, project))"))
+        tcols = [r[1] for r in c.execute(text("PRAGMA table_info(tasks)"))]
+        for col in ("tenant", "project"):
+            if tcols and col not in tcols:
+                c.execute(text(f"ALTER TABLE tasks ADD COLUMN {col} TEXT"))
+        ucols = [r[1] for r in c.execute(text("PRAGMA table_info(users)"))]
+        if ucols and "tenant" not in ucols:
+            c.execute(text("ALTER TABLE users ADD COLUMN tenant TEXT"))
+    with eng.begin() as c:  # begin: the receipts migration below must commit
+        n = c.execute(text("SELECT COUNT(*) FROM tasks WHERE tenant IS NULL OR tenant=''"
+                           " OR project IS NULL OR project=''")).scalar()
+        if n:
+            raise ValueError(f"ledger has {n} task(s) without tenant/project scope: assign scope"
+                             " explicitly (no defaults); refusing to serve unpartitioned rows")
         if db_url.startswith("sqlite"):
             rsql = c.execute(text("SELECT sql FROM sqlite_master WHERE type='table' AND name='receipts'")).scalar()
             norm = "".join((rsql or "").lower().split())
@@ -75,10 +98,11 @@ def make_app(db_url: str = DB_URL) -> FastAPI:
                 c.execute(text("DROP TABLE receipts"))
                 c.execute(text("ALTER TABLE receipts_new RENAME TO receipts"))
 
-    # Token auth (S011 + S016): the shared stack token authenticates as
-    # "supervisor" (stack/worker identity, sees all). A per-user token
-    # authenticates as that user and is scoped to their own tasks.
-    # Unset shared token = open dev mode (identity supervisor).
+    # Token auth (S011 + S016, partitions S022): the shared stack token
+    # authenticates as "supervisor" (stack/worker identity, sees all). A
+    # per-user token authenticates as that user, scoped to exactly its
+    # own tenant's projects and tasks. Unset shared token = open dev
+    # mode (identity supervisor).
     _token = os.environ.get("ROUVR_LEDGER_TOKEN", "")
 
     @app.middleware("http")
@@ -104,11 +128,37 @@ def make_app(db_url: str = DB_URL) -> FastAPI:
     def _identity(request) -> str:
         return getattr(request.state, "user", "supervisor")
 
+    def _tenant_of(c, identity: str | None) -> str | None:
+        """Caller tenant: supervisor (stack) sees all tenants; a user sees
+        exactly its own tenant. Fail closed when the user has no tenant."""
+        if identity == "supervisor":
+            return None
+        u = row(c, "SELECT tenant FROM users WHERE username=:u", u=identity)
+        if not u or not u.get("tenant"):
+            raise HTTPException(403, f"no tenant assigned to {identity}")
+        return u["tenant"]
+
+    def _scope(body: dict) -> tuple[str, str]:
+        """Mandatory separate scope fields (S022): blank/missing/non-string refused."""
+        tenant, project = body.get("tenant"), body.get("project")
+        if not isinstance(tenant, str) or not tenant.strip():
+            raise HTTPException(422, "tenant is required")
+        if not isinstance(project, str) or not project.strip():
+            raise HTTPException(422, "project is required")
+        return tenant.strip(), project.strip()
+
+    def _registered(c, tenant: str, project: str) -> dict:
+        p = row(c, "SELECT * FROM projects WHERE tenant=:t AND project=:p", t=tenant, p=project)
+        if not p:
+            raise HTTPException(404, f"project not registered: create tenant {tenant!r},"
+                                    f" then project {project!r}, before adding tasks")
+        return p
+
     def _own_or_stack(c, tid, identity):
-        """403 for a user touching another user's task (S016)."""
+        """403 for a caller outside the task's tenant (S022 partition)."""
         t = task_or_404(c, tid)
-        if identity != "supervisor" and (t.get("created_by") or "supervisor") != identity:
-            raise HTTPException(403, f"task owned by {t.get('created_by') or 'supervisor'}")
+        if identity != "supervisor" and t.get("tenant") != _tenant_of(c, identity):
+            raise HTTPException(403, f"task in tenant {t.get('tenant')!r}")
         return t
 
     def _stack_only(identity):
@@ -133,22 +183,69 @@ def make_app(db_url: str = DB_URL) -> FastAPI:
     def create_user(body: dict, request: Request):
         _stack_only(_identity(request))
         name = str(body.get("username") or "").strip()
+        tenant = body.get("tenant")
         if not name or not body.get("token_hash"):
             raise HTTPException(422, "username and token_hash are required")
+        if not isinstance(tenant, str) or not tenant.strip():
+            raise HTTPException(422, "tenant is required")  # S022: no default tenant
         with eng.begin() as c:
-            c.execute(text("INSERT INTO users(username,display_name,token_hash,created_at)"
-                           " VALUES(:u,:d,:h,:n) ON CONFLICT(username) DO UPDATE SET"
-                           " token_hash=:h, display_name=:d, disabled=0"),
+            c.execute(text("INSERT INTO users(username,display_name,token_hash,tenant,created_at)"
+                           " VALUES(:u,:d,:h,:t,:n) ON CONFLICT(username) DO UPDATE SET"
+                           " token_hash=:h, display_name=:d, tenant=:t, disabled=0"),
                       {"u": name, "d": body.get("display_name", ""), "h": body["token_hash"],
-                       "n": _now()})
-            return row(c, "SELECT username, display_name, disabled, created_at FROM users WHERE username=:u", u=name)
+                       "t": tenant.strip(), "n": _now()})
+            return row(c, "SELECT username, display_name, tenant, disabled, created_at"
+                          " FROM users WHERE username=:u", u=name)
 
     @app.get("/v1/users")
     def list_users(request: Request):
         _stack_only(_identity(request))
         with eng.begin() as c:
             return {"items": [dict(r) for r in c.execute(
-                text("SELECT username, display_name, disabled, created_at FROM users ORDER BY username")).mappings()]}
+                text("SELECT username, display_name, tenant, disabled, created_at"
+                     " FROM users ORDER BY username")).mappings()]}
+
+    @app.post("/v1/tenants")
+    def create_tenant(body: dict, request: Request):
+        """Register a tenant explicitly (S022). Idempotent: returns the row."""
+        _stack_only(_identity(request))
+        name = body.get("tenant")
+        if not isinstance(name, str) or not name.strip():
+            raise HTTPException(422, "tenant is required")
+        with eng.begin() as c:
+            c.execute(text("INSERT INTO tenants(tenant,created_at) VALUES(:t,:n)"
+                           " ON CONFLICT(tenant) DO NOTHING"),
+                      {"t": name.strip(), "n": _now()})
+            return row(c, "SELECT * FROM tenants WHERE tenant=:t", t=name.strip())
+
+    @app.post("/v1/projects")
+    def create_project(body: dict, request: Request):
+        """Register a project under an existing tenant (S022). Idempotent."""
+        _stack_only(_identity(request))
+        tenant, project = _scope(body)
+        with eng.begin() as c:
+            if not row(c, "SELECT * FROM tenants WHERE tenant=:t", t=tenant):
+                raise HTTPException(404, f"tenant not registered: create {tenant!r} first")
+            c.execute(text("INSERT INTO projects(tenant,project,created_at) VALUES(:t,:p,:n)"
+                           " ON CONFLICT(tenant,project) DO NOTHING"),
+                      {"t": tenant, "p": project, "n": _now()})
+            return row(c, "SELECT * FROM projects WHERE tenant=:t AND project=:p",
+                       t=tenant, p=project)
+
+    @app.get("/v1/projects")
+    def list_projects(request: Request, tenant: str | None = None):
+        """Projects visible to the caller: its own tenant, or all for stack."""
+        ident = _identity(request)
+        with eng.begin() as c:
+            mine = _tenant_of(c, ident)
+            want = mine if mine is not None else tenant
+            q = "SELECT tenant, project FROM projects"
+            kw: dict = {}
+            if want:
+                q += " WHERE tenant=:t"
+                kw["t"] = want
+            rows = [dict(r) for r in c.execute(text(q + " ORDER BY tenant, project"), kw).mappings()]
+            return {"projects": rows}
 
     @app.post("/v1/users/{username}/disable")
     def disable_user(username: str, request: Request):
@@ -159,12 +256,18 @@ def make_app(db_url: str = DB_URL) -> FastAPI:
 
     @app.post("/v1/tasks")
     def create_task(body: dict, request: Request):
+        ident = _identity(request)
+        tenant, project = _scope(body)  # S022: mandatory, never defaulted
         with eng.begin() as c:
+            _registered(c, tenant, project)
+            if _tenant_of(c, ident) not in (None, tenant):
+                raise HTTPException(403, f"task in tenant {tenant!r}")
             n = _now()
-            rid = c.execute(text("INSERT INTO tasks(title,intent,state,created_at,updated_at,created_by)"
-                                 " VALUES(:t,:i,'open',:n,:n,:by)"),
+            rid = c.execute(text("INSERT INTO tasks(title,intent,state,created_at,updated_at,created_by,"
+                                 "tenant,project)"
+                                 " VALUES(:t,:i,'open',:n,:n,:by,:tn,:p)"),
                             {"t": body.get("title", ""), "i": body.get("intent", ""), "n": n,
-                             "by": _identity(request)}).lastrowid
+                             "by": ident, "tn": tenant, "p": project}).lastrowid
             return row(c, "SELECT * FROM tasks WHERE id=:i", i=rid)
 
     def _int_field(body: dict, field: str, default=None):
@@ -189,12 +292,18 @@ def make_app(db_url: str = DB_URL) -> FastAPI:
         ac = contract.get("acceptance_criteria") if isinstance(contract, dict) else None
         if not isinstance(ac, list) or not ac or not all(isinstance(x, str) and x.strip() for x in ac):
             raise HTTPException(422, "contract with acceptance_criteria is required")
+        ident = _identity(request)
+        tenant, project = _scope(body)  # S022: mandatory, never defaulted
         with eng.begin() as c:
+            _registered(c, tenant, project)
+            if _tenant_of(c, ident) not in (None, tenant):
+                raise HTTPException(403, f"task in tenant {tenant!r}")
             n = _now()
-            rid = c.execute(text("INSERT INTO tasks(title,intent,state,created_at,updated_at,created_by)"
-                                 " VALUES(:t,:i,'open',:n,:n,:by)"),
+            rid = c.execute(text("INSERT INTO tasks(title,intent,state,created_at,updated_at,created_by,"
+                                 "tenant,project)"
+                                 " VALUES(:t,:i,'open',:n,:n,:by,:tn,:p)"),
                             {"t": body.get("title", ""), "i": body.get("intent", ""), "n": n,
-                             "by": _identity(request)}).lastrowid
+                             "by": ident, "tn": tenant, "p": project}).lastrowid
             s, h = _canon(contract)
             c.execute(text("INSERT INTO contracts(task_id,body,sha256,created_at) VALUES(:i,:b,:h,:n)"),
                       {"i": rid, "b": s, "h": h, "n": n})
@@ -204,15 +313,17 @@ def make_app(db_url: str = DB_URL) -> FastAPI:
             return t
 
     @app.get("/v1/tasks")
-    def list_tasks(request: Request, state: str | None = None):
+    def list_tasks(request: Request, state: str | None = None, tenant: str | None = None):
         ident = _identity(request)
         with eng.begin() as c:
+            mine = _tenant_of(c, ident)
+            want = mine if mine is not None else tenant  # S022: users see their own tenant
             q, kw = "SELECT * FROM tasks", {}
             conds = []
             if state:
                 conds.append("state=:s"); kw["s"] = state
-            if ident != "supervisor":  # S016: users see their own tasks by default
-                conds.append("created_by=:by"); kw["by"] = ident
+            if want:
+                conds.append("tenant=:t"); kw["t"] = want
             if conds:
                 q += " WHERE " + " AND ".join(conds)
             return {"items": [dict(r) for r in c.execute(text(q + " ORDER BY id"), kw).mappings()]}

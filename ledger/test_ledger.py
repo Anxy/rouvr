@@ -2,13 +2,19 @@ from fastapi.testclient import TestClient
 from ledger.app import make_app
 
 
+_SCOPE = {"tenant": "acme", "project": "site"}
+
+
 def _client(tmp_path):
-    return TestClient(make_app(f"sqlite:///{tmp_path}/l.db"))
+    c = TestClient(make_app(f"sqlite:///{tmp_path}/l.db"))
+    c.post("/v1/tenants", json={"tenant": "acme"})
+    c.post("/v1/projects", json={"tenant": "acme", "project": "site"})
+    return c
 
 
 def test_done_requires_contract_and_evidence_and_replay_is_idempotent(tmp_path):
     c = _client(tmp_path)
-    t = c.post("/v1/tasks", json={"title": "morning report", "intent": "send ops summary"}).json()
+    t = c.post("/v1/tasks", json={"title": "morning report", "intent": "send ops summary", "tenant": "acme", "project": "site"}).json()
     tid = t["id"]
     assert c.post(f"/v1/tasks/{tid}/transition", json={"to": "claimed", "idempotency_key": "k1"}).status_code == 200
     assert c.post(f"/v1/tasks/{tid}/transition", json={"to": "done", "idempotency_key": "k2"}).status_code == 409
@@ -24,7 +30,7 @@ def test_done_requires_contract_and_evidence_and_replay_is_idempotent(tmp_path):
 def test_create_with_contract_is_atomic_and_evidence_returns_own_row(tmp_path):
     c = _client(tmp_path)
     t = c.post("/v1/tasks_with_contract",
-               json={"title": "x", "intent": "y", "contract": {"checks": ["a"],
+               json={"title": "x", "intent": "y", "tenant": "acme", "project": "site", "contract": {"checks": ["a"],
                                                                 "acceptance_criteria": ["a"]}}).json()
     assert t["state"] == "open" and len(t["contracts"]) == 1
     e1 = c.post(f"/v1/tasks/{t['id']}/evidence", json={"kind": "k1", "body": {"n": 1}}).json()
@@ -34,7 +40,7 @@ def test_create_with_contract_is_atomic_and_evidence_returns_own_row(tmp_path):
 
 def test_illegal_transition_rejected(tmp_path):
     c = _client(tmp_path)
-    tid = c.post("/v1/tasks", json={"title": "x", "intent": "y"}).json()["id"]
+    tid = c.post("/v1/tasks", json={"title": "x", "intent": "y", "tenant": "acme", "project": "site"}).json()["id"]
     assert c.post(f"/v1/tasks/{tid}/transition", json={"to": "done", "idempotency_key": "a"}).status_code == 409
 
 
@@ -67,7 +73,7 @@ def _claim(c, tid, key, principal="coder-1", ttl=120):
 
 def test_second_reclaim_cycle_reexecutes(tmp_path):
     c = _client(tmp_path)
-    tid = c.post("/v1/tasks", json={"title": "x", "intent": "y"}).json()["id"]
+    tid = c.post("/v1/tasks", json={"title": "x", "intent": "y", "tenant": "acme", "project": "site"}).json()["id"]
     assert _claim(c, tid, "claim-1").status_code == 200
     for cycle in range(2):
         _expire_lease(tmp_path)
@@ -79,7 +85,7 @@ def test_second_reclaim_cycle_reexecutes(tmp_path):
 
 def test_claim_same_key_other_principal_conflicts(tmp_path):
     c = _client(tmp_path)
-    tid = c.post("/v1/tasks", json={"title": "x", "intent": "y"}).json()["id"]
+    tid = c.post("/v1/tasks", json={"title": "x", "intent": "y", "tenant": "acme", "project": "site"}).json()["id"]
     assert _claim(c, tid, "claim-1", "coder-1").status_code == 200
     assert _claim(c, tid, "claim-1", "coder-2").status_code == 409
     assert _claim(c, tid, "claim-1", "coder-1").json()["replayed"] is True  # same principal replays
@@ -87,7 +93,7 @@ def test_claim_same_key_other_principal_conflicts(tmp_path):
 
 def test_renew_replay_after_stored_lease_lapses_extends(tmp_path):
     c = _client(tmp_path)
-    tid = c.post("/v1/tasks", json={"title": "x", "intent": "y"}).json()["id"]
+    tid = c.post("/v1/tasks", json={"title": "x", "intent": "y", "tenant": "acme", "project": "site"}).json()["id"]
     _claim(c, tid, "claim-1")
     body = {"key": "ren-1", "holder": "coder-1", "expected_lease_epoch": 1, "ttl_s": 120}
     assert c.post(f"/v1/tasks/{tid}/leases/renew", json=body).status_code == 200
@@ -100,7 +106,7 @@ def test_renew_replay_after_stored_lease_lapses_extends(tmp_path):
 
 def test_stale_claim_preserves_original_receipt(tmp_path):
     c = _client(tmp_path)
-    tid = c.post("/v1/tasks", json={"title": "x", "intent": "y"}).json()["id"]
+    tid = c.post("/v1/tasks", json={"title": "x", "intent": "y", "tenant": "acme", "project": "site"}).json()["id"]
     _claim(c, tid, "claim-1", ttl=0)
     c.post(f"/v1/tasks/{tid}/assignments/reclaim", json={"key": "rec-1"})
     assert _claim(c, tid, "claim-1").status_code == 200  # stale: re-claim, no DELETE
@@ -110,7 +116,7 @@ def test_stale_claim_preserves_original_receipt(tmp_path):
 
 def test_claim_replay_after_takeover_conflicts(tmp_path):
     c = _client(tmp_path)
-    tid = c.post("/v1/tasks", json={"title": "x", "intent": "y"}).json()["id"]
+    tid = c.post("/v1/tasks", json={"title": "x", "intent": "y", "tenant": "acme", "project": "site"}).json()["id"]
     assert _claim(c, tid, "claim-1", "coder-1").status_code == 200
     _expire_lease(tmp_path)
     assert c.post(f"/v1/tasks/{tid}/assignments/reclaim", json={"key": "rec-1"}).status_code == 200
@@ -121,7 +127,7 @@ def test_claim_replay_after_takeover_conflicts(tmp_path):
 
 def test_record_result_requires_live_lease_epoch(tmp_path):
     c = _client(tmp_path)
-    tid = c.post("/v1/tasks", json={"title": "x", "intent": "y"}).json()["id"]
+    tid = c.post("/v1/tasks", json={"title": "x", "intent": "y", "tenant": "acme", "project": "site"}).json()["id"]
     body = {"key": "res-0", "attempt_id": 1, "lease_epoch": 1, "verdict": "pass", "result": {}}
     assert c.post(f"/v1/tasks/{tid}/results", json=body).status_code == 409  # no lease at all
     _claim(c, tid, "claim-1")
@@ -135,8 +141,8 @@ def test_record_result_requires_live_lease_epoch(tmp_path):
 
 def test_literal_colon_key_is_not_a_generation(tmp_path):
     c = _client(tmp_path)
-    t1 = c.post("/v1/tasks", json={"title": "a", "intent": "y"}).json()["id"]
-    t2 = c.post("/v1/tasks", json={"title": "b", "intent": "y"}).json()["id"]
+    t1 = c.post("/v1/tasks", json={"title": "a", "intent": "y", "tenant": "acme", "project": "site"}).json()["id"]
+    t2 = c.post("/v1/tasks", json={"title": "b", "intent": "y", "tenant": "acme", "project": "site"}).json()["id"]
     assert _claim(c, t1, "k1:9", "coder-1").status_code == 200
     r = _claim(c, t2, "k1", "coder-1")
     assert r.status_code == 200 and r.json()["replayed"] is False
@@ -145,7 +151,7 @@ def test_literal_colon_key_is_not_a_generation(tmp_path):
 
 def test_malformed_numeric_fields_are_422(tmp_path):
     c = _client(tmp_path)
-    tid = c.post("/v1/tasks", json={"title": "x", "intent": "y"}).json()["id"]
+    tid = c.post("/v1/tasks", json={"title": "x", "intent": "y", "tenant": "acme", "project": "site"}).json()["id"]
     assert c.post(f"/v1/tasks/{tid}/assignments/claim",
                   json={"key": "k", "principal": "p", "attempt_no": "abc"}).status_code == 422
     assert c.post(f"/v1/tasks/{tid}/attempts",
@@ -160,14 +166,14 @@ def test_tasks_with_contract_rejects_empty_contract(tmp_path):
     c = _client(tmp_path)
     for contract in (None, {}, {"acceptance_criteria": []}, {"acceptance_criteria": "just do it"},
                      {"acceptance_criteria": [""]}, {"acceptance_criteria": [123]}):
-        body = {"title": "x", "intent": "y", **({"contract": contract} if contract is not None else {})}
+        body = {"title": "x", "intent": "y", "tenant": "acme", "project": "site", **({"contract": contract} if contract is not None else {})}
         assert c.post("/v1/tasks_with_contract", json=body).status_code == 422
     assert c.get("/v1/tasks").json()["items"] == []  # no orphan task stored
 
 
 def test_stale_claim_conflicts_when_other_assignment_active(tmp_path):
     c = _client(tmp_path)
-    tid = c.post("/v1/tasks", json={"title": "x", "intent": "y"}).json()["id"]
+    tid = c.post("/v1/tasks", json={"title": "x", "intent": "y", "tenant": "acme", "project": "site"}).json()["id"]
     assert _claim(c, tid, "claim-1").status_code == 200
     _expire_lease(tmp_path)
     assert c.post(f"/v1/tasks/{tid}/assignments/reclaim", json={"key": "rec-1"}).status_code == 200
@@ -180,7 +186,7 @@ def test_stale_claim_conflicts_when_other_assignment_active(tmp_path):
 
 def test_renew_after_reclaim_conflicts_and_replay_validates_holder(tmp_path):
     c = _client(tmp_path)
-    tid = c.post("/v1/tasks", json={"title": "x", "intent": "y"}).json()["id"]
+    tid = c.post("/v1/tasks", json={"title": "x", "intent": "y", "tenant": "acme", "project": "site"}).json()["id"]
     _claim(c, tid, "claim-1")
     body = {"key": "ren-1", "holder": "coder-1", "expected_lease_epoch": 1, "ttl_s": 120}
     assert c.post(f"/v1/tasks/{tid}/leases/renew", json=body).status_code == 200
@@ -196,8 +202,8 @@ def test_renew_after_reclaim_conflicts_and_replay_validates_holder(tmp_path):
 
 def test_record_result_rejects_foreign_unknown_and_wrong_epoch_attempts(tmp_path):
     c = _client(tmp_path)
-    t1 = c.post("/v1/tasks", json={"title": "a", "intent": "y"}).json()["id"]
-    t2 = c.post("/v1/tasks", json={"title": "b", "intent": "y"}).json()["id"]
+    t1 = c.post("/v1/tasks", json={"title": "a", "intent": "y", "tenant": "acme", "project": "site"}).json()["id"]
+    t2 = c.post("/v1/tasks", json={"title": "b", "intent": "y", "tenant": "acme", "project": "site"}).json()["id"]
     _claim(c, t1, "claim-1"); _claim(c, t2, "claim-2")
     a1 = c.post(f"/v1/tasks/{t1}/attempts", json={"key": "att-1", "attempt_no": 1, "lease_epoch": 1}).json()["attempt"]
     def res(tid, key, aid, epoch):
@@ -215,18 +221,18 @@ def test_record_result_rejects_foreign_unknown_and_wrong_epoch_attempts(tmp_path
 
 def test_float_fields_and_mixed_criteria_are_422(tmp_path):
     c = _client(tmp_path)
-    tid = c.post("/v1/tasks", json={"title": "x", "intent": "y"}).json()["id"]
+    tid = c.post("/v1/tasks", json={"title": "x", "intent": "y", "tenant": "acme", "project": "site"}).json()["id"]
     assert c.post(f"/v1/tasks/{tid}/assignments/claim",
                   json={"key": "k", "principal": "p", "attempt_no": 1.9}).status_code == 422
     assert c.post("/v1/tasks_with_contract",
-                  json={"title": "x", "intent": "y",
+                  json={"title": "x", "intent": "y", "tenant": "acme", "project": "site",
                         "contract": {"acceptance_criteria": ["ok", 123]}}).status_code == 422
 
 
 def test_same_key_replays_per_task_not_globally(tmp_path):
     c = _client(tmp_path)
-    t1 = c.post("/v1/tasks", json={"title": "a", "intent": "y"}).json()["id"]
-    t2 = c.post("/v1/tasks", json={"title": "b", "intent": "y"}).json()["id"]
+    t1 = c.post("/v1/tasks", json={"title": "a", "intent": "y", "tenant": "acme", "project": "site"}).json()["id"]
+    t2 = c.post("/v1/tasks", json={"title": "b", "intent": "y", "tenant": "acme", "project": "site"}).json()["id"]
     assert _claim(c, t1, "shared", "coder-1").status_code == 200
     r = _claim(c, t2, "shared", "coder-1")
     assert r.status_code == 200 and r.json()["replayed"] is False  # not t1's receipt
@@ -237,8 +243,8 @@ def test_same_key_replays_per_task_not_globally(tmp_path):
 
 def test_generation_shaped_key_on_other_task_does_not_poison(tmp_path):
     c = _client(tmp_path)
-    t1 = c.post("/v1/tasks", json={"title": "a", "intent": "y"}).json()["id"]
-    t2 = c.post("/v1/tasks", json={"title": "b", "intent": "y"}).json()["id"]
+    t1 = c.post("/v1/tasks", json={"title": "a", "intent": "y", "tenant": "acme", "project": "site"}).json()["id"]
+    t2 = c.post("/v1/tasks", json={"title": "b", "intent": "y", "tenant": "acme", "project": "site"}).json()["id"]
     assert _claim(c, t1, "K::gen1", "coder-1").status_code == 200
     r = _claim(c, t2, "K", "coder-1")
     assert r.status_code == 200 and r.json()["replayed"] is False
@@ -247,7 +253,7 @@ def test_generation_shaped_key_on_other_task_does_not_poison(tmp_path):
 
 def test_claim_replay_with_other_attempt_no_conflicts(tmp_path):
     c = _client(tmp_path)
-    tid = c.post("/v1/tasks", json={"title": "x", "intent": "y"}).json()["id"]
+    tid = c.post("/v1/tasks", json={"title": "x", "intent": "y", "tenant": "acme", "project": "site"}).json()["id"]
     assert _claim(c, tid, "claim-1").status_code == 200
     r = c.post(f"/v1/tasks/{tid}/assignments/claim",
                json={"key": "claim-1", "principal": "coder-1", "attempt_no": 2})
@@ -257,7 +263,7 @@ def test_claim_replay_with_other_attempt_no_conflicts(tmp_path):
 
 def test_expired_lease_blocks_new_attempt_and_result(tmp_path):
     c = _client(tmp_path)
-    tid = c.post("/v1/tasks", json={"title": "x", "intent": "y"}).json()["id"]
+    tid = c.post("/v1/tasks", json={"title": "x", "intent": "y", "tenant": "acme", "project": "site"}).json()["id"]
     assert _claim(c, tid, "claim-1").status_code == 200
     att = c.post(f"/v1/tasks/{tid}/attempts",
                  json={"key": "att-1", "attempt_no": 1, "lease_epoch": 1}).json()["attempt"]
@@ -271,7 +277,7 @@ def test_expired_lease_blocks_new_attempt_and_result(tmp_path):
 
 def test_int_fields_reject_numeric_strings_and_bad_ttls(tmp_path):
     c = _client(tmp_path)
-    tid = c.post("/v1/tasks", json={"title": "x", "intent": "y"}).json()["id"]
+    tid = c.post("/v1/tasks", json={"title": "x", "intent": "y", "tenant": "acme", "project": "site"}).json()["id"]
 
     def claim(**over):
         body = {"key": "k", "principal": "p", "attempt_no": 1, "ttl_s": 120}
@@ -294,7 +300,7 @@ def test_postgres_url_fails_fast():
 
 def test_resumed_attempt_after_reclaim_records_result_at_new_epoch(tmp_path):
     c = _client(tmp_path)
-    tid = c.post("/v1/tasks", json={"title": "x", "intent": "y"}).json()["id"]
+    tid = c.post("/v1/tasks", json={"title": "x", "intent": "y", "tenant": "acme", "project": "site"}).json()["id"]
     assert _claim(c, tid, "claim-1").status_code == 200
     att = c.post(f"/v1/tasks/{tid}/attempts",
                  json={"key": "att-1", "attempt_no": 1, "lease_epoch": 1}).json()["attempt"]
@@ -312,7 +318,7 @@ def test_resumed_attempt_after_reclaim_records_result_at_new_epoch(tmp_path):
 
 def test_literal_gen_key_same_task_is_not_a_generation(tmp_path):
     c = _client(tmp_path)
-    tid = c.post("/v1/tasks", json={"title": "x", "intent": "y"}).json()["id"]
+    tid = c.post("/v1/tasks", json={"title": "x", "intent": "y", "tenant": "acme", "project": "site"}).json()["id"]
     assert _claim(c, tid, "K::gen1").status_code == 200
     r = c.post(f"/v1/tasks/{tid}/assignments/claim",
                json={"key": "K", "principal": "coder-1", "attempt_no": 2})
@@ -322,7 +328,7 @@ def test_literal_gen_key_same_task_is_not_a_generation(tmp_path):
 
 def test_claim_replay_with_expired_stored_lease_reclaims_with_new_ttl(tmp_path):
     c = _client(tmp_path)
-    tid = c.post("/v1/tasks", json={"title": "x", "intent": "y"}).json()["id"]
+    tid = c.post("/v1/tasks", json={"title": "x", "intent": "y", "tenant": "acme", "project": "site"}).json()["id"]
     assert _claim(c, tid, "claim-1", ttl=120).status_code == 200
     _expire_lease(tmp_path)
     r = _claim(c, tid, "claim-1", ttl=120)
@@ -332,7 +338,7 @@ def test_claim_replay_with_expired_stored_lease_reclaims_with_new_ttl(tmp_path):
 
 def test_transition_replay_with_different_to_conflicts(tmp_path):
     c = _client(tmp_path)
-    tid = c.post("/v1/tasks", json={"title": "x", "intent": "y"}).json()["id"]
+    tid = c.post("/v1/tasks", json={"title": "x", "intent": "y", "tenant": "acme", "project": "site"}).json()["id"]
     assert c.post(f"/v1/tasks/{tid}/transition",
                   json={"to": "claimed", "idempotency_key": "t1"}).status_code == 200
     r = c.post(f"/v1/tasks/{tid}/transition", json={"to": "done", "idempotency_key": "t1"})
@@ -344,7 +350,7 @@ def test_claim_replay_uses_live_lease_not_stored_snapshot(tmp_path):
     import json
     import sqlite3
     c = _client(tmp_path)
-    tid = c.post("/v1/tasks", json={"title": "x", "intent": "y"}).json()["id"]
+    tid = c.post("/v1/tasks", json={"title": "x", "intent": "y", "tenant": "acme", "project": "site"}).json()["id"]
     assert _claim(c, tid, "claim-1").status_code == 200
     att = c.post(f"/v1/tasks/{tid}/attempts",
                  json={"key": "att-1", "attempt_no": 1, "lease_epoch": 1}).json()["attempt"]
@@ -369,7 +375,7 @@ def test_claim_replay_uses_live_lease_not_stored_snapshot(tmp_path):
 
 def test_literal_gen_key_after_generation_stored_is_fresh(tmp_path):
     c = _client(tmp_path)
-    tid = c.post("/v1/tasks", json={"title": "x", "intent": "y"}).json()["id"]
+    tid = c.post("/v1/tasks", json={"title": "x", "intent": "y", "tenant": "acme", "project": "site"}).json()["id"]
     assert _claim(c, tid, "K").status_code == 200
     _expire_lease(tmp_path)
     assert _claim(c, tid, "K").status_code == 200  # stale re-claim stores K\x1fgen1
@@ -388,8 +394,8 @@ def test_preexisting_global_unique_receipts_db_is_migrated(tmp_path):
     db.execute("INSERT INTO receipts VALUES (1, 999, 'old', 'claim', '{}', '2024-01-01')")
     db.commit(); db.close()
     c = _client(tmp_path)
-    t1 = c.post("/v1/tasks", json={"title": "a", "intent": "y"}).json()["id"]
-    t2 = c.post("/v1/tasks", json={"title": "b", "intent": "y"}).json()["id"]
+    t1 = c.post("/v1/tasks", json={"title": "a", "intent": "y", "tenant": "acme", "project": "site"}).json()["id"]
+    t2 = c.post("/v1/tasks", json={"title": "b", "intent": "y", "tenant": "acme", "project": "site"}).json()["id"]
     assert _claim(c, t1, "shared", "coder-1").status_code == 200
     r = _claim(c, t2, "shared", "coder-1")
     assert r.status_code == 200 and r.json()["replayed"] is False
@@ -399,7 +405,7 @@ def test_preexisting_global_unique_receipts_db_is_migrated(tmp_path):
 
 def test_claim_moves_task_to_claimed_and_review_cycle(tmp_path):
     c = _client(tmp_path)
-    tid = c.post("/v1/tasks", json={"title": "x", "intent": "y"}).json()["id"]
+    tid = c.post("/v1/tasks", json={"title": "x", "intent": "y", "tenant": "acme", "project": "site"}).json()["id"]
     r = c.post(f"/v1/tasks/{tid}/assignments/claim",
                json={"key": "claim-1", "principal": "svc-b", "attempt_no": 1})
     assert r.status_code == 200

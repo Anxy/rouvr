@@ -23,7 +23,7 @@ from typing import Any, Awaitable, Callable
 from rouvr.contracts import TaskWorkflowInput
 
 StartFn = Callable[[TaskWorkflowInput], Awaitable[tuple[str, bool]]]
-REQUIRED = ("task_id", "contract_rev", "requested_by")
+REQUIRED = ("task_id", "contract_rev", "requested_by", "tenant", "project")
 
 
 def build_app(*, start: StartFn, token: str, tenant_id: str, project_id: str, max_rework: int = 2,
@@ -61,7 +61,9 @@ def build_app(*, start: StartFn, token: str, tenant_id: str, project_id: str, ma
             missing = list(REQUIRED)
         if missing:
             return await send_json(send, 400, {"error": "E_BAD_REQUEST", "message": f"missing: {missing}"})
-        wf = TaskWorkflowInput(tenant_id=tenant_id, project_id=project_id, task_id=data["task_id"],
+        if data["tenant"] != tenant_id or data["project"] != project_id:
+            return await send_json(send, 403, {"error": "E_AUTHZ", "message": "scope not served"})
+        wf = TaskWorkflowInput(tenant_id=data["tenant"], project_id=data["project"], task_id=data["task_id"],
                                contract_rev=data["contract_rev"], requested_by=data["requested_by"],
                                max_rework=max_rework, assign_start_to_close_s=assign_start_to_close_s,
                                spec_timeout_s=spec_timeout_s)

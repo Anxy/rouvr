@@ -17,7 +17,6 @@ import httpx
 from mcp.server.mcpserver import MCPServer
 
 LEDGER = os.environ.get("WORKHUB_BASE_URL", "http://127.0.0.1:8221").rstrip("/")
-PROJECT = os.environ.get("ROUVR_PROJECT_ID", "scratch")
 
 mcp = MCPServer("rouvr-workhub", instructions=(
     "Deliver coding tasks to WorkHub with workhub_create_task, then launch the "
@@ -78,9 +77,27 @@ def _author_hidden_suite(criteria: list[str]) -> dict[str, str]:
 
 
 @mcp.tool()
-def workhub_create_task(title: str, description: str, acceptance_criteria: list[str]) -> dict:
+def workhub_create_tenant(tenant: str) -> dict:
+    """Register a tenant explicitly (S022). Must exist before any project."""
+    with _ledger() as c:
+        return c.post("/v1/tenants", json={"tenant": tenant}).raise_for_status().json()
+
+
+@mcp.tool()
+def workhub_create_project(tenant: str, project: str) -> dict:
+    """Register a project under an existing tenant (S022). Must exist before any task."""
+    with _ledger() as c:
+        return c.post("/v1/projects", json={"tenant": tenant, "project": project}
+                      ).raise_for_status().json()
+
+
+@mcp.tool()
+def workhub_create_task(title: str, description: str, acceptance_criteria: list[str],
+                        tenant: str, project: str) -> dict:
     """Create a WorkHub task plus its contract. Returns the task (task_number = id).
 
+    Tenant and project are mandatory (S022): create them first with
+    workhub_create_tenant / workhub_create_project — no defaults.
     Also writes the hidden acceptance suite as the distinct test_author
     principal (never the coder): HIDDEN_TESTS_ROOT/<id>/MANIFEST.json with
     created_by=test_author. The coder workspace is never touched.
@@ -97,8 +114,9 @@ def workhub_create_task(title: str, description: str, acceptance_criteria: list[
         decomposition = {"status": "skipped", "reason": f"{type(e).__name__}: {e}"[:200]}
     with _ledger() as c:
         task = c.post("/v1/tasks_with_contract", json={
-            "title": title, "intent": "supervisor", "contract": {
-                "project_id": PROJECT, "description": description,
+            "title": title, "intent": "supervisor", "tenant": tenant, "project": project,
+            "contract": {
+                "project_id": project, "description": description,
                 "acceptance_criteria": acceptance_criteria}}).raise_for_status().json()
         task = c.get(f"/v1/tasks/{task['id']}").raise_for_status().json()
         if (w := _prose_warnings(description, acceptance_criteria)):
@@ -169,11 +187,13 @@ def _annotate(task: dict) -> dict:
 
 
 @mcp.tool()
-def workhub_list_tasks() -> dict:
+def workhub_list_tasks(tenant: str = "") -> dict:
     """List WorkHub tasks with states, stuck flags, and a
-    waiting_on_supervisor rollup (blocked tasks, credential requests)."""
+    waiting_on_supervisor rollup (blocked tasks, credential requests).
+    Optional tenant filter; the ledger still enforces caller visibility."""
     with _ledger() as c:
-        data = c.get("/v1/tasks").raise_for_status().json()
+        params = {"tenant": tenant} if tenant else None
+        data = c.get("/v1/tasks", params=params).raise_for_status().json()
         items = [_annotate(dict(t)) for t in data.get("items", [])]
         waiting = []
         for t in items:

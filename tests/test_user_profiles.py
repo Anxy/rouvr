@@ -35,27 +35,40 @@ def url(tmp_path, monkeypatch):
     importlib.reload(la)
 
 
-def _seed(c, name, token):
+def _scope(c, tenant="acme", project="site"):
+    """S022: register the partition this module's tasks run inside."""
+    c.post("/v1/tenants", json={"tenant": tenant}, headers=STACK).raise_for_status()
+    c.post("/v1/projects", json={"tenant": tenant, "project": project}, headers=STACK
+           ).raise_for_status()
+
+
+def _seed(c, name, token, tenant="acme"):
     h = hashlib.sha256(token.encode()).hexdigest()
-    r = c.post("/v1/users", json={"username": name, "token_hash": h}, headers=STACK)
+    r = c.post("/v1/users", json={"username": name, "token_hash": h, "tenant": tenant},
+               headers=STACK)
     assert r.status_code == 200, r.text
 
 
 def test_two_user_scoping_and_worker_only(url):
     with httpx.Client(base_url=url, timeout=10) as c:
-        _seed(c, "alice", "alice-tok")
-        _seed(c, "bob", "bob-tok")
-        ta = c.post("/v1/tasks", json={"title": "a", "intent": "supervisor"},
+        _scope(c)
+        _scope(c, tenant="globex")
+        _seed(c, "alice", "alice-tok", tenant="acme")
+        _seed(c, "bob", "bob-tok", tenant="globex")
+        ta = c.post("/v1/tasks", json={"title": "a", "intent": "supervisor",
+                                       "tenant": "acme", "project": "site"},
                     headers=_tok("alice-tok")).json()
-        tb = c.post("/v1/tasks", json={"title": "b", "intent": "supervisor"},
+        tb = c.post("/v1/tasks", json={"title": "b", "intent": "supervisor",
+                                       "tenant": "globex", "project": "site"},
                     headers=_tok("bob-tok")).json()
         assert ta["created_by"] == "alice" and tb["created_by"] == "bob"
+        assert (ta["tenant"], tb["tenant"]) == ("acme", "globex")
         mine = c.get("/v1/tasks", headers=_tok("alice-tok")).json()["items"]
         assert [t["id"] for t in mine] == [ta["id"]]
         assert len(c.get("/v1/tasks", headers=STACK).json()["items"]) == 2
-        # cross-user access refused, naming the owner
+        # cross-tenant access refused, naming the tenant
         r = c.get(f"/v1/tasks/{tb['id']}", headers=_tok("alice-tok"))
-        assert r.status_code == 403 and "bob" in r.json()["detail"]
+        assert r.status_code == 403 and "globex" in r.json()["detail"]
         assert c.post(f"/v1/tasks/{tb['id']}/evidence",
                       json={"kind": "agent_message", "body": {}},
                       headers=_tok("alice-tok")).status_code == 403

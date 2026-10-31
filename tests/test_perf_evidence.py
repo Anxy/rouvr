@@ -19,7 +19,10 @@ def test_fence_lookup_with_many_rows(tmp_path):
         time.sleep(0.1)
     try:
         with httpx.Client(base_url="http://127.0.0.1:18241", timeout=15) as c:
-            tid = c.post("/v1/tasks", json={"title": "t", "intent": "x"}).json()["id"]
+            c.post("/v1/tenants", json={"tenant": "acme"}).raise_for_status()
+            c.post("/v1/projects", json={"tenant": "acme", "project": "site"}).raise_for_status()
+            tid = c.post("/v1/tasks", json={"title": "t", "intent": "x",
+                                            "tenant": "acme", "project": "site"}).json()["id"]
             conn = sqlite3.connect(db)
             rows = [(tid, "note", json.dumps({"fence": f"f{i}", "payload": {}}, sort_keys=True),
                      "x", "2026-01-01") for i in range(2000)]

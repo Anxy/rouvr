@@ -348,6 +348,23 @@
         "21.6 Demo script"
       ],
       "known_gaps": []
+    },
+    {
+      "id": "S022",
+      "title": "Tenant/project partitions in WorkHub",
+      "goal": "Mandatory tenant/project scope on every task and workflow; tenant-scoped visibility.",
+      "sprint_file": "docs/tasks/rouvr/S022-tenant-project-partitions.md",
+      "status": "RUNNING",
+      "commit": "2edbf0a+uncommitted",
+      "confidence": "medium",
+      "tasks": [
+        "22.1 Ledger partitions",
+        "22.2 Creation-path wiring",
+        "22.3 Docs + index + review submission"
+      ],
+      "known_gaps": [
+        "Grant scopes stay task-global; legacy unscoped rows refuse startup explicitly."
+      ]
     }
   ]
 }

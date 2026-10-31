@@ -14,7 +14,9 @@ from rouvr.workhub.ledger import LedgerWorkHub
 async def test_claim_attempt_fenced_flow(tmp_path):
     app = make_app(f"sqlite:///{tmp_path}/ledger.db")
     wh = LedgerWorkHub("http://ledger", transport=httpx.ASGITransport(app=app))
-    task = await wh.create_task("r5", "ownership")
+    await wh._http.post("/v1/tenants", json={"tenant": "acme"})
+    await wh._http.post("/v1/projects", json={"tenant": "acme", "project": "site"})
+    task = await wh.create_task("r5", "ownership", "acme", "site")
     tid = str(task["id"])
     lease, asg = await claim_assignment_and_lease(wh, tid, "coder-1", 1, 120)
     assert lease.lease_epoch == 1 and asg

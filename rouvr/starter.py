@@ -76,12 +76,17 @@ async def _input_for(task_number: int, requested_by: str) -> tuple[TaskWorkflowI
     finally:
         await wh.aclose()
     spec_timeout_s = 1500
+    # S022: the workflow runs inside the task's partition, never the
+    # operator env's — unscoped legacy tasks refuse here, not mid-workflow.
+    tenant, project = task.get("tenant"), task.get("project")
+    if not tenant or not project:
+        raise RuntimeError(f"task {task_number} has no tenant/project scope: assign scope explicitly")
     try:
         from rouvr.execspec import LocalExecSpecProvider
-        spec_timeout_s = (await LocalExecSpecProvider(s.spec_root).get(s.tenant_id, task)).timeout_s
+        spec_timeout_s = (await LocalExecSpecProvider(s.spec_root).get(tenant, task)).timeout_s
     except Exception:
         pass  # missing/bad spec still fails in assign_task; keep the ExecSpec default here
-    return TaskWorkflowInput(tenant_id=s.tenant_id, project_id=s.project_id, task_id=str(task["id"]),
+    return TaskWorkflowInput(tenant_id=tenant, project_id=project, task_id=str(task["id"]),
                              contract_rev=str(task["contract_rev"]), requested_by=requested_by,
                              max_rework=s.max_rework, assign_start_to_close_s=s.assign_start_to_close_s,
                              spec_timeout_s=spec_timeout_s), s

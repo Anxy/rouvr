@@ -30,7 +30,8 @@ def ledger_url(tmp_path_factory):
 async def test_mcp_tools_registered():
     from rouvr.mcp_server import mcp
     names = [t.name for t in await mcp.list_tools()]
-    assert names == ["workhub_create_task", "workhub_list_tasks",
+    assert names == ["workhub_create_tenant", "workhub_create_project", "workhub_create_task",
+                     "workhub_list_tasks",
                      "workhub_show_task", "workhub_post_message",
                      "workhub_read_messages", "workhub_peer_sessions",
                      "workhub_message_agent", "workhub_agent_windows",
@@ -59,6 +60,14 @@ def test_stale_windows_terminal_and_orphan_only():
 _FAKE_SUITE = {"test_authored.py": "def test_authored_criterion():\n    assert 2 + 2 == 4\n"}
 
 
+def _ensure_scope(ledger_url, tenant="acme", project="site"):
+    """S022: register the partition every create below runs inside."""
+    import httpx
+    with httpx.Client(base_url=ledger_url, timeout=10) as c:
+        c.post("/v1/tenants", json={"tenant": tenant}).raise_for_status()
+        c.post("/v1/projects", json={"tenant": tenant, "project": project}).raise_for_status()
+
+
 def _inject_fake_author(monkeypatch, ms, files=None):
     """Deterministic stand-in for the test_author model turn."""
     body = dict(files) if files is not None else dict(_FAKE_SUITE)
@@ -72,7 +81,8 @@ def test_mcp_create_and_show(monkeypatch, ledger_url, tmp_path):
     import rouvr.mcp_server as ms
     importlib.reload(ms)
     _inject_fake_author(monkeypatch, ms)
-    task = ms.workhub_create_task("t", "d", ["c1"])
+    _ensure_scope(ledger_url)
+    task = ms.workhub_create_task("t", "d", ["c1"], "acme", "site")
     assert task["state"] == "open" and task["id"] == 1
     shown = ms.workhub_show_task(1)
     assert shown["contracts"] and shown["contracts"][0]["body"]
@@ -86,7 +96,8 @@ def test_mcp_create_writes_hidden_suite_as_test_author(monkeypatch, ledger_url, 
     import rouvr.mcp_server as ms
     importlib.reload(ms)
     _inject_fake_author(monkeypatch, ms)
-    task = ms.workhub_create_task("t-hidden", "do the thing", ["returns 200"])
+    _ensure_scope(ledger_url)
+    task = ms.workhub_create_task("t-hidden", "do the thing", ["returns 200"], "acme", "site")
     manifest = json.loads((tmp_path / "hidden" / str(task["id"]) / "MANIFEST.json").read_text())
     assert manifest["created_by"] == "test_author"
     assert any(name.startswith("test_") for name in manifest["files"])
@@ -107,7 +118,8 @@ def test_mcp_agent_messages_roundtrip(monkeypatch, ledger_url, tmp_path):
     import rouvr.mcp_server as ms
     importlib.reload(ms)
     _inject_fake_author(monkeypatch, ms)
-    ms.workhub_create_task("t2", "d", ["c1"])
+    _ensure_scope(ledger_url)
+    ms.workhub_create_task("t2", "d", ["c1"], "acme", "site")
     ms.workhub_post_message(1, "coder", "reviewer", "used punct param name from criteria")
     ms.workhub_post_message(1, "reviewer", "coder", "please also cover empty name")
     assert ms.workhub_read_messages(1, "reviewer") == [
@@ -151,7 +163,8 @@ def test_show_task_decodes_evidence(monkeypatch, ledger_url, tmp_path):
     import rouvr.mcp_server as ms
     importlib.reload(ms)
     _inject_fake_author(monkeypatch, ms)
-    t = ms.workhub_create_task("decode-me", "d", ["c1"])
+    _ensure_scope(ledger_url)
+    t = ms.workhub_create_task("decode-me", "d", ["c1"], "acme", "site")
     ms.workhub_post_message(t["id"], "coder", "reviewer", "hello")
     shown = ms.workhub_show_task(t["id"])
     msg = [e for e in shown["evidence"] if e.get("kind") == "agent_message"][0]
@@ -168,7 +181,8 @@ def test_message_agent_timeout_returns_error_status(monkeypatch, ledger_url, tmp
     import rouvr.mcp_server as ms
     importlib.reload(ms)
     _inject_fake_author(monkeypatch, ms)
-    task = ms.workhub_create_task("t-timeout", "d", ["c1"])
+    _ensure_scope(ledger_url)
+    task = ms.workhub_create_task("t-timeout", "d", ["c1"], "acme", "site")
     monkeypatch.setattr(ms, "_live_peers",
                         lambda tid, t: [{"role": "coder", "session_id": "sid-9"}])
 
@@ -189,7 +203,7 @@ def test_mcp_create_refuses_without_model(monkeypatch, ledger_url, tmp_path):
     import rouvr.mcp_server as ms
     importlib.reload(ms)
     with pytest.raises(RuntimeError, match="hidden suite"):
-        ms.workhub_create_task("t-refused", "d", ["c1"])
+        ms.workhub_create_task("t-refused", "d", ["c1"], "acme", "site")
     assert not (tmp_path / "hidden").exists()
 
 
@@ -224,13 +238,14 @@ def test_waiting_lists_escalation_reason_from_json_string_body(monkeypatch, ledg
     import rouvr.mcp_server as ms
     importlib.reload(ms)
     _inject_fake_author(monkeypatch, ms)
-    t1 = ms.workhub_create_task("t-reason", "d", ["c1"])
+    _ensure_scope(ledger_url)
+    t1 = ms.workhub_create_task("t-reason", "d", ["c1"], "acme", "site")
     httpx.post(f"{ledger_url}/v1/tasks/{t1['id']}/evidence",
                json={"kind": "escalation", "fence": "e:1",
                      "body": {"reason": "rework_exhausted"}}).raise_for_status()
     httpx.post(f"{ledger_url}/v1/tasks/{t1['id']}/transition",
                json={"to": "blocked", "idempotency_key": "k1"}).raise_for_status()
-    t2 = ms.workhub_create_task("t-badbody", "d", ["c1"])
+    t2 = ms.workhub_create_task("t-badbody", "d", ["c1"], "acme", "site")
     httpx.post(f"{ledger_url}/v1/tasks/{t2['id']}/evidence",
                json={"kind": "escalation", "fence": "e:2", "body": "not json{"}).raise_for_status()
     httpx.post(f"{ledger_url}/v1/tasks/{t2['id']}/transition",
@@ -266,7 +281,8 @@ def test_create_attaches_decomposition_evidence(monkeypatch, ledger_url, tmp_pat
                  "tasks": [{"id": "T1"}], "coverage_ledger": {"R1": ["T1"]},
                  "dropped_content": []}
     monkeypatch.setattr(ms, "_decompose_brief", lambda *a: candidate)
-    task = ms.workhub_create_task("t-decomp", "do the thing", ["returns 200"])
+    _ensure_scope(ledger_url)
+    task = ms.workhub_create_task("t-decomp", "do the thing", ["returns 200"], "acme", "site")
     detail = ms.workhub_show_task(task["id"])
     kinds = [e.get("kind") for e in detail.get("evidence") or []]
     assert "decomposition" in kinds
@@ -289,7 +305,8 @@ def test_create_records_skipped_decomposition_without_model(monkeypatch, ledger_
     def boom(*a):
         raise RuntimeError("no model")
     monkeypatch.setattr(ms, "_decompose_brief", boom)
-    task = ms.workhub_create_task("t-decomp-skip", "d", ["c1"])
+    _ensure_scope(ledger_url)
+    task = ms.workhub_create_task("t-decomp-skip", "d", ["c1"], "acme", "site")
     detail = ms.workhub_show_task(task["id"])
     bodies = [e.get("body") for e in detail.get("evidence") or []
               if e.get("kind") == "decomposition"]

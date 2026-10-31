@@ -1543,6 +1543,33 @@
         "by": "coder",
         "ref": "review-009 VERDICT ACCEPT + CLOSEOUT at 4fa6b06"
       }
+    },
+    {
+      "id": "S022",
+      "file": "docs/tasks/rouvr/S022-tenant-project-partitions.md",
+      "state": "running",
+      "worker": "coder-1",
+      "supervisor": null,
+      "depends_on": [
+        "S021"
+      ],
+      "cycles": [],
+      "history": [
+        {
+          "state": "queued",
+          "at": "2026-10-31",
+          "by": "worker",
+          "ref": "registered"
+        },
+        {
+          "state": "running",
+          "at": "2026-10-31",
+          "by": "worker",
+          "ref": "claim"
+        }
+      ],
+      "claimed_at": "2026-10-31",
+      "pre_task": "IMPLEMENTATION; ledger tenants/projects tables plus mandatory task scope plus tenant visibility; MCP/binding/starter/api/ops/demo scope wiring; tests-first per task"
     }
   ]
 }

@@ -10,7 +10,7 @@ Shipped items are checked (see `docs/system/ROUVR-SPRINT-INDEX.json`, 19/19 PASS
 ## Next
 - [x] Move `demo/morning_report.py` onto Temporal workflows — done via `OpsTaskWorkflow` (S018)
 - [ ] Real mail delivery with provider message-id readback
-- [ ] WorkHub-lite: principals/auth, leases, multi-tenancy
+- [x] WorkHub-lite partitions: principals/auth, leases, per-tenant projects (S011/S016/S022)
 - [ ] Core backend WorkHub client speaking the WorkHub-lite API
 - [ ] Get the full `core/backend/tests` suite green without private services
 - [ ] Rename internal `aix`/`hyeve_aix` modules to `rouvr`

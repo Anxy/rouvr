@@ -27,13 +27,16 @@ async def test_thin_start_endpoint_idempotent():
         seen[wid] = seen.get(wid, 0) + 1
         return wid, seen[wid] == 1
     app = build_app(start=start, token="t0k", tenant_id="t", project_id="p")
-    body = {"task_id": "7", "contract_rev": "r1", "requested_by": "ankur"}
+    body = {"task_id": "7", "contract_rev": "r1", "requested_by": "ankur",
+            "tenant": "t", "project": "p"}
     assert await _call(app, "POST", "/workflows/start", body) == (200, {"workflow_id": "rouvr-task-7", "started": True})
     assert await _call(app, "POST", "/workflows/start", body) == (200, {"workflow_id": "rouvr-task-7", "started": False})
     assert (await _call(app, "POST", "/workflows/start", body, token="bad"))[0] == 401
     assert (await _call(app, "POST", "/workflows/start", {"task_id": "7"}))[0] == 400
     big = {"task_id": "7", "contract_rev": "r1", "requested_by": "x" * 70000}
     assert (await _call(app, "POST", "/workflows/start", big))[0] == 400
+    other = dict(body, tenant="elsewhere")
+    assert (await _call(app, "POST", "/workflows/start", other))[0] == 403  # scope not served
 
 
 async def test_default_app_resolves_spec_timeout(monkeypatch, tmp_path):
@@ -59,7 +62,8 @@ async def test_default_app_resolves_spec_timeout(monkeypatch, tmp_path):
     monkeypatch.setattr(Client, "connect", lambda *a, **k: _connect())
     app = _make_default_app()
     status, body = await _call(app, "POST", "/workflows/start",
-                               {"task_id": "7", "contract_rev": "r1", "requested_by": "ankur"})
+                               {"task_id": "7", "contract_rev": "r1", "requested_by": "ankur",
+                                "tenant": "t", "project": "p"})
     assert (status, body) == (200, {"workflow_id": "wid-1", "started": True})
     assert seen["wf"].spec_timeout_s == 999
 

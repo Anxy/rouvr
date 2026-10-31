@@ -64,8 +64,13 @@ uvicorn.run(make_app(os.environ['ROUVR_LEDGER_DATABASE_URL']), host='127.0.0.1',
 " >>"$R10_ROOT/logs/ledger.log" 2>&1 &
 echo $! > "$R10_ROOT/pids/ledger.pid"
 for _ in $(seq 1 30); do curl -sf -o /dev/null "http://127.0.0.1:$LEDGER_PORT/health" && break; sleep 1; done
+# S022: partitions are mandatory — register tenant/project before any task.
+curl -sf -X POST "http://127.0.0.1:$LEDGER_PORT/v1/tenants" -H 'Content-Type: application/json' \
+  -d "{\"tenant\":\"$R10_TENANT\"}" > /dev/null
+curl -sf -X POST "http://127.0.0.1:$LEDGER_PORT/v1/projects" -H 'Content-Type: application/json' \
+  -d "{\"tenant\":\"$R10_TENANT\",\"project\":\"scratch\"}" > /dev/null
 TID=$(curl -sf -X POST "http://127.0.0.1:$LEDGER_PORT/v1/tasks" -H 'Content-Type: application/json' \
-  -d '{"title":"[R10] punctuated greet","intent":"rehearsal"}' | "$ROOT/.venv/bin/python" -c "import json,sys; print(json.load(sys.stdin)['id'])")
+  -d "{\"title\":\"[R10] punctuated greet\",\"intent\":\"rehearsal\",\"tenant\":\"$R10_TENANT\",\"project\":\"scratch\"}" | "$ROOT/.venv/bin/python" -c "import json,sys; print(json.load(sys.stdin)['id'])")
 [ "$TID" = "1" ] || fail "expected fresh ledger task 1, got $TID"
 curl -sf -X POST "http://127.0.0.1:$LEDGER_PORT/v1/tasks/$TID/contracts" -H 'Content-Type: application/json' \
   -d '{"project_id":"scratch","description":"Extend greet(name) with an optional punct parameter (default \"\") appended to the greeting.","acceptance_criteria":["greet() appends the punct parameter to the greeting","repo test suite passes"]}' > /dev/null

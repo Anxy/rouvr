@@ -25,7 +25,9 @@ async def backend(request, tmp_path: Path):
         from ledger.app import make_app
         app = make_app(f"sqlite:///{tmp_path}/ledger.db")
         wh = LedgerWorkHub("http://ledger", transport=httpx.ASGITransport(app=app))
-        task = await wh.create_task("contract", "suite task")
+        await wh._call("POST", "/v1/tenants", {"tenant": "acme"})
+        await wh._call("POST", "/v1/projects", {"tenant": "acme", "project": "site"})
+        task = await wh.create_task("contract", "suite task", "acme", "site")
         yield wh, str(task["id"]), task["id"]
         await wh.aclose()
     else:
@@ -133,7 +135,7 @@ async def test_ledger_non_dict_error_bodies_become_rouvr_errors(status, content,
     wh = LedgerWorkHub("http://ledger", transport=httpx.MockTransport(handler))
     try:
         with pytest.raises(RouvrError) as ei:
-            await wh.create_task("t", "i")
+            await wh.create_task("t", "i", "acme", "site")
         assert ei.value.code is Code.DOWNSTREAM
     finally:
         await wh.aclose()

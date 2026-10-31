@@ -66,12 +66,25 @@ def verify(c, msg_id: str, figures: dict) -> dict:
             "health": health}
 
 
+def _ops_scope() -> tuple[str, str]:
+    """Partition scope for ops tasks (S022): explicit env, never defaulted."""
+    tenant = os.environ.get("ROUVR_TENANT_ID", "")
+    project = os.environ.get("ROUVR_PROJECT_ID", "")
+    if not tenant or not project:
+        raise RuntimeError("ops tasks need scope: set ROUVR_TENANT_ID and ROUVR_PROJECT_ID")
+    return tenant, project
+
+
 def run(ledger_url: str | None = None) -> str:
     c = ledger_client(ledger_url)
+    tenant, project = _ops_scope()
     day = (date.today() - timedelta(days=1)).isoformat()
     run_key = f"morning-report:{day}"
-    existing = [t for t in c.get("/v1/tasks").json()["items"] if t["title"] == run_key]
-    tid = existing[0]["id"] if existing else c.post("/v1/tasks", json={"title": run_key, "intent": INSTRUCTION}).json()["id"]
+    existing = [t for t in c.get("/v1/tasks").json()["items"] if t["title"] == run_key
+                and t.get("tenant") == tenant and t.get("project") == project]
+    tid = existing[0]["id"] if existing else c.post(
+        "/v1/tasks", json={"title": run_key, "intent": INSTRUCTION,
+                           "tenant": tenant, "project": project}).json()["id"]
     task = c.get(f"/v1/tasks/{tid}").json()
     if task["state"] == "done":
         return "Done. No action needed."

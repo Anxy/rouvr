@@ -43,8 +43,10 @@ class LedgerWorkHub:
             raise from_http(r.status_code, {"code": code or "", "message": str(payload.get("detail", payload))})
         return payload
 
-    async def create_task(self, title: str, intent: str) -> dict:
-        return await self._call("POST", "/v1/tasks", {"title": title, "intent": intent})
+    async def create_task(self, title: str, intent: str, tenant: str, project: str) -> dict:
+        """Scope is mandatory (S022): no defaults, project must be registered first."""
+        return await self._call("POST", "/v1/tasks", {"title": title, "intent": intent,
+                                                      "tenant": tenant, "project": project})
 
     async def get_task(self, task_id: str) -> dict:
         return canonical_task(await self._call("GET", f"/v1/tasks/{task_id}"))

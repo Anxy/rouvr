@@ -82,6 +82,10 @@ class Activities:
         task = await wh.get_task(wf.task_id)
         if str(task.get("contract_rev")) != wf.contract_rev:
             raise RouvrError(Code.CONTRACT_MOVED, "contract revision changed since start")
+        if task.get("tenant") != wf.tenant_id or task.get("project") != wf.project_id:
+            raise RouvrError(Code.SCOPE,  # S022: workflows execute only inside their own partition
+                             f"binding left its scope: workflow {wf.tenant_id}/{wf.project_id}"
+                             f" vs task {task.get('tenant')}/{task.get('project')}")
         b, v = self.h.personas.role_pair(wf.tenant_id)  # raises SELF_REVIEW; binding names no personas
         return Binding(task_id=wf.task_id, coder_persona=b.name, reviewer_persona=v.name,
                        contract_rev=wf.contract_rev, record_version=int(task["record_version"]))
@@ -419,11 +423,13 @@ class Activities:
     async def ops_prepare(self, inp: OpsInput) -> dict:
         c = _ops_ledger()
         items = c.get("/v1/tasks").json()["items"]
-        match = [t for t in items if t["title"] == inp.run_key]
+        match = [t for t in items if t["title"] == inp.run_key and t.get("tenant") == inp.tenant
+                 and t.get("project") == inp.project]
         if match:
             tid = str(match[0]["id"])
         else:
-            tid = str(c.post("/v1/tasks", json={"title": inp.run_key, "intent": inp.instruction}).json()["id"])
+            tid = str(_ops_post(c, "/v1/tasks", {"title": inp.run_key, "intent": inp.instruction,
+                                                "tenant": inp.tenant, "project": inp.project})["id"])
         task = c.get(f"/v1/tasks/{tid}").json()
         out = {"task_id": tid, "state": task["state"], "message_id": "", "sink": ""}
         if task["state"] == "done":  # rerun after completion: hand back the receipt

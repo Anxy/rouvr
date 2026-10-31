@@ -56,12 +56,22 @@ def test_stale_windows_terminal_and_orphan_only():
     assert [w["pid"] for w in _stale_windows(wins, states)] == [1, 2, 5]
 
 
+_FAKE_SUITE = {"test_authored.py": "def test_authored_criterion():\n    assert 2 + 2 == 4\n"}
+
+
+def _inject_fake_author(monkeypatch, ms, files=None):
+    """Deterministic stand-in for the test_author model turn."""
+    body = dict(files) if files is not None else dict(_FAKE_SUITE)
+    monkeypatch.setattr(ms, "_author_hidden_suite", lambda criteria: body)
+
+
 def test_mcp_create_and_show(monkeypatch, ledger_url, tmp_path):
     monkeypatch.setenv("WORKHUB_BASE_URL", ledger_url)
     monkeypatch.setenv("HIDDEN_TESTS_ROOT", str(tmp_path / "hidden"))
     import importlib
     import rouvr.mcp_server as ms
     importlib.reload(ms)
+    _inject_fake_author(monkeypatch, ms)
     task = ms.workhub_create_task("t", "d", ["c1"])
     assert task["state"] == "open" and task["id"] == 1
     shown = ms.workhub_show_task(1)
@@ -75,10 +85,14 @@ def test_mcp_create_writes_hidden_suite_as_test_author(monkeypatch, ledger_url, 
     import importlib
     import rouvr.mcp_server as ms
     importlib.reload(ms)
+    _inject_fake_author(monkeypatch, ms)
     task = ms.workhub_create_task("t-hidden", "do the thing", ["returns 200"])
     manifest = json.loads((tmp_path / "hidden" / str(task["id"]) / "MANIFEST.json").read_text())
     assert manifest["created_by"] == "test_author"
     assert any(name.startswith("test_") for name in manifest["files"])
+    body = (tmp_path / "hidden" / str(task["id"]) / "test_authored.py").read_text()
+    assert "assert True" not in body  # authored checks, never placeholders
+    assert "assert 2 + 2 == 4" in body
     from rouvr.hiddentests import assert_coder_clean, fetch_hidden_suite
     hidden_dir, manifest_obj = fetch_hidden_suite(tmp_path / "hidden", str(task["id"]))
     coder_ws = tmp_path / "coder_ws"
@@ -92,6 +106,7 @@ def test_mcp_agent_messages_roundtrip(monkeypatch, ledger_url, tmp_path):
     import importlib
     import rouvr.mcp_server as ms
     importlib.reload(ms)
+    _inject_fake_author(monkeypatch, ms)
     ms.workhub_create_task("t2", "d", ["c1"])
     ms.workhub_post_message(1, "coder", "reviewer", "used punct param name from criteria")
     ms.workhub_post_message(1, "reviewer", "coder", "please also cover empty name")
@@ -135,6 +150,7 @@ def test_show_task_decodes_evidence(monkeypatch, ledger_url, tmp_path):
     import importlib
     import rouvr.mcp_server as ms
     importlib.reload(ms)
+    _inject_fake_author(monkeypatch, ms)
     t = ms.workhub_create_task("decode-me", "d", ["c1"])
     ms.workhub_post_message(t["id"], "coder", "reviewer", "hello")
     shown = ms.workhub_show_task(t["id"])
@@ -151,6 +167,7 @@ def test_message_agent_timeout_returns_error_status(monkeypatch, ledger_url, tmp
 
     import rouvr.mcp_server as ms
     importlib.reload(ms)
+    _inject_fake_author(monkeypatch, ms)
     task = ms.workhub_create_task("t-timeout", "d", ["c1"])
     monkeypatch.setattr(ms, "_live_peers",
                         lambda tid, t: [{"role": "coder", "session_id": "sid-9"}])
@@ -161,3 +178,77 @@ def test_message_agent_timeout_returns_error_status(monkeypatch, ledger_url, tmp
     monkeypatch.setattr(subprocess, "run", boom)
     out = ms.workhub_message_agent(task["id"], "coder", "hi")
     assert out == {"target": "sid-9", "status": "error", "detail": "timeout"}
+
+
+def test_mcp_create_refuses_without_model(monkeypatch, ledger_url, tmp_path):
+    """F1: no model, no placeholders — create fails closed, nothing written."""
+    monkeypatch.setenv("WORKHUB_BASE_URL", ledger_url)
+    monkeypatch.setenv("HIDDEN_TESTS_ROOT", str(tmp_path / "hidden"))
+    monkeypatch.setenv("ROUVR_MODEL_PROVIDER", "stub")
+    import importlib
+    import rouvr.mcp_server as ms
+    importlib.reload(ms)
+    with pytest.raises(RuntimeError, match="hidden suite"):
+        ms.workhub_create_task("t-refused", "d", ["c1"])
+    assert not (tmp_path / "hidden").exists()
+
+
+def test_mcp_author_rejects_malformed_model_output(monkeypatch):
+    """F1: unparsable model output or bad filenames refuse, never partial."""
+    import rouvr.mcp_server as ms
+
+    class Garbage:
+        name = "meta"
+        def chat(self, messages):
+            return "not json{"
+    monkeypatch.setattr("backend.rouvr_models.providers.get_provider", lambda *a, **k: Garbage())
+    with pytest.raises(RuntimeError, match="[Jj]son|pars"):
+        ms._author_hidden_suite(["c1"])
+
+    class Evil:
+        name = "meta"
+        def chat(self, messages):
+            return '{"../evil.py": "x"}'
+    monkeypatch.setattr("backend.rouvr_models.providers.get_provider", lambda *a, **k: Evil())
+    with pytest.raises(RuntimeError, match="[Ff]lat|name"):
+        ms._author_hidden_suite(["c1"])
+
+
+def test_waiting_lists_escalation_reason_from_json_string_body(monkeypatch, ledger_url, tmp_path):
+    """F3: ledger string bodies parse; malformed bodies fall back, never raise."""
+    import json
+    import httpx
+    monkeypatch.setenv("WORKHUB_BASE_URL", ledger_url)
+    monkeypatch.setenv("HIDDEN_TESTS_ROOT", str(tmp_path / "hidden"))
+    import importlib
+    import rouvr.mcp_server as ms
+    importlib.reload(ms)
+    _inject_fake_author(monkeypatch, ms)
+    t1 = ms.workhub_create_task("t-reason", "d", ["c1"])
+    httpx.post(f"{ledger_url}/v1/tasks/{t1['id']}/evidence",
+               json={"kind": "escalation", "fence": "e:1",
+                     "body": {"reason": "rework_exhausted"}}).raise_for_status()
+    httpx.post(f"{ledger_url}/v1/tasks/{t1['id']}/transition",
+               json={"to": "blocked", "idempotency_key": "k1"}).raise_for_status()
+    t2 = ms.workhub_create_task("t-badbody", "d", ["c1"])
+    httpx.post(f"{ledger_url}/v1/tasks/{t2['id']}/evidence",
+               json={"kind": "escalation", "fence": "e:2", "body": "not json{"}).raise_for_status()
+    httpx.post(f"{ledger_url}/v1/tasks/{t2['id']}/transition",
+               json={"to": "blocked", "idempotency_key": "k2"}).raise_for_status()
+    waiting = {w["task_id"]: w["reason"] for w in ms.workhub_list_tasks()["waiting_on_supervisor"]}
+    assert waiting[t1["id"]] == "escalation:rework_exhausted"
+    assert waiting[t2["id"]] == "blocked"
+
+
+def test_mcp_http_auth_gate(monkeypatch):
+    """F2b: no token, no serve — unless explicitly anonymous."""
+    import rouvr.mcp_server as ms
+    monkeypatch.setenv("ROUVR_LEDGER_TOKEN", "tok")
+    monkeypatch.delenv("ROUVR_ALLOW_ANON", raising=False)
+    assert ms._mcp_http_auth() == "tok"
+    monkeypatch.delenv("ROUVR_LEDGER_TOKEN", raising=False)
+    monkeypatch.setenv("ROUVR_ALLOW_ANON", "1")
+    assert ms._mcp_http_auth() == ""
+    monkeypatch.delenv("ROUVR_ALLOW_ANON", raising=False)
+    with pytest.raises(RuntimeError, match="ROUVR_LEDGER_TOKEN"):
+        ms._mcp_http_auth()

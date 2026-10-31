@@ -1407,6 +1407,41 @@
         "by": "supervisor",
         "ref": "docs/tasks/rouvr/S016-user-profiles.md SS11"
       }
+    },
+    {
+      "id": "S020",
+      "file": "docs/tasks/rouvr/S020-review-fixes.md",
+      "state": "needs_review",
+      "worker": "coder-1",
+      "supervisor": null,
+      "depends_on": [
+        "S019"
+      ],
+      "cycles": [],
+      "history": [
+        {
+          "state": "queued",
+          "at": "2026-10-31",
+          "by": "worker",
+          "ref": "registered"
+        },
+        {
+          "state": "running",
+          "at": "2026-10-31",
+          "by": "worker",
+          "ref": "claim"
+        },
+        {
+          "state": "needs_review",
+          "at": "2026-10-31",
+          "by": "worker",
+          "ref": "tests"
+        }
+      ],
+      "claimed_at": "2026-10-31",
+      "pre_task": "IMPLEMENTATION+docs; bounded scope: mcp_server author hook, compose URL, token gate, waiting json.loads, doc sync; tests-first per task",
+      "tests": "tests/ 295 passed (6 new: author refusal, malformed author, inbox reason, token gate, compose sqlite, schedule doc); broad set 389 passed 2 skipped; hygiene clean",
+      "evidence": "F1 author-or-refuse hook (no placeholders, coder blind); F2a compose sqlite + dropped db dep; F2b token gate; F3 waiting json.loads; F6 doc sync; F7 coding-only docs"
     }
   ]
 }

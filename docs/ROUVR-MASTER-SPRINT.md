@@ -125,8 +125,7 @@ Executed (all PASS; sheets in `docs/tasks/rouvr/`, lifecycle JSON):
 | S006 | R9 verifier + close | Rework loop test; CAS+readback close |
 | S007 | R10 rehearsal + record + A2 gates | Script exit 0; transcript recorded |
 
-Queued (human-gated): S008 stage promotion (grant + verifier credential +
-stage R10), S009 hyeve-lane back-port, S010 P2 receipt signing.
+Done: S008 stage promotion, S009 hyeve-lane back-port, S010 P2 receipt signing (all PASS per INDEX).
 
 ## 8. Child Sprint Generation Rules
 
@@ -242,8 +241,7 @@ releases). `next`/`claim-next` select the lowest queued sprint whose
 may never review (claimant ≠ reviewer, enforced in `review()`). Multiple
 workers and multiple supervisors are first-class: every mutation names its
 actor (`--by`). Messages (`muse.send_session_message`) are wakeups only;
-the ledger is the system of record. Queued: S008 (stage promotion, blocked
-on humans), S009 (back-port, depends on S008), S010 (P2 receipts).
+the ledger is the system of record. S008/S009/S010 are done (PASS per INDEX).
 
 ## 17. Muse Operating Instruction
 

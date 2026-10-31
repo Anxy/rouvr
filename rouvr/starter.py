@@ -1,5 +1,6 @@
 """rouvr/starter.py — idempotent start used by the thin endpoint (rouvr/api.py, owner decision 2) and the
-`rouvr start` operator CLI. `rouvr schedule` (recurring work) is OUT OF SCOPE (owner decision 1: coding only); kept, unused."""
+`rouvr start` operator CLI. `rouvr schedule` (recurring work) is OUT OF SCOPE (owner decision 1: coding only); kept, unused.
+Schedules are coding-only: they start TaskWorkflow children. Ops packs run through OpsTaskWorkflow directly."""
 from __future__ import annotations
 
 import argparse

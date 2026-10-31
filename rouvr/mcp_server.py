@@ -10,6 +10,7 @@ Serves streamable HTTP on 127.0.0.1:8231/mcp (override with ROUVR_MCP_PORT).
 """
 from __future__ import annotations
 
+import json
 import os
 
 import httpx
@@ -42,6 +43,40 @@ def _prose_warnings(description: str, criteria: list[str]) -> list[str]:
     return []
 
 
+def _author_hidden_suite(criteria: list[str]) -> dict[str, str]:
+    """Author hidden checks via a test_author model turn. Never placeholders.
+
+    Override point for tests: monkeypatch rouvr.mcp_server._author_hidden_suite.
+    Raises RuntimeError (fail closed, nothing written) when no model is
+    available or the model output is unusable — the create is refused
+    instead of degrading to assert True.
+    """
+    from backend.rouvr_models.providers import get_provider
+    provider = get_provider()
+    if provider.name == "stub":
+        raise RuntimeError(
+            "hidden suite needs a real model: set ROUVR_MODEL_PROVIDER "
+            "(meta|ollama|openrouter) with its key, then retry the create")
+    raw = provider.chat([
+        {"role": "system", "content": (
+            "Write pytest checks for the acceptance criteria. Reply with ONLY a "
+            "JSON object mapping flat filenames (*.py, no directories) to file "
+            "contents. Every test name must start with test_. No placeholders: "
+            "every test must assert real behavior.")},
+        {"role": "user", "content": "\n".join(f"- {c}" for c in criteria)}])
+    try:
+        files = json.loads(raw)
+    except ValueError:
+        raise RuntimeError("test_author returned unparsable output; create refused") from None
+    if not isinstance(files, dict) or not files or \
+            any(not isinstance(k, str) or not isinstance(v, str) for k, v in files.items()):
+        raise RuntimeError("test_author returned an unusable suite; create refused")
+    for name in files:
+        if "/" in name or name in {".", ".."} or not name.endswith(".py"):
+            raise RuntimeError(f"test_author returned a bad test name: {name!r}; create refused")
+    return files
+
+
 @mcp.tool()
 def workhub_create_task(title: str, description: str, acceptance_criteria: list[str]) -> dict:
     """Create a WorkHub task plus its contract. Returns the task (task_number = id).
@@ -50,11 +85,11 @@ def workhub_create_task(title: str, description: str, acceptance_criteria: list[
     principal (never the coder): HIDDEN_TESTS_ROOT/<id>/MANIFEST.json with
     created_by=test_author. The coder workspace is never touched.
     """
-    import re
     from pathlib import Path
 
     from rouvr.hiddentests import write_hidden_suite
 
+    files = _author_hidden_suite(acceptance_criteria)  # fail closed before any ledger write
     with _ledger() as c:
         task = c.post("/v1/tasks_with_contract", json={
             "title": title, "intent": "supervisor", "contract": {
@@ -64,13 +99,6 @@ def workhub_create_task(title: str, description: str, acceptance_criteria: list[
         if (w := _prose_warnings(description, acceptance_criteria)):
             task["warnings"] = w
     root = Path(os.environ.get("HIDDEN_TESTS_ROOT", "/srv/rouvr/hidden-tests"))
-    files: dict[str, str] = {}
-    for i, crit in enumerate(acceptance_criteria, 1):
-        slug = re.sub(r"[^a-z0-9]+", "_", crit.lower()).strip("_")[:40] or "criterion"
-        files.setdefault("test_criteria.py", "")
-        files["test_criteria.py"] += (
-            f"def test_c{i}_{slug}():\n"
-            f"    assert True  # test_author placeholder for criterion {i}: {crit[:80]}\n")
     if files:
         try:
             write_hidden_suite(root, task_id=str(task["id"]), files=files, created_by="test_author")
@@ -78,6 +106,27 @@ def workhub_create_task(title: str, description: str, acceptance_criteria: list[
             if "locked" not in str(e).lower():
                 raise
     return task
+
+
+def _escalation_reason(evidence: list | None) -> str:
+    """Newest escalation reason, or "blocked". Ledger bodies may be JSON strings."""
+    for e in evidence or []:
+        if e.get("kind") != "escalation":
+            continue
+        body = e.get("body") or {}
+        if isinstance(body, str):
+            try:
+                body = json.loads(body)
+            except ValueError:
+                continue
+        if not isinstance(body, dict):
+            continue
+        payload = body.get("payload")
+        if isinstance(payload, dict) and payload.get("reason"):
+            return f"escalation:{payload['reason']}"
+        if body.get("reason"):
+            return f"escalation:{body['reason']}"
+    return "blocked"
 
 
 def _annotate(task: dict) -> dict:
@@ -112,16 +161,7 @@ def workhub_list_tasks() -> dict:
             reason = "blocked"
             try:
                 detail = c.get(f"/v1/tasks/{t['id']}").raise_for_status().json()
-                for e in detail.get("evidence") or []:
-                    if e.get("kind") == "escalation":
-                        body = e.get("body") or {}
-                        payload = body.get("payload") if isinstance(body, dict) else None
-                        if isinstance(payload, dict) and payload.get("reason"):
-                            reason = f"escalation:{payload['reason']}"
-                            break
-                        elif isinstance(body, dict) and body.get("reason"):
-                            reason = f"escalation:{body['reason']}"
-                            break
+                reason = _escalation_reason(detail.get("evidence"))
             except Exception:
                 pass
             waiting.append({"task_id": t["id"], "reason": reason})
@@ -408,13 +448,23 @@ async def rouvr_schedule(task_number: int, cron: str, schedule_id: str = "",
     return {"schedule_id": sid, "task_number": task_number, "scope": scope}
 
 
+def _mcp_http_auth() -> str:
+    """Token guard for the HTTP transport. Returns the token, or "" when
+    explicitly anonymous. Refuses to serve an open port otherwise."""
+    token = os.environ.get("ROUVR_LEDGER_TOKEN", "")
+    if token or os.environ.get("ROUVR_ALLOW_ANON") == "1":
+        return token
+    raise RuntimeError("ROUVR_LEDGER_TOKEN is unset: refusing an open MCP port "
+                       "(set the token, or explicit ROUVR_ALLOW_ANON=1)")
+
+
 if __name__ == "__main__":
     if os.environ.get("ROUVR_MCP_TRANSPORT") == "stdio":  # plugin-bundled mode
         mcp.run(transport="stdio")
     else:
         import threading
         threading.Thread(target=_auto_reap_loop, daemon=True).start()
-        _token = os.environ.get("ROUVR_LEDGER_TOKEN", "")
+        _token = _mcp_http_auth()
         if _token:  # S011: same shared token guards the MCP port
             import uvicorn
             from starlette.middleware.base import BaseHTTPMiddleware

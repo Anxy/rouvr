@@ -4,7 +4,7 @@ Rouvr was developed inside eBizneeds' Hyeve platform (it was formerly called "AI
 
 | Hyeve service | What it does in production | Standalone replacement here |
 |---|---|---|
-| WorkHub | System of record: tasks, contracts, leases, results, reviews, evidence, receipts. Bots are stateless; all state lives here. | `ledger/` (WorkHub-lite: tasks, hashed contracts, append-only evidence, idempotent receipts; refuses `done` without contract + evidence). No auth, leases or multi-tenancy. |
+| WorkHub | System of record: tasks, contracts, leases, results, reviews, evidence, receipts. Bots are stateless; all state lives here. | `ledger/` (WorkHub-lite: tasks, hashed contracts, append-only evidence, idempotent receipts; refuses `done` without contract + evidence). Token auth (shared + per-user), leases, per-user task scoping. |
 | Hyeve Agent SDK | Worker runtime used by bots to claim work and report results | `workers/` |
 | Comm / Notification service | Outbound email/notifications, returning provider message ids used for readback verification | File outbox (`demo/.outbox/`) |
 | Auth service | Principals, tokens, tenancy; enforces builder ≠ reviewer by identity | Not shipped |

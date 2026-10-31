@@ -131,3 +131,15 @@ def test_stop_kills_only_own_checkout_pids(tmp_path):
     finally:
         own.kill()
         foreign.kill()
+
+
+def test_compose_ledger_uses_sqlite_not_postgres():
+    compose = (ROOT / "demo/docker-compose.yml").read_text()
+    ledger = compose.split("ledger:")[1].split("\n  ", 1)[1] if "ledger:" in compose else compose
+    assert "postgresql" not in ledger and "psycopg" not in ledger
+    assert "sqlite" in ledger
+
+
+def test_schedule_path_documented_coding_only():
+    starter = (ROOT / "rouvr/starter.py").read_text()
+    assert "coding-only" in starter

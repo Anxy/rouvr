@@ -8,3 +8,4 @@ docs/a2-gates.md
 docs/implementation-plan.md
 docs/tasks/*
 docs/release-notes/*
+rouvr-lane/*

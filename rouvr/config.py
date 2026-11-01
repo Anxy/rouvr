@@ -6,6 +6,10 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 
+#: Canonical workspace-root default; shared so ad-hoc tools agree with Settings.
+DEFAULT_WORKSPACE_ROOT = "/srv/rouvr/workspaces"
+
+
 def _env(name: str, default: str | None = None) -> str:
     v = os.environ.get(name, default)
     if v is None:
@@ -70,7 +74,7 @@ class Settings:
             persona_source=_env("PERSONA_SOURCE", "aix"),
             aix_mapping_path=Path(_env("AIX_MAPPING_PATH", "/srv/rouvr/personas/aix_mapping.json")),
             start_api_token_file=Path(_env("START_API_TOKEN_FILE", "/srv/rouvr/start_api.token")),
-            workspace_root=Path(_env("WORKSPACE_ROOT", "/srv/rouvr/workspaces")),
+            workspace_root=Path(_env("WORKSPACE_ROOT", DEFAULT_WORKSPACE_ROOT)),
             evidence_root=Path(_env("EVIDENCE_ROOT", "/srv/rouvr/evidence")),
             muse_bin=_env("MUSE_BIN", "muse"),
             max_rework=_int("MAX_REWORK", 2),

@@ -327,9 +327,10 @@ def _live_peers(task_id: int, task: dict) -> list[dict]:
     yet, so its session is found in the muse session store by workspace)."""
     from pathlib import Path
 
+    from rouvr.config import DEFAULT_WORKSPACE_ROOT
     from rouvr.muse import discover_session_id
     peers = _peer_sessions(task)
-    root = Path(os.environ.get("WORKSPACE_ROOT", "/tmp/rouvr-supervisor/workspaces"))
+    root = Path(os.environ.get("WORKSPACE_ROOT", DEFAULT_WORKSPACE_ROOT))
     known = {p["session_id"] for p in peers}
     for ws in sorted(root.glob(f"rouvr__{task_id}__a*")) if root.exists() else []:
         sid = discover_session_id(ws)

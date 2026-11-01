@@ -35,7 +35,8 @@ async def test_mcp_tools_registered():
                      "workhub_show_task", "workhub_post_message",
                      "workhub_read_messages", "workhub_peer_sessions",
                      "workhub_message_agent", "workhub_agent_windows",
-                     "workhub_reap_windows", "rouvr_start_task", "rouvr_schedule"]
+                     "workhub_reap_windows", "rouvr_start_task", "rouvr_schedule",
+                     "rouvr_schedule_ops"]
 
 
 def test_parse_windows_matches_muse_and_terminal_not_server():

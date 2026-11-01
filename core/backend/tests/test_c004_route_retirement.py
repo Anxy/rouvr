@@ -118,4 +118,4 @@ def test_mvp_execute_returns_410() -> None:
         },
     )
     assert response.status_code == 410
-    assert response.json()["detail"]["code"] == "MVP_EXECUTE_RETIRED"
+    assert response.json()["detail"]["code"] == "MVP_MUTATION_RETIRED"

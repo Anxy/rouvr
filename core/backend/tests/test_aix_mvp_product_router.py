@@ -17,6 +17,13 @@ def _client() -> TestClient:
     return TestClient(app)
 
 
+def _assert_retired(response, code: str) -> None:
+    # C004: MVP mutations retired; authed calls get 410 before validation.
+    assert response.status_code == 410
+    assert response.json()["detail"]["code"] == code
+    assert response.json()["detail"]["sub_code"] == "USE_OBJECTIVE_CYCLE"
+
+
 def _admission_payload(**overrides):
     payload = {
         "id": "task-1",
@@ -168,10 +175,8 @@ def test_admit_requires_trusted_tenant_and_actor_headers() -> None:
         json=_admission_payload(),
     )
 
-    assert missing_tenant.status_code == 400
-    assert missing_tenant.json()["detail"]["sub_code"] == "TENANT_ID_REQUIRED"
-    assert missing_actor.status_code == 400
-    assert missing_actor.json()["detail"]["sub_code"] == "ACTOR_ID_REQUIRED"
+    _assert_retired(missing_tenant, "MVP_ADMIT_RETIRED")
+    _assert_retired(missing_actor, "MVP_ADMIT_RETIRED")
 
 
 def test_admit_rejects_tenant_mismatch() -> None:
@@ -181,8 +186,7 @@ def test_admit_rejects_tenant_mismatch() -> None:
         json=_admission_payload(),
     )
 
-    assert response.status_code == 403
-    assert response.json()["detail"]["sub_code"] == "TENANT_MISMATCH"
+    _assert_retired(response, "MVP_ADMIT_RETIRED")
 
 
 def test_admit_rejects_unsupported_task_kind() -> None:
@@ -192,24 +196,13 @@ def test_admit_rejects_unsupported_task_kind() -> None:
         json=_admission_payload(task_kind="multi_file_refactor"),
     )
 
-    assert response.status_code == 422
-    assert response.json()["detail"]["sub_code"] == "UNSUPPORTED_TASK_KIND"
+    _assert_retired(response, "MVP_ADMIT_RETIRED")
 
 
 def test_admit_accepts_supported_task_kind_without_execution_authority() -> None:
     response = _client().post("/aix/tasks/admit", headers=_headers(), json=_admission_payload())
 
-    assert response.status_code == 200
-    data = response.json()["data"]
-    assert data["schema_version"] == "aix.mvp.task_admission.v1"
-    assert data["task_id"] == "task-1"
-    assert data["tenant_id"] == "tenant-a"
-    assert data["admission"] == "admitted"
-    assert data["execution_authorized"] is False
-    assert data["review_state"] == "review_pending"
-    assert data["authority"]["workhub_lifecycle_authority"] is False
-    assert data["authority"]["executor_self_retry_allowed"] is False
-    assert data["authority"]["production_mutation_allowed"] is False
+    _assert_retired(response, "MVP_ADMIT_RETIRED")
 
 
 def test_admit_accepts_hyeve_tenant_header_alias() -> None:
@@ -219,8 +212,7 @@ def test_admit_accepts_hyeve_tenant_header_alias() -> None:
 
     response = _client().post("/aix/tasks/admit", headers=headers, json=_admission_payload())
 
-    assert response.status_code == 200
-    assert response.json()["data"]["tenant_id"] == "tenant-a"
+    _assert_retired(response, "MVP_ADMIT_RETIRED")
 
 
 def test_admit_rejects_explicit_production_mutation_request() -> None:
@@ -233,8 +225,7 @@ def test_admit_rejects_explicit_production_mutation_request() -> None:
         ),
     )
 
-    assert response.status_code == 422
-    assert response.json()["detail"]["sub_code"] == "PRODUCTION_MUTATION_FORBIDDEN"
+    _assert_retired(response, "MVP_ADMIT_RETIRED")
 
 
 def test_admit_rejects_single_file_helper_without_single_file_scope() -> None:
@@ -248,8 +239,7 @@ def test_admit_rejects_single_file_helper_without_single_file_scope() -> None:
         ),
     )
 
-    assert response.status_code == 422
-    assert response.json()["detail"]["sub_code"] == "SINGLE_FILE_SCOPE_REQUIRED"
+    _assert_retired(response, "MVP_ADMIT_RETIRED")
 
 
 def test_admit_rejects_single_file_helper_without_loc_bound() -> None:
@@ -259,8 +249,7 @@ def test_admit_rejects_single_file_helper_without_loc_bound() -> None:
         json=_admission_payload(task_kind="single_file_helper", bounded_scope=["backend/helper.py"]),
     )
 
-    assert response.status_code == 422
-    assert response.json()["detail"]["sub_code"] == "SINGLE_FILE_LOC_BOUND_REQUIRED"
+    _assert_retired(response, "MVP_ADMIT_RETIRED")
 
 
 def test_admit_rejects_single_file_helper_over_50_loc() -> None:
@@ -274,8 +263,7 @@ def test_admit_rejects_single_file_helper_over_50_loc() -> None:
         ),
     )
 
-    assert response.status_code == 422
-    assert response.json()["detail"]["sub_code"] == "SINGLE_FILE_LOC_BOUND_EXCEEDED"
+    _assert_retired(response, "MVP_ADMIT_RETIRED")
 
 
 def test_admit_accepts_bounded_single_file_helper() -> None:
@@ -289,8 +277,7 @@ def test_admit_accepts_bounded_single_file_helper() -> None:
         ),
     )
 
-    assert response.status_code == 200
-    assert response.json()["data"]["task_kind"] == "single_file_helper"
+    _assert_retired(response, "MVP_ADMIT_RETIRED")
 
 
 def test_admit_rejects_test_generation_source_path_scope() -> None:
@@ -303,8 +290,7 @@ def test_admit_rejects_test_generation_source_path_scope() -> None:
         ),
     )
 
-    assert response.status_code == 422
-    assert response.json()["detail"]["sub_code"] == "TEST_GENERATION_TEST_PATH_REQUIRED"
+    _assert_retired(response, "MVP_ADMIT_RETIRED")
 
 
 def test_admit_rejects_test_generation_source_mutation_authority() -> None:
@@ -318,8 +304,7 @@ def test_admit_rejects_test_generation_source_mutation_authority() -> None:
         ),
     )
 
-    assert response.status_code == 422
-    assert response.json()["detail"]["sub_code"] == "TEST_GENERATION_SOURCE_MUTATION_FORBIDDEN"
+    _assert_retired(response, "MVP_ADMIT_RETIRED")
 
 
 def test_admit_accepts_test_generation_test_path_scope() -> None:
@@ -333,8 +318,7 @@ def test_admit_accepts_test_generation_test_path_scope() -> None:
         ),
     )
 
-    assert response.status_code == 200
-    assert response.json()["data"]["task_kind"] == "test_generation"
+    _assert_retired(response, "MVP_ADMIT_RETIRED")
 
 
 def test_status_requires_tenant_header() -> None:
@@ -378,10 +362,8 @@ def test_replay_requires_trusted_tenant_and_actor_headers() -> None:
         json={},
     )
 
-    assert missing_tenant.status_code == 400
-    assert missing_tenant.json()["detail"]["sub_code"] == "TENANT_ID_REQUIRED"
-    assert missing_actor.status_code == 400
-    assert missing_actor.json()["detail"]["sub_code"] == "ACTOR_ID_REQUIRED"
+    _assert_retired(missing_tenant, "MVP_MUTATION_RETIRED")
+    _assert_retired(missing_actor, "MVP_MUTATION_RETIRED")
 
 
 def test_replay_evidence_not_found_returns_404_without_leak(monkeypatch) -> None:
@@ -400,9 +382,7 @@ def test_replay_evidence_not_found_returns_404_without_leak(monkeypatch) -> None
 
     response = _client().post("/aix/replay/evidence-missing", headers=_headers(), json={})
 
-    assert response.status_code == 404
-    assert response.json()["detail"]["sub_code"] == "EVIDENCE_ID_NOT_FOUND"
-    assert "tenant-b" not in str(response.json())
+    _assert_retired(response, "MVP_MUTATION_RETIRED")
 
 
 def test_replay_rejects_ambiguous_evidence_id(monkeypatch) -> None:
@@ -417,8 +397,7 @@ def test_replay_rejects_ambiguous_evidence_id(monkeypatch) -> None:
 
     response = _client().post("/aix/replay/evidence-duplicate", headers=_headers(), json={})
 
-    assert response.status_code == 409
-    assert response.json()["detail"]["sub_code"] == "EVIDENCE_ID_AMBIGUOUS"
+    _assert_retired(response, "MVP_MUTATION_RETIRED")
 
 
 def test_replay_rejects_non_replay_evidence(monkeypatch) -> None:
@@ -433,8 +412,7 @@ def test_replay_rejects_non_replay_evidence(monkeypatch) -> None:
 
     response = _client().post("/aix/replay/evidence-not-replay", headers=_headers(), json={})
 
-    assert response.status_code == 422
-    assert response.json()["detail"]["sub_code"] == "EVIDENCE_NOT_REPLAYABLE"
+    _assert_retired(response, "MVP_MUTATION_RETIRED")
 
 
 def test_replay_returns_product_shape_without_workhub_lifecycle_or_execution_authority(monkeypatch) -> None:
@@ -467,17 +445,7 @@ def test_replay_returns_product_shape_without_workhub_lifecycle_or_execution_aut
 
     response = _client().post("/aix/replay/evidence-replay-1", headers=_headers(), json={})
 
-    assert response.status_code == 200
-    data = response.json()["data"]
-    assert data["schema_version"] == "aix.mvp.evidence_replay.v1"
-    assert data["tenant_id"] == "tenant-a"
-    assert data["requested_by_actor_id"] == "actor-a"
-    assert data["evidence_id"] == "evidence-replay-1"
-    assert data["executed"] is False
-    assert data["duplicate_suppression"]["duplicate_execution"] is False
-    assert data["authority"]["workhub_lifecycle_authority"] is False
-    assert data["authority"]["evidence_is_acceptance"] is False
-    assert data["authority"]["production_mutation_allowed"] is False
+    _assert_retired(response, "MVP_MUTATION_RETIRED")
 
 
 def test_status_returns_latest_tenant_scoped_orchestrator_state(tmp_path, monkeypatch) -> None:
@@ -536,8 +504,7 @@ def test_execute_rejects_workhub_writeback() -> None:
     )
 
     # C004-T03: execute path retired before writeback policy checks.
-    assert response.status_code == 410
-    assert response.json()["detail"]["code"] == "MVP_EXECUTE_RETIRED"
+    _assert_retired(response, "MVP_MUTATION_RETIRED")
 
 
 def test_execute_rejects_unsupported_task_kind_before_orchestrator(monkeypatch) -> None:
@@ -555,8 +522,7 @@ def test_execute_rejects_unsupported_task_kind_before_orchestrator(monkeypatch) 
         json=_execution_payload(task_kind="multi_file_refactor"),
     )
 
-    assert response.status_code == 410
-    assert response.json()["detail"]["code"] == "MVP_EXECUTE_RETIRED"
+    _assert_retired(response, "MVP_MUTATION_RETIRED")
     assert calls == []
 
 
@@ -578,8 +544,7 @@ def test_execute_rejects_task_kind_policy_before_orchestrator(monkeypatch) -> No
         ),
     )
 
-    assert response.status_code == 410
-    assert response.json()["detail"]["code"] == "MVP_EXECUTE_RETIRED"
+    _assert_retired(response, "MVP_MUTATION_RETIRED")
     assert calls == []
 
 
@@ -601,8 +566,7 @@ def test_execute_invokes_orchestrator_inline_with_writeback_disabled(monkeypatch
 
     response = _client().post("/aix/tasks/execute", headers=_headers(), json=_execution_payload())
 
-    assert response.status_code == 410
-    assert response.json()["detail"]["code"] == "MVP_EXECUTE_RETIRED"
+    _assert_retired(response, "MVP_MUTATION_RETIRED")
     assert calls == []
 
 
@@ -651,8 +615,7 @@ def test_review_decision_requires_human_actor_header(tmp_path, monkeypatch) -> N
         json=_review_decision_payload(),
     )
 
-    assert response.status_code == 400
-    assert response.json()["detail"]["sub_code"] == "ACTOR_ID_REQUIRED"
+    _assert_retired(response, "MVP_MUTATION_RETIRED")
 
 
 def test_review_decision_rejects_body_actor_mismatch(tmp_path, monkeypatch) -> None:
@@ -664,8 +627,7 @@ def test_review_decision_rejects_body_actor_mismatch(tmp_path, monkeypatch) -> N
         json=_review_decision_payload(human_actor_id="actor-b"),
     )
 
-    assert response.status_code == 403
-    assert response.json()["detail"]["sub_code"] == "HUMAN_ACTOR_MISMATCH"
+    _assert_retired(response, "MVP_MUTATION_RETIRED")
 
 
 def test_review_decision_rejects_non_human_actor_roles(tmp_path, monkeypatch) -> None:
@@ -677,8 +639,7 @@ def test_review_decision_rejects_non_human_actor_roles(tmp_path, monkeypatch) ->
             headers=_headers(),
             json=_review_decision_payload(actor_type=actor_type),
         )
-        assert response.status_code == 403
-        assert response.json()["detail"]["sub_code"] == "HUMAN_REVIEW_REQUIRED"
+        _assert_retired(response, "MVP_MUTATION_RETIRED")
 
 
 def test_review_decision_rejects_cross_tenant_without_leaking_state(tmp_path, monkeypatch) -> None:
@@ -690,9 +651,7 @@ def test_review_decision_rejects_cross_tenant_without_leaking_state(tmp_path, mo
         json=_review_decision_payload(tenant_id="tenant-b"),
     )
 
-    assert response.status_code == 404
-    assert response.json()["detail"]["sub_code"] == "TASK_ID_NOT_FOUND"
-    assert "tenant-a" not in str(response.json())
+    _assert_retired(response, "MVP_MUTATION_RETIRED")
 
 
 def test_review_decision_rejects_stale_run_or_packet_version(tmp_path, monkeypatch) -> None:
@@ -709,10 +668,8 @@ def test_review_decision_rejects_stale_run_or_packet_version(tmp_path, monkeypat
         json=_review_decision_payload(review_packet_version="packet-stale"),
     )
 
-    assert stale_run.status_code == 409
-    assert stale_run.json()["detail"]["sub_code"] == "STALE_REVIEW_RUN"
-    assert stale_packet.status_code == 409
-    assert stale_packet.json()["detail"]["sub_code"] == "STALE_REVIEW_PACKET"
+    _assert_retired(stale_run, "MVP_MUTATION_RETIRED")
+    _assert_retired(stale_packet, "MVP_MUTATION_RETIRED")
 
 
 def test_review_decision_records_aix_review_state_without_workhub_lifecycle_authority(tmp_path, monkeypatch) -> None:
@@ -724,17 +681,7 @@ def test_review_decision_records_aix_review_state_without_workhub_lifecycle_auth
         json=_review_decision_payload(decision="request_changes"),
     )
 
-    assert response.status_code == 200
-    data = response.json()["data"]
-    assert data["schema_version"] == "aix.mvp.review_decision.v1"
-    assert data["task_id"] == "task-1"
-    assert data["review_state"] == "changes_requested"
-    assert data["idempotent_replay"] is False
-    assert data["authority"]["workhub_lifecycle_authority"] is False
-    state = store.get_latest_by_task_id("task-1")
-    assert state is not None
-    assert state.validator_ledger["mvp_review_decision"]["review_state"] == "changes_requested"
-    assert state.validator_ledger["mvp_review_decision"]["workhub_lifecycle_mutation"] is False
+    _assert_retired(response, "MVP_MUTATION_RETIRED")
 
 
 def test_review_decision_duplicate_same_payload_is_idempotent(tmp_path, monkeypatch) -> None:
@@ -744,11 +691,8 @@ def test_review_decision_duplicate_same_payload_is_idempotent(tmp_path, monkeypa
     first = client.post("/aix/tasks/task-1/review-decision", headers=_headers(), json=_review_decision_payload())
     second = client.post("/aix/tasks/task-1/review-decision", headers=_headers(), json=_review_decision_payload())
 
-    assert first.status_code == 200
-    assert second.status_code == 200
-    assert first.json()["data"]["idempotent_replay"] is False
-    assert second.json()["data"]["idempotent_replay"] is True
-    assert second.json()["data"]["review_state"] == "review_accepted"
+    _assert_retired(first, "MVP_MUTATION_RETIRED")
+    _assert_retired(second, "MVP_MUTATION_RETIRED")
 
 
 def test_review_decision_duplicate_different_payload_is_rejected(tmp_path, monkeypatch) -> None:
@@ -762,6 +706,5 @@ def test_review_decision_duplicate_different_payload_is_rejected(tmp_path, monke
         json=_review_decision_payload(decision="reject"),
     )
 
-    assert first.status_code == 200
-    assert second.status_code == 409
-    assert second.json()["detail"]["sub_code"] == "DUPLICATE_DECISION_CONFLICT"
+    _assert_retired(first, "MVP_MUTATION_RETIRED")
+    _assert_retired(second, "MVP_MUTATION_RETIRED")

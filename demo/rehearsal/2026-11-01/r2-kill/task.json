@@ -1,0 +1,65 @@
+{
+  "id": 2,
+  "title": "morning-report:r2",
+  "intent": "Every morning, compile yesterday's lane report (tasks closed, parks and escalations), publish it to the stakeholder inbox, make sure the ledger is healthy, and escalate if anything fails.",
+  "state": "done",
+  "owner": "ops-worker",
+  "tenant": "rehearse",
+  "project": "demo",
+  "created_at": "2026-11-01T11:19:34.253686+00:00",
+  "updated_at": "2026-11-01T11:19:34.547872+00:00",
+  "created_by": "supervisor",
+  "contracts": [
+    {
+      "id": 2,
+      "task_id": 2,
+      "body": "{\"escalation\":\"owner\",\"expires_in_hours\":24,\"provider\":\"stub\",\"side_effects\":[\"write one message to stakeholder outbox\"],\"stakeholders\":[\"owner\"],\"steps\":[\"health_probe\",\"compile_report\",\"deliver\",\"verify\"],\"success_criteria\":[\"report delivered and read back\",\"figures match ledger\",\"health ok\"]}",
+      "sha256": "6e36b8a9fdd0cc5d3395bc671ab11ee0a093d8c1930925e0526dc6784b619823",
+      "created_at": "2026-11-01T11:19:34.313294+00:00"
+    }
+  ],
+  "evidence": [
+    {
+      "id": 4,
+      "task_id": 2,
+      "kind": "delivery",
+      "body": "{\"message_id\":\"00088c98de1c35c0\",\"ok\":true,\"sink\":\"primary\"}",
+      "sha256": "ecc3b309dc817539c3a99fe6a11dc3afd60ac585ffe7b5d1e727982b13bc92c0",
+      "created_at": "2026-11-01T11:19:34.442215+00:00"
+    },
+    {
+      "id": 5,
+      "task_id": 2,
+      "kind": "reviewer",
+      "body": "{\"executor\":\"ops-worker\",\"figures_match\":true,\"health\":true,\"judge_principal\":\"ops-judge\",\"model\":\"stub\",\"readback\":true,\"sink\":\"primary\",\"verdict\":\"pass\"}",
+      "sha256": "addef20f6b5c8aa0ba58231fa3270771d65861919d9f05b83059821e3267505d",
+      "created_at": "2026-11-01T11:19:34.499040+00:00"
+    },
+    {
+      "id": 6,
+      "task_id": 2,
+      "kind": "ops_receipt",
+      "body": "{\"digest\":\"Done. No action needed.\",\"figures\":{\"blocked\":0,\"done\":1,\"failed\":0},\"message_id\":\"00088c98de1c35c0\",\"sink\":\"primary\"}",
+      "sha256": "db84f6c9ab76dfe3fdb3a75b299a3d70affc95035f5e5d02f5fa260c6cff9dab",
+      "created_at": "2026-11-01T11:19:34.551767+00:00"
+    }
+  ],
+  "receipts": [
+    {
+      "id": 3,
+      "task_id": 2,
+      "idempotency_key": "morning-report:r2:claim",
+      "action": "transition:claimed",
+      "body": "{\"from\":\"open\",\"note\":null,\"to\":\"claimed\"}",
+      "created_at": "2026-11-01T11:19:34.366859+00:00"
+    },
+    {
+      "id": 4,
+      "task_id": 2,
+      "idempotency_key": "morning-report:r2:done",
+      "action": "transition:done",
+      "body": "{\"from\":\"claimed\",\"note\":null,\"to\":\"done\"}",
+      "created_at": "2026-11-01T11:19:34.548080+00:00"
+    }
+  ]
+}

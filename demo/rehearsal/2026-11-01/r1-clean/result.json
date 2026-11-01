@@ -1,0 +1,9 @@
+{
+  "run_key": "morning-report:r1",
+  "workflow_id": "rehearse-morning-report:r1-1793531973",
+  "state": "done",
+  "digest": "Done. No action needed.",
+  "sink": "primary",
+  "message_id": "410d0e499fa3f98c",
+  "task_id": "1"
+}

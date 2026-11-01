@@ -1,0 +1,81 @@
+{
+  "id": 3,
+  "title": "morning-report:r3",
+  "intent": "Every morning, compile yesterday's lane report (tasks closed, parks and escalations), publish it to the stakeholder inbox, make sure the ledger is healthy, and escalate if anything fails.",
+  "state": "done",
+  "owner": "ops-worker",
+  "tenant": "rehearse",
+  "project": "demo",
+  "created_at": "2026-11-01T11:20:38.135537+00:00",
+  "updated_at": "2026-11-01T11:20:38.518219+00:00",
+  "created_by": "supervisor",
+  "contracts": [
+    {
+      "id": 3,
+      "task_id": 3,
+      "body": "{\"escalation\":\"owner\",\"expires_in_hours\":24,\"provider\":\"stub\",\"side_effects\":[\"write one message to stakeholder outbox\"],\"stakeholders\":[\"owner\"],\"steps\":[\"health_probe\",\"compile_report\",\"deliver\",\"verify\"],\"success_criteria\":[\"report delivered and read back\",\"figures match ledger\",\"health ok\"]}",
+      "sha256": "6e36b8a9fdd0cc5d3395bc671ab11ee0a093d8c1930925e0526dc6784b619823",
+      "created_at": "2026-11-01T11:20:38.200757+00:00"
+    }
+  ],
+  "evidence": [
+    {
+      "id": 7,
+      "task_id": 3,
+      "kind": "delivery",
+      "body": "{\"message_id\":\"2bafdefb33649d10\",\"ok\":true,\"sink\":\"primary\"}",
+      "sha256": "95b23341682b67bafdc4aa8aaa619cd1d40679eecb891441679c4702b840710a",
+      "created_at": "2026-11-01T11:20:38.306906+00:00"
+    },
+    {
+      "id": 8,
+      "task_id": 3,
+      "kind": "reviewer",
+      "body": "{\"executor\":\"ops-worker\",\"figures_match\":false,\"health\":true,\"judge_principal\":\"ops-judge\",\"model\":\"stub\",\"readback\":true,\"sink\":\"primary\",\"verdict\":\"fail\"}",
+      "sha256": "88b28e8cbc3b96880c6c7410757b19fd2910a2ab60721a7bdb966aa6247f2638",
+      "created_at": "2026-11-01T11:20:38.366219+00:00"
+    },
+    {
+      "id": 9,
+      "task_id": 3,
+      "kind": "delivery",
+      "body": "{\"message_id\":\"37b9a102405a3cef\",\"ok\":true,\"sink\":\"fallback\"}",
+      "sha256": "df8e6ba469a67cca92bab53732e9844171ae4a3b82c89080b91389fb2df55bc9",
+      "created_at": "2026-11-01T11:20:38.412302+00:00"
+    },
+    {
+      "id": 10,
+      "task_id": 3,
+      "kind": "reviewer",
+      "body": "{\"executor\":\"ops-worker\",\"figures_match\":true,\"health\":true,\"judge_principal\":\"ops-judge\",\"model\":\"stub\",\"readback\":true,\"sink\":\"fallback\",\"verdict\":\"pass\"}",
+      "sha256": "41c64e766161abb542f3df6164728a547d0a0d7d7a646fa901970a66e8e01a29",
+      "created_at": "2026-11-01T11:20:38.463993+00:00"
+    },
+    {
+      "id": 11,
+      "task_id": 3,
+      "kind": "ops_receipt",
+      "body": "{\"digest\":\"Done. No action needed.\",\"figures\":{\"blocked\":0,\"done\":2,\"failed\":0},\"message_id\":\"37b9a102405a3cef\",\"sink\":\"fallback\"}",
+      "sha256": "fce8a1f7d360077c8d504a69aa711a4efa2ba62f1bf0475393dec0fd12df03eb",
+      "created_at": "2026-11-01T11:20:38.521829+00:00"
+    }
+  ],
+  "receipts": [
+    {
+      "id": 5,
+      "task_id": 3,
+      "idempotency_key": "morning-report:r3:claim",
+      "action": "transition:claimed",
+      "body": "{\"from\":\"open\",\"note\":null,\"to\":\"claimed\"}",
+      "created_at": "2026-11-01T11:20:38.250588+00:00"
+    },
+    {
+      "id": 6,
+      "task_id": 3,
+      "idempotency_key": "morning-report:r3:done",
+      "action": "transition:done",
+      "body": "{\"from\":\"claimed\",\"note\":null,\"to\":\"done\"}",
+      "created_at": "2026-11-01T11:20:38.518341+00:00"
+    }
+  ]
+}

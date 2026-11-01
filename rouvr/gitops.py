@@ -9,7 +9,11 @@ from rouvr.errors import Code, RouvrError
 
 
 async def _run(*argv: str, cwd: Path | None = None, env: dict[str, str] | None = None) -> str:
-    p = await asyncio.create_subprocess_exec(*argv, cwd=str(cwd) if cwd else None, env=env,
+    # env augments, never replaces: a bare {"GH_TOKEN": ...} must keep PATH
+    # so git/gh resolve (live-model finding: FileNotFoundError 'gh' broke PRs).
+    import os
+    merged = {**os.environ, **(env or {})}
+    p = await asyncio.create_subprocess_exec(*argv, cwd=str(cwd) if cwd else None, env=merged,
                                              stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
     out, err = await p.communicate()
     if p.returncode != 0:

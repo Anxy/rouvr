@@ -30,6 +30,17 @@ def test_coder_prompt_forbids_push():
     assert "do NOT push" in prompt and "supervisor grants" in prompt
 
 
+async def test_run_merges_env_over_os_environ():
+    """Live-model regression: _run(env={'GH_TOKEN': ...}) must keep PATH so
+    git/gh resolve instead of FileNotFoundError."""
+    import sys
+    from rouvr.gitops import _run
+    out = await _run(sys.executable, "-c",
+                     "import os;print(os.environ.get('ROUVR_PROBE_X'), os.environ.get('PATH', '') != '')",
+                     env={"ROUVR_PROBE_X": "1"})
+    assert out.split() == ["1", "True"]
+
+
 def test_gh_token_file_0600(tmp_path, monkeypatch):
     from rouvr.gitops import gh_token
     p = tmp_path / "gh-token"

@@ -144,7 +144,7 @@ def test_apply_patch_rejects_empty_patch(repo: Path) -> None:
 def test_run_command_enforces_allowlist(repo: Path) -> None:
     box = RepositoryToolbox(repository_root=repo)
 
-    result = box.run_command(["python", "--version"], allowlist=("python --version",))
+    result = box.run_command(["python3", "--version"], allowlist=("python3 --version",))
     assert result["returncode"] == 0
 
     with pytest.raises(RepositoryToolError) as exc_info:

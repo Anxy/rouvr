@@ -119,6 +119,8 @@ def test_repo_profile_drift_policy_resolves_thresholds() -> None:
 
 
 def test_patch_engine_can_resolve_policy_via_repo_profile_resolver(tmp_path: Path) -> None:
+    if not Path("projects/AIX/hyeve-aix-service/backend/config/repo_profiles").is_dir():
+        pytest.skip("legacy monorepo repo_profiles fixtures not in this cut")
     subprocess.run(["git", "-C", str(tmp_path), "init"], check=True, capture_output=True)
     (tmp_path / "demo.txt").write_text("hello\n", encoding="utf-8")
     result = apply_patch_with_outcome(

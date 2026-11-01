@@ -140,6 +140,11 @@ All on the supervisor stack with `model: meta` (muse-spark-1.3). Artifacts under
   8/8 approve, PR #24); 23/32/33 blocked (cheat-flag criterion conflict,
   leak-check name false positive, uncollectable hidden_ filename —
   all three fixed with regression tests, see `liveproof/task*-summary.json`).
+- **reviewer request_changes (demo talking point, not a gap)** — Live reviewer
+  request_changes not observed in 9 rounds; the coder met fair criteria
+  first-pass. Path is unit-proven. Not forced, by design (no rigged tasks).
+  Item closed by Owner on the converging proofs (tasks 34/39) plus the
+  unit-covered verdict path.
 
 An earlier t1 attempt is kept as failure evidence (`t1-blocked-contract/`):
 the live model returned a verbose non-schema contract and the old merge broke

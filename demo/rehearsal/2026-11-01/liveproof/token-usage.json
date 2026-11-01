@@ -1,0 +1,159 @@
+{
+  "method": "input=max context-input per turn (context reuse); output/reasoning=summed per model call; cost n/a (no rate card for demo key)",
+  "rows": [
+    {
+      "workspace": "rouvr__11__a1",
+      "session": "2e5735f0",
+      "model_calls": 29,
+      "input_max_ctx": 27636,
+      "output_sum": 7803,
+      "reasoning_sum": 4346,
+      "models": [
+        "muse-spark-1.3-contributor"
+      ]
+    },
+    {
+      "workspace": "rouvr__11__a1",
+      "session": "42d85525",
+      "model_calls": 34,
+      "input_max_ctx": 28736,
+      "output_sum": 10289,
+      "reasoning_sum": 6691,
+      "models": [
+        "muse-spark-1.3-contributor"
+      ]
+    },
+    {
+      "workspace": "rouvr__11__a1",
+      "session": "7b31bc2e",
+      "model_calls": 37,
+      "input_max_ctx": 30635,
+      "output_sum": 17363,
+      "reasoning_sum": 11685,
+      "models": [
+        "muse-spark-1.3-contributor"
+      ]
+    },
+    {
+      "workspace": "rouvr__12__a1",
+      "session": "36cb142f",
+      "model_calls": 48,
+      "input_max_ctx": 30848,
+      "output_sum": 16507,
+      "reasoning_sum": 9959,
+      "models": [
+        "muse-spark-1.3-contributor"
+      ]
+    },
+    {
+      "workspace": "rouvr__12__a2",
+      "session": "36cb142f",
+      "model_calls": 38,
+      "input_max_ctx": 28552,
+      "output_sum": 17994,
+      "reasoning_sum": 12066,
+      "models": [
+        "muse-spark-1.3-contributor"
+      ]
+    },
+    {
+      "workspace": "rouvr__12__a3",
+      "session": "36cb142f",
+      "model_calls": 54,
+      "input_max_ctx": 32470,
+      "output_sum": 15911,
+      "reasoning_sum": 9491,
+      "models": [
+        "muse-spark-1.3-contributor"
+      ]
+    },
+    {
+      "workspace": "rouvr__13__a1",
+      "session": "66859c7e",
+      "model_calls": 34,
+      "input_max_ctx": 27848,
+      "output_sum": 11624,
+      "reasoning_sum": 6663,
+      "models": [
+        "muse-spark-1.3-contributor"
+      ]
+    },
+    {
+      "workspace": "rouvr__13__a1__verify",
+      "session": "a0838cab",
+      "model_calls": 26,
+      "input_max_ctx": 27911,
+      "output_sum": 13739,
+      "reasoning_sum": 10328,
+      "models": [
+        "muse-spark-1.3-contributor"
+      ]
+    },
+    {
+      "workspace": "rouvr__14__a1",
+      "session": "03f6a02a",
+      "model_calls": 34,
+      "input_max_ctx": 28657,
+      "output_sum": 13841,
+      "reasoning_sum": 8553,
+      "models": [
+        "muse-spark-1.3-contributor"
+      ]
+    },
+    {
+      "workspace": "rouvr__14__a1__verify",
+      "session": "2a794dd8",
+      "model_calls": 36,
+      "input_max_ctx": 46178,
+      "output_sum": 16179,
+      "reasoning_sum": 11396,
+      "models": [
+        "muse-spark-1.3-contributor"
+      ]
+    },
+    {
+      "workspace": "rouvr__15__a1",
+      "session": "e08aa8d1",
+      "model_calls": 51,
+      "input_max_ctx": 34978,
+      "output_sum": 24320,
+      "reasoning_sum": 16351,
+      "models": [
+        "muse-spark-1.3-contributor"
+      ]
+    },
+    {
+      "workspace": "rouvr__15__a1__verify",
+      "session": "36e26c95",
+      "model_calls": 25,
+      "input_max_ctx": 32870,
+      "output_sum": 21213,
+      "reasoning_sum": 15922,
+      "models": [
+        "muse-spark-1.3-contributor"
+      ]
+    },
+    {
+      "workspace": "rouvr__8__a1",
+      "session": "565461f3",
+      "model_calls": 9,
+      "input_max_ctx": 24396,
+      "output_sum": 1086,
+      "reasoning_sum": 534,
+      "models": [
+        "muse-spark-1.3-contributor"
+      ]
+    },
+    {
+      "workspace": "rouvr__8__a1",
+      "session": "ef6feab6",
+      "model_calls": 18,
+      "input_max_ctx": 24759,
+      "output_sum": 3246,
+      "reasoning_sum": 1841,
+      "models": [
+        "muse-spark-1.3-contributor"
+      ]
+    }
+  ]
+}

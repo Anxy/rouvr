@@ -1,0 +1,65 @@
+{
+  "id": 10,
+  "title": "morning-report:t1-534875",
+  "intent": "Every morning, compile yesterday's lane report (tasks closed, parks and escalations), publish it to the stakeholder inbox, make sure the ledger is healthy, and escalate if anything fails.",
+  "state": "done",
+  "owner": "ops-worker",
+  "tenant": "rehearse",
+  "project": "demo",
+  "created_at": "2026-11-01T12:07:55.718300+00:00",
+  "updated_at": "2026-11-01T12:08:02.917668+00:00",
+  "created_by": "supervisor",
+  "contracts": [
+    {
+      "id": 8,
+      "task_id": 10,
+      "body": "{\"escalation\":\"Escalate to on-call if compilation, publishing, or ledger health fails\",\"expires_in_hours\":24,\"provider\":\"meta\",\"side_effects\":[\"Stakeholder inbox notified with new report\"],\"stakeholders\":[\"stakeholders\"],\"steps\":[\"Fetch yesterday's tasks closed, parks and escalations\",\"Compile yesterday's lane report\",\"Publish report to stakeholder inbox\",\"Verify ledger health\",\"Escalate if report, publish, or ledger check fails\"],\"success_criteria\":[\"Yesterday's lane report compiled with tasks closed, parks and escalations\",\"Report published to stakeholder inbox\",\"Ledger verified healthy\"]}",
+      "sha256": "3e50e7de9fdb707da79a467f658c38075dd6cca383f86eae5c6c84817184737c",
+      "created_at": "2026-11-01T12:07:59.627448+00:00"
+    }
+  ],
+  "evidence": [
+    {
+      "id": 45,
+      "task_id": 10,
+      "kind": "delivery",
+      "body": "{\"message_id\":\"09ac561253827c0a\",\"ok\":true,\"sink\":\"primary\"}",
+      "sha256": "e6eac6dc4e4480714ee571543648059de19734fdfc44faf0889cab254ed39f10",
+      "created_at": "2026-11-01T12:07:59.706905+00:00"
+    },
+    {
+      "id": 46,
+      "task_id": 10,
+      "kind": "reviewer",
+      "body": "{\"executor\":\"ops-worker\",\"figures_match\":true,\"health\":true,\"judge\":{\"judge_principal\":\"ops-judge\",\"reason\":\"All figures match ledger values.\",\"verdict\":\"pass\"},\"judge_principal\":\"ops-judge\",\"model\":\"meta\",\"readback\":true,\"sink\":\"primary\",\"verdict\":\"pass\"}",
+      "sha256": "e69f03cf38ca2bc645b22f12615a50cea562c6a53cab91abea5afb2a926100d7",
+      "created_at": "2026-11-01T12:08:02.862945+00:00"
+    },
+    {
+      "id": 47,
+      "task_id": 10,
+      "kind": "ops_receipt",
+      "body": "{\"digest\":\"Done. No action needed.\",\"figures\":{\"blocked\":2,\"done\":6,\"failed\":0},\"message_id\":\"09ac561253827c0a\",\"sink\":\"primary\"}",
+      "sha256": "8aa21d612f8cd75707e578eb32fb12909082d71df49e92f6a9a7fc90e2fe55ba",
+      "created_at": "2026-11-01T12:08:02.920269+00:00"
+    }
+  ],
+  "receipts": [
+    {
+      "id": 35,
+      "task_id": 10,
+      "idempotency_key": "morning-report:t1-534875:claim",
+      "action": "transition:claimed",
+      "body": "{\"from\":\"open\",\"note\":null,\"to\":\"claimed\"}",
+      "created_at": "2026-11-01T12:07:59.661204+00:00"
+    },
+    {
+      "id": 36,
+      "task_id": 10,
+      "idempotency_key": "morning-report:t1-534875:done",
+      "action": "transition:done",
+      "body": "{\"from\":\"claimed\",\"note\":null,\"to\":\"done\"}",
+      "created_at": "2026-11-01T12:08:02.917802+00:00"
+    }
+  ]
+}

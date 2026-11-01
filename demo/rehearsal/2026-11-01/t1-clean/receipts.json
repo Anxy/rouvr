@@ -1,0 +1,10 @@
+[
+  {
+    "id": 47,
+    "task_id": 10,
+    "kind": "ops_receipt",
+    "body": "{\"digest\":\"Done. No action needed.\",\"figures\":{\"blocked\":2,\"done\":6,\"failed\":0},\"message_id\":\"09ac561253827c0a\",\"sink\":\"primary\"}",
+    "sha256": "8aa21d612f8cd75707e578eb32fb12909082d71df49e92f6a9a7fc90e2fe55ba",
+    "created_at": "2026-11-01T12:08:02.920269+00:00"
+  }
+]

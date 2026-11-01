@@ -1,0 +1,10 @@
+{
+  "run_key": "morning-report:t1-534875",
+  "workflow_id": "rerun-morning-report:t1-534875-1793534875",
+  "state": "done",
+  "digest": "Done. No action needed.",
+  "sink": "primary",
+  "message_id": "09ac561253827c0a",
+  "task_id": "10",
+  "elapsed_s": 7.4
+}

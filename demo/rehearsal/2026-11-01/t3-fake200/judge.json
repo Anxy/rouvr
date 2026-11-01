@@ -1,0 +1,18 @@
+[
+  {
+    "id": 139,
+    "task_id": 18,
+    "kind": "reviewer",
+    "body": "{\"executor\":\"ops-worker\",\"figures_match\":false,\"health\":true,\"judge\":{\"judge_principal\":\"ops-judge\",\"reason\":\"Report is empty and missing all ledger figures.\",\"verdict\":\"fail\"},\"judge_principal\":\"ops-judge\",\"model\":\"meta\",\"readback\":true,\"sink\":\"primary\",\"verdict\":\"fail\"}",
+    "sha256": "d648baefb3fb135b6f1cdc244e819b719dc38e71ac76c0638892e8b22965a5f7",
+    "created_at": "2026-11-01T13:09:16.947662+00:00"
+  },
+  {
+    "id": 141,
+    "task_id": 18,
+    "kind": "reviewer",
+    "body": "{\"executor\":\"ops-worker\",\"figures_match\":true,\"health\":true,\"judge\":{\"judge_principal\":\"ops-judge\",\"reason\":\"All figures match ledger.\",\"verdict\":\"pass\"},\"judge_principal\":\"ops-judge\",\"model\":\"meta\",\"readback\":true,\"sink\":\"fallback\",\"verdict\":\"pass\"}",
+    "sha256": "1f7f7a6a8ac3be8d72c18393efcb883817ceb432bf371a42c3499477e46f2613",
+    "created_at": "2026-11-01T13:09:19.934397+00:00"
+  }
+]

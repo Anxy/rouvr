@@ -1,0 +1,10 @@
+{
+  "run_key": "morning-report:t1",
+  "workflow_id": "rerun-morning-report:t1-1793534862",
+  "state": "blocked",
+  "digest": "ESCALATED: blocked",
+  "sink": "",
+  "message_id": "",
+  "task_id": "9",
+  "elapsed_s": 0.2
+}

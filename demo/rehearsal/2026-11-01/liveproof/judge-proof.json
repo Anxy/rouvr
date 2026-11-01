@@ -1,0 +1,19 @@
+{
+  "figures": {
+    "done": 10,
+    "blocked": 5,
+    "failed": 0
+  },
+  "good": {
+    "verdict": "pass",
+    "reason": "All figures match ledger values.",
+    "judge_principal": "ops-judge"
+  },
+  "bad": {
+    "verdict": "fail",
+    "reason": "Report done value 11 does not match ledger done value 10.",
+    "judge_principal": "ops-judge"
+  },
+  "model": "muse-spark-1.3",
+  "seconds": 5.4
+}

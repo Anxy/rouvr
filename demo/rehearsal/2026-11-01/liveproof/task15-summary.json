@@ -1,0 +1,29 @@
+{
+  "id": 15,
+  "state": "done",
+  "workflow": "rouvr-task-supervisor-15-41e2feb04156eb12",
+  "attempts": 1,
+  "pr_url": "https://github.com/Anxy/rouvr-liveproof/pull/6",
+  "head_sha": "b3775742cc8d4726965dafaa8c966d1fe605b844",
+  "receipt": {
+    "digest": "51faa8f68628e96ec892b51e2384815dd0f6329c8b4d757268fc23b448aeaf87",
+    "key_id": "rouvr-receipt-1",
+    "signature": "2jXWprjtNGCDu3+riPxkOWhgYGGjOWYv0Gm+7SLuOSt0+nW6n/ZbdodQWhlUdVUgCT9ZQsnGHTdKKqCaeSjqAQ=="
+  },
+  "review_verdicts": [
+    "approve",
+    "approve"
+  ],
+  "evidence_kinds": {
+    "decomposition": 1,
+    "temporal_handoff": 1,
+    "execution_spec": 1,
+    "muse_session": 1,
+    "peer_session": 2,
+    "pr_record": 1,
+    "test_run": 1,
+    "agent_message": 1,
+    "submit_attempt": 1,
+    "reviewer_report": 1
+  }
+}

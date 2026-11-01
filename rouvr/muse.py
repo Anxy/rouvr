@@ -19,7 +19,8 @@ from rouvr.errors import Code, RouvrError
 from rouvr.ids import sanitize_for_log
 
 FLAGS = {"json": "--json", "provider": "--provider", "session": "--session-id", "prompt_file": "--prompt-file",
-         "workspace": "--workspace", "max_steps": "--max-model-steps", "model": "--model"}  # all in `muse exec --help`
+         "workspace": "--workspace", "max_steps": "--max-model-steps", "model": "--model",
+         "no_approval": "--disable-approval", "no_sandbox": "--disable-sandbox"}  # all in `muse exec --help`
 PROVIDER = "meta"
 MAX_MODEL_STEPS = 40
 
@@ -181,9 +182,16 @@ class MuseLauncher:
                              f"`docker build -f coder.Dockerfile -t {self.coder_image} .`")
 
     def argv(self, prompt_file: Path, model: str, cwd: Path, session_id: str) -> list[str]:
+        # Headless turns carry --disable-approval + --disable-sandbox: there is
+        # no approver on a worker (an approval_wait hangs the turn until the
+        # activity times out — observed live), and this host's bwrap sandbox
+        # cannot set up loopback, so sandboxed tool calls fail outright.
+        # Boundary stays workspace cwd/HOME + prompt + step cap; the container
+        # coder sandbox is the stronger follow-up once its image exists.
         argv = [self.bin, "exec", FLAGS["json"], FLAGS["provider"], PROVIDER, FLAGS["session"], session_id,
                FLAGS["prompt_file"], str(prompt_file), FLAGS["workspace"], str(cwd),
-               FLAGS["max_steps"], str(MAX_MODEL_STEPS)]
+               FLAGS["max_steps"], str(MAX_MODEL_STEPS),
+               FLAGS["no_approval"], FLAGS["no_sandbox"]]
         return argv if not model else argv + [FLAGS["model"], model]  # "" = CLI default model
 
     async def run(self, *, prompt: str, model: str, cwd: Path, env: dict[str, str], timeout_s: int,

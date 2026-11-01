@@ -336,3 +336,12 @@ async def test_local_exec_spec_rejects_traversal(tmp_path: Path, tenant, project
     with pytest.raises(RouvrError) as e:
         await LocalExecSpecProvider(tmp_path).get(tenant, {"project_id": project})
     assert e.value.code is Code.CONTRACT
+
+
+def test_exec_argv_carries_headless_flags(tmp_path: Path):
+    """Worker turns have no approver and this host's bwrap is unusable:
+    exec argv must disable approval prompts and the CLI sandbox."""
+    from rouvr.muse import MuseLauncher
+    argv = MuseLauncher().argv(tmp_path / "p.md", "", tmp_path, "sid")
+    assert "--disable-approval" in argv and "--disable-sandbox" in argv
+    assert MuseLauncher().argv(tmp_path / "p.md", "m", tmp_path, "sid")[-2:] == ["--model", "m"]

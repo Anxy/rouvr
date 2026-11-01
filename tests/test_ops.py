@@ -344,6 +344,88 @@ async def test_ops_schedule_with_grant_creates(monkeypatch, ledger_url):
     assert out["scope"] == "ops:morning-report" and seen["cron"] == "* * * * *"
 
 
+async def test_ops_prepare_blocks_without_active_grant(ops_env):
+    """Per-tick grant gate: an expired/absent grant parks the tick with an
+    escalation record instead of running the pack."""
+    import httpx
+    from rouvr.activities import Activities
+    from rouvr.contracts import OpsInput
+    from types import SimpleNamespace
+
+    acts = Activities(SimpleNamespace(
+        workhub_for=lambda persona: (_ for _ in ()).throw(AssertionError("no ledger reads expected")),
+        settings=SimpleNamespace(workspace_root=None)))
+    inp = OpsInput(RUN_KEY, INSTRUCTION, "acme", "site", grant_scope="ops:morning-report")
+    out = await acts.ops_prepare(inp)
+    assert out["state"] == "blocked"
+    assert "ops:morning-report" in out.get("reason", "")
+
+
+async def test_ops_prepare_proceeds_with_active_grant(ops_env, ledger_url, monkeypatch):
+    import httpx
+    from rouvr.activities import Activities
+    from rouvr.contracts import OpsInput
+    from types import SimpleNamespace
+
+    monkeypatch.setenv("ROUVR_LEDGER_URL", ledger_url)
+    c = httpx.Client(base_url=ledger_url, timeout=10)
+    c.post("/v1/tenants", json={"tenant": "acme"})
+    c.post("/v1/projects", json={"tenant": "acme", "project": "site"})
+    c.post("/v1/grants", json={"scope": "ops:morning-report", "contract_rev": "",
+                               "expires_at": "2999-01-01T00:00:00+00:00",
+                               "approved_by": "owner"}).raise_for_status()
+    acts = Activities(SimpleNamespace(
+        workhub_for=lambda persona: (_ for _ in ()).throw(AssertionError("no ledger reads expected")),
+        settings=SimpleNamespace(workspace_root=None)))
+    out = await acts.ops_prepare(
+        OpsInput(RUN_KEY, INSTRUCTION, "acme", "site", grant_scope="ops:morning-report"))
+    assert out["state"] in ("open", "done", "claimed")
+
+
+async def test_ops_workflow_blocked_tick_leaves_escalation_record(ops_env, ledger_url, monkeypatch):
+    """Full tick through live Temporal: expired grant -> blocked + escalation evidence."""
+    import httpx
+    import uuid
+    from temporalio.worker import Worker
+    from rouvr.activities import Activities
+    from rouvr.contracts import OpsInput
+    from rouvr.workflows import Q_ORCH, OpsTaskWorkflow
+    from types import SimpleNamespace
+
+    monkeypatch.setenv("ROUVR_LEDGER_URL", ledger_url)
+    c = httpx.Client(base_url=ledger_url, timeout=10)
+    c.post("/v1/tenants", json={"tenant": "acme"})
+    c.post("/v1/projects", json={"tenant": "acme", "project": "site"})
+    c.post("/v1/grants", json={"scope": "ops:morning-report", "contract_rev": "",
+                               "expires_at": "2000-01-01T00:00:00+00:00",
+                               "approved_by": "owner"}).raise_for_status()
+    acts = Activities(SimpleNamespace(
+        workhub_for=lambda persona: (_ for _ in ()).throw(AssertionError("no ledger reads expected")),
+        settings=SimpleNamespace(workspace_root=None)))
+
+    async def _env_client():
+        async with await WorkflowEnvironment.start_time_skipping() as e:
+            yield e
+
+    async for e in _env_client():
+        worker = Worker(e.client, task_queue=Q_ORCH, workflows=[OpsTaskWorkflow],
+                        activities=[acts.ops_prepare, acts.ops_block])
+        async with worker:
+            r = await e.client.execute_workflow(
+                OpsTaskWorkflow.run,
+                OpsInput(RUN_KEY, INSTRUCTION, "acme", "site",
+                         grant_scope="ops:morning-report"),
+                id=str(uuid.uuid4()), task_queue=Q_ORCH)
+        c2 = httpx.Client(base_url=ledger_url, timeout=10)
+        tasks = c2.get("/v1/tasks").json()["items"]
+    assert r.state == "blocked"
+    tid = str(r.task_id)
+    assert any(str(t["id"]) == tid and t["state"] == "blocked" for t in tasks)
+    with httpx.Client(base_url=ledger_url, timeout=10) as c3:
+        detail = c3.get(f"/v1/tasks/{tid}").json()
+    assert any(x.get("kind") == "escalation" for x in detail.get("evidence", []))
+
+
 async def test_create_ops_schedule_registers_ops_action(env):
     """The test Temporal server has no CreateSchedule RPC, so the schedule
     payload is asserted on a recording client: it must fire OpsTaskWorkflow

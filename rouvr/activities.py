@@ -436,6 +436,12 @@ class Activities:
                                                 "tenant": inp.tenant, "project": inp.project})["id"])
         task = c.get(f"/v1/tasks/{tid}").json()
         out = {"task_id": tid, "state": task["state"], "message_id": "", "sink": ""}
+        if inp.grant_scope:  # standing-grant ticks: expired grant parks before any pack work
+            g = c.get("/v1/grants/active", params={"scope": inp.grant_scope}).json()
+            if not g.get("active"):
+                return {"task_id": tid, "state": "blocked",
+                        "reason": f"no active grant for scope {inp.grant_scope}",
+                        "message_id": "", "sink": ""}
         if task["state"] == "done":  # rerun after completion: hand back the receipt
             for e in task.get("evidence") or []:
                 if e.get("kind") == "ops_receipt" and isinstance(_evidence_payload(e), dict):

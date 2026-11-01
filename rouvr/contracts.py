@@ -88,6 +88,7 @@ class OpsInput:
     instruction: str
     tenant: str  # S022: partition scope, mandatory, no default
     project: str  # S022: partition scope, mandatory, no default
+    grant_scope: str = ""  # when set, ticks require an active (unexpired) grant
 
 
 @dataclass

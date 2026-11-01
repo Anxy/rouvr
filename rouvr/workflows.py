@@ -152,6 +152,9 @@ class OpsTaskWorkflow:
         if prep["state"] == "done":  # rerun after completion: hand back the receipt
             return OpsResult("done", OPS_DIGEST_DONE, prep["task_id"],
                              prep["message_id"], prep["sink"])
+        if prep["state"] == "blocked":  # expired grant: park with escalation record
+            return await self._park(inp, prep["task_id"], prep.get("reason", "blocked"),
+                                    None, ops)
         try:
             await workflow.execute_activity_method(
                 Activities.ops_compile, args=[inp, prep["task_id"]], task_queue=Q_ORCH,

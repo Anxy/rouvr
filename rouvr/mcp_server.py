@@ -56,6 +56,8 @@ def _author_hidden_suite(criteria: list[str]) -> dict[str, str]:
         raise RuntimeError(
             "hidden suite needs a real model: set ROUVR_MODEL_PROVIDER "
             "(meta|ollama|openrouter) with its key, then retry the create")
+    # Full-suite generation is the longest single model call on the create
+    # path; the 60 s provider default trips under slow-model conditions.
     raw = provider.chat([
         {"role": "system", "content": (
             "Write pytest checks for the acceptance criteria. Reply with ONLY a "
@@ -67,7 +69,8 @@ def _author_hidden_suite(criteria: list[str]) -> dict[str, str]:
             "contain any particular string (such as module __all__ contents or "
             "identifier spellings as strings) — compliant code must be writable "
             "without tripping literal-cheat detection.")},
-        {"role": "user", "content": "\n".join(f"- {c}" for c in criteria)}])
+        {"role": "user", "content": "\n".join(f"- {c}" for c in criteria)}],
+        timeout=300)
     try:
         files = json.loads(raw)
     except ValueError:

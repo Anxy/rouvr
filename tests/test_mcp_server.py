@@ -234,7 +234,7 @@ def test_mcp_author_rejects_malformed_model_output(monkeypatch):
 
     class Garbage:
         name = "meta"
-        def chat(self, messages):
+        def chat(self, messages, **kw):
             return "not json{"
     monkeypatch.setattr("backend.rouvr_models.providers.get_provider", lambda *a, **k: Garbage())
     with pytest.raises(RuntimeError, match="[Jj]son|pars"):
@@ -242,7 +242,7 @@ def test_mcp_author_rejects_malformed_model_output(monkeypatch):
 
     class Evil:
         name = "meta"
-        def chat(self, messages):
+        def chat(self, messages, **kw):
             return '{"../evil.py": "x"}'
     monkeypatch.setattr("backend.rouvr_models.providers.get_provider", lambda *a, **k: Evil())
     with pytest.raises(RuntimeError, match="[Ff]lat|name"):
@@ -250,11 +250,27 @@ def test_mcp_author_rejects_malformed_model_output(monkeypatch):
 
     class Plain:
         name = "meta"
-        def chat(self, messages):
+        def chat(self, messages, **kw):
             return '{"test_durations.py": "def test_x():\\n    assert 1\\n"}'
     monkeypatch.setattr("backend.rouvr_models.providers.get_provider", lambda *a, **k: Plain())
     with pytest.raises(RuntimeError, match="test_rouvr_hidden_"):
         ms._author_hidden_suite(["c1"])
+
+
+def test_mcp_author_uses_extended_timeout(monkeypatch):
+    """Suite generation is the longest create-path call; it must allow slow models."""
+    import rouvr.mcp_server as ms
+    seen = {}
+
+    class Patient:
+        name = "meta"
+        def chat(self, messages, **kw):
+            seen.update(kw)
+            return '{"test_rouvr_hidden_x.py": "def test_x():\\n    assert 1\\n"}'
+    monkeypatch.setattr("backend.rouvr_models.providers.get_provider", lambda *a, **k: Patient())
+    files = ms._author_hidden_suite(["c1"])
+    assert list(files) == ["test_rouvr_hidden_x.py"]
+    assert seen.get("timeout", 0) > 60
 
 
 def test_waiting_lists_escalation_reason_from_json_string_body(monkeypatch, ledger_url, tmp_path):

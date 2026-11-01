@@ -1,0 +1,13 @@
+{
+  "task_id": 38,
+  "hidden_files": [
+    "test_rouvr_hidden_docs.py",
+    "test_rouvr_hidden_errors.py",
+    "test_rouvr_hidden_parse.py"
+  ],
+  "hidden_created_by": "test_author",
+  "workflow_id": "rouvr-task-supervisor-38-4c9ab7716adaae4f",
+  "watch_t0": 1793552820.2369978,
+  "create_s": 60.1,
+  "judge": "green"
+}

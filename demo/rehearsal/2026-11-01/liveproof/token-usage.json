@@ -385,6 +385,94 @@
     ]
   },
   {
+    "workspace": "rouvr__38__a1",
+    "session": "586fcfb3",
+    "model_calls": 73,
+    "input_max_ctx": 38817,
+    "output_sum": 22659,
+    "reasoning_sum": 13596,
+    "models": [
+      "muse-spark-1.3-contributor"
+    ]
+  },
+  {
+    "workspace": "rouvr__38__a1__verify",
+    "session": "6dbcb40d",
+    "model_calls": 29,
+    "input_max_ctx": 31796,
+    "output_sum": 16794,
+    "reasoning_sum": 12986,
+    "models": [
+      "muse-spark-1.3-contributor"
+    ]
+  },
+  {
+    "workspace": "rouvr__39__a1",
+    "session": "f760d520",
+    "model_calls": 56,
+    "input_max_ctx": 36827,
+    "output_sum": 23701,
+    "reasoning_sum": 15191,
+    "models": [
+      "muse-spark-1.3-contributor"
+    ]
+  },
+  {
+    "workspace": "rouvr__39__a2",
+    "session": "f760d520",
+    "model_calls": 80,
+    "input_max_ctx": 43524,
+    "output_sum": 37497,
+    "reasoning_sum": 26628,
+    "models": [
+      "muse-spark-1.3-contributor"
+    ]
+  },
+  {
+    "workspace": "rouvr__39__a3",
+    "session": "f760d520",
+    "model_calls": 56,
+    "input_max_ctx": 36654,
+    "output_sum": 25493,
+    "reasoning_sum": 17130,
+    "models": [
+      "muse-spark-1.3-contributor"
+    ]
+  },
+  {
+    "workspace": "rouvr__39__a3__verify",
+    "session": "717d05a6",
+    "model_calls": 54,
+    "input_max_ctx": 38770,
+    "output_sum": 18961,
+    "reasoning_sum": 11656,
+    "models": [
+      "muse-spark-1.3-contributor"
+    ]
+  },
+  {
+    "workspace": "rouvr__40__a1",
+    "session": "8c005399",
+    "model_calls": 54,
+    "input_max_ctx": 38417,
+    "output_sum": 29826,
+    "reasoning_sum": 21604,
+    "models": [
+      "muse-spark-1.3-contributor"
+    ]
+  },
+  {
+    "workspace": "rouvr__40__a1__verify",
+    "session": "e471f112",
+    "model_calls": 22,
+    "input_max_ctx": 29187,
+    "output_sum": 14569,
+    "reasoning_sum": 11401,
+    "models": [
+      "muse-spark-1.3-contributor"
+    ]
+  },
+  {
     "workspace": "rouvr__8__a1",
     "session": "565461f3",
     "model_calls": 9,

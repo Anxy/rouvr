@@ -1,12 +1,13 @@
 {
-  "task_id": 40,
+  "task_id": 41,
   "hidden_files": [
-    "test_rouvr_hidden_core.py",
-    "test_rouvr_hidden_meta.py"
+    "test_rouvr_hidden_docs.py",
+    "test_rouvr_hidden_parse.py",
+    "test_rouvr_hidden_repo.py"
   ],
   "hidden_created_by": "test_author",
-  "workflow_id": "rouvr-task-supervisor-40-6cbc132dd911b60a",
-  "watch_t0": 1793554385.121034,
-  "create_s": 116.1,
+  "workflow_id": "rouvr-task-supervisor-41-c4f507482fd78a22",
+  "watch_t0": 1793555036.071173,
+  "create_s": 186.2,
   "judge": "green"
 }

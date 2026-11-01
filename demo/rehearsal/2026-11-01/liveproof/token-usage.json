@@ -473,6 +473,28 @@
     ]
   },
   {
+    "workspace": "rouvr__41__a1",
+    "session": "1fb3339e",
+    "model_calls": 57,
+    "input_max_ctx": 41453,
+    "output_sum": 34574,
+    "reasoning_sum": 24173,
+    "models": [
+      "muse-spark-1.3-contributor"
+    ]
+  },
+  {
+    "workspace": "rouvr__41__a1__verify",
+    "session": "5495e1fb",
+    "model_calls": 10,
+    "input_max_ctx": 29294,
+    "output_sum": 9327,
+    "reasoning_sum": 7735,
+    "models": [
+      "muse-spark-1.3-contributor"
+    ]
+  },
+  {
     "workspace": "rouvr__8__a1",
     "session": "565461f3",
     "model_calls": 9,

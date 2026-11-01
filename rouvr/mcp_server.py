@@ -494,6 +494,29 @@ async def rouvr_schedule(task_number: int, cron: str, schedule_id: str = "",
     return {"schedule_id": sid, "task_number": task_number, "scope": scope}
 
 
+@mcp.tool()
+async def rouvr_schedule_ops(run_key: str, instruction: str, tenant: str, project: str,
+                             cron: str, schedule_id: str = "",
+                             requested_by: str = "supervisor",
+                             tz: str = "Asia/Kolkata") -> dict:
+    """Schedule a morning-report style ops pack on a cron. Refuses without an
+    active standing grant for the pack scope ops:<pack> (owner approves via
+    POST /v1/grants with an expiry — the grant expiry is the time box). The
+    schedule fires OpsTaskWorkflow directly; delivery counts only on a
+    read-back receipt (ops_verify), never on a 200."""
+    from rouvr.starter import default_ops_schedule_id, ops_schedule_scope, run_schedule_ops
+    scope = ops_schedule_scope(run_key)
+    with _ledger() as c:
+        g = c.get("/v1/grants/active", params={"scope": scope}).raise_for_status().json()
+    if not g.get("active"):
+        raise RuntimeError(f"schedule refused: no active grant for scope {scope!r}")
+    sid = await run_schedule_ops(run_key=run_key, instruction=instruction, tenant=tenant,
+                                 project=project, requested_by=requested_by,
+                                 schedule_id=schedule_id or default_ops_schedule_id(run_key),
+                                 cron=cron, tz=tz)
+    return {"schedule_id": sid, "run_key": run_key, "scope": scope}
+
+
 def _mcp_http_auth() -> str:
     """Token guard for the HTTP transport. Returns the token, or "" when
     explicitly anonymous. Refuses to serve an open port otherwise."""

@@ -52,6 +52,50 @@ def schedule_scope(task_number: int) -> str:
     return f"schedule:task:{task_number}"
 
 
+def ops_schedule_scope(run_key: str) -> str:
+    """Grant scope a standing ops schedule requires: the pack part of the
+    run key, so one time-boxed grant covers every tick of the pack."""
+    return f"ops:{run_key.split(':', 1)[0]}"
+
+
+def default_ops_schedule_id(run_key: str) -> str:
+    return f"ops-{run_key.replace(':', '-')}"
+
+
+async def create_ops_schedule(client: Client, inp: OpsInput, schedule_id: str,
+                              cron: str, tz: str) -> None:
+    """Ops packs run through OpsTaskWorkflow directly — the schedule action
+    starts OpsTaskWorkflow, never a coding-task child."""
+    from rouvr.workflows import OpsTaskWorkflow
+    await client.create_schedule(schedule_id, Schedule(
+        action=ScheduleActionStartWorkflow(OpsTaskWorkflow.run, inp,
+                                           id=f"rouvr-ops-{schedule_id}",
+                                           task_queue=Q_ORCH),
+        spec=ScheduleSpec(cron_expressions=[cron], time_zone_name=tz),
+        policy=SchedulePolicy(overlap=ScheduleOverlapPolicy.SKIP)))
+
+
+async def run_schedule_ops(*, run_key: str, instruction: str, tenant: str,
+                           project: str, requested_by: str, schedule_id: str = "",
+                           cron: str, tz: str = "Asia/Kolkata") -> str:
+    """Create the ops-pack schedule. Refuses without an active (unexpired)
+    standing grant for the pack scope — the time box is the grant expiry."""
+    import httpx
+
+    s = Settings.from_env()
+    scope = ops_schedule_scope(run_key)
+    async with httpx.AsyncClient(base_url=s.workhub_base_url, timeout=10) as http:
+        g = (await http.get("/v1/grants/active", params={"scope": scope})
+             ).raise_for_status().json()
+    if not g.get("active"):
+        raise RuntimeError(f"schedule refused: no active grant for scope {scope!r}")
+    sid = schedule_id or default_ops_schedule_id(run_key)
+    client = await Client.connect(s.temporal_address, namespace=s.temporal_namespace)
+    await create_ops_schedule(client, OpsInput(run_key, instruction, tenant, project),
+                              sid, cron, tz)
+    return sid
+
+
 async def run_schedule(*, task_number: int, requested_by: str, schedule_id: str,
                        cron: str, tz: str = "Asia/Kolkata") -> str:
     """Create the Temporal schedule. Callers must hold an active grant for schedule_scope()."""

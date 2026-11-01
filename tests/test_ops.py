@@ -300,6 +300,80 @@ async def test_ops_workflow_done_digest(env, ops_env):
     assert r.state == "done" and r.digest == "Done. No action needed."
 
 
+async def _ops_schedule_ms(monkeypatch, ledger_url, grant=True, expired=False):
+    import httpx
+    monkeypatch.setenv("WORKHUB_BASE_URL", ledger_url)
+    import importlib
+    import rouvr.mcp_server as ms
+    importlib.reload(ms)
+    if grant or expired:
+        expiry = "2000-01-01T00:00:00+00:00" if expired else "2999-01-01T00:00:00+00:00"
+        _grant(httpx.Client(base_url=ledger_url, timeout=10),
+               "ops:morning-report", expiry=expiry).raise_for_status()
+    return ms
+
+
+async def test_ops_schedule_refused_without_grant(monkeypatch, ledger_url):
+    import pytest as _pytest
+    ms = await _ops_schedule_ms(monkeypatch, ledger_url, grant=False)
+    with _pytest.raises(RuntimeError, match="no active grant"):
+        await ms.rouvr_schedule_ops("morning-report:2026-10-30", INSTRUCTION,
+                                    "acme", "site", "* * * * *")
+
+
+async def test_ops_schedule_refused_when_grant_expired(monkeypatch, ledger_url):
+    import pytest as _pytest
+    ms = await _ops_schedule_ms(monkeypatch, ledger_url, expired=True)
+    with _pytest.raises(RuntimeError, match="no active grant"):
+        await ms.rouvr_schedule_ops("morning-report:2026-10-30", INSTRUCTION,
+                                    "acme", "site", "* * * * *")
+
+
+async def test_ops_schedule_with_grant_creates(monkeypatch, ledger_url):
+    ms = await _ops_schedule_ms(monkeypatch, ledger_url, grant=True)
+    seen = {}
+
+    async def fake_run_schedule_ops(**kw):
+        seen.update(kw)
+        return kw["schedule_id"]
+
+    monkeypatch.setattr("rouvr.starter.run_schedule_ops", fake_run_schedule_ops)
+    out = await ms.rouvr_schedule_ops("morning-report:2026-10-30", INSTRUCTION,
+                                      "acme", "site", "* * * * *")
+    assert out["schedule_id"] == "ops-morning-report-2026-10-30"
+    assert out["scope"] == "ops:morning-report" and seen["cron"] == "* * * * *"
+
+
+async def test_create_ops_schedule_registers_ops_action(env):
+    """The test Temporal server has no CreateSchedule RPC, so the schedule
+    payload is asserted on a recording client: it must fire OpsTaskWorkflow
+    (never a coding child) with the pack input, SKIP overlap, and the cron."""
+    from rouvr.contracts import OpsInput
+    from rouvr.starter import create_ops_schedule
+    from rouvr.workflows import OpsTaskWorkflow
+    from temporalio.client import (ScheduleActionStartWorkflow, ScheduleOverlapPolicy)
+
+    seen = {}
+
+    class RecordingClient:
+        async def create_schedule(self, schedule_id, schedule, **_kw):
+            seen["id"] = schedule_id
+            seen["schedule"] = schedule
+
+    inp = OpsInput(RUN_KEY, INSTRUCTION, "acme", "site")
+    await create_ops_schedule(RecordingClient(), inp, "ops-morning-report-test",
+                              "7 6 * * *", "Asia/Kolkata")
+    assert seen["id"] == "ops-morning-report-test"
+    sched = seen["schedule"]
+    assert isinstance(sched.action, ScheduleActionStartWorkflow)
+    assert sched.action.workflow == "OpsTaskWorkflow"
+    assert list(sched.action.args) == [inp]
+    assert sched.action.id == "rouvr-ops-ops-morning-report-test"
+    assert sched.spec.cron_expressions == ["7 6 * * *"]
+    assert sched.spec.time_zone_name == "Asia/Kolkata"
+    assert sched.policy.overlap == ScheduleOverlapPolicy.SKIP
+
+
 async def test_scheduled_duplicate_tick_deduped(env):
     """T5: a duplicate tick creates no second child (REJECT_DUPLICATE + swallow)."""
     from rouvr.contracts import (AssignInput, AssignResult, Binding, CloseResult, TaskWorkflowInput,

@@ -40,7 +40,11 @@ from rouvr.receipts import build_links, load_private_key, sign_links
 def _ops_ledger():
     """Sync ledger client for the ops leg (same endpoints demo/morning_report.py uses)."""
     import demo.morning_report as m
-    return m.ledger_client(os.environ.get("ROUVR_LEDGER_URL"))
+    c = m.ledger_client(os.environ.get("ROUVR_LEDGER_URL"))
+    token = os.environ.get("ROUVR_LEDGER_TOKEN", "")
+    if token:
+        c.headers["X-Rouvr-Token"] = token  # live ledger guards writes/reads
+    return c
 
 
 def _ops_post(c, path: str, body: dict) -> dict:

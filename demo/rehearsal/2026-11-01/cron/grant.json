@@ -1,0 +1,7 @@
+{
+  "scope": "ops:cronproof1793533438",
+  "expires_at": "2026-11-01T11:47:58.322580+00:00",
+  "contract_rev": "cronproof-v2",
+  "approved_by": "owner",
+  "note": "short-lived standing grant; tick A fired under it, tick B after expiry"
+}

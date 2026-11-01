@@ -1,0 +1,9 @@
+{
+  "a": "ops-cronproof1793533438:a",
+  "b": "ops-cronproof1793533438:b",
+  "run_a": "cronproof1793533438:a",
+  "run_b": "cronproof1793533438:b",
+  "scope": "ops:cronproof1793533438",
+  "grant_expiry": "2026-11-01T11:47:58.322580+00:00",
+  "note": "both schedules deleted after proof; v1 strays ops-cron-a/b-1793532852 also deleted"
+}

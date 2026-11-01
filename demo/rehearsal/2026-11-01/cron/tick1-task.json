@@ -1,0 +1,38 @@
+{
+  "id": 6,
+  "title": "cronproof1793533438:a",
+  "state": "done",
+  "owner": "ops-worker",
+  "tenant": "cron",
+  "created_at": "2026-11-01T11:44:00.123598+00:00",
+  "evidence_kinds": [
+    "delivery",
+    "reviewer",
+    "ops_receipt",
+    "escalation",
+    "escalation",
+    "escalation",
+    "escalation",
+    "escalation",
+    "escalation",
+    "escalation"
+  ],
+  "receipts": [
+    {
+      "id": 11,
+      "task_id": 6,
+      "idempotency_key": "cronproof1793533438:a:claim",
+      "action": "transition:claimed",
+      "body": "{\"from\":\"open\",\"note\":null,\"to\":\"claimed\"}",
+      "created_at": "2026-11-01T11:44:00.328585+00:00"
+    },
+    {
+      "id": 12,
+      "task_id": 6,
+      "idempotency_key": "cronproof1793533438:a:done",
+      "action": "transition:done",
+      "body": "{\"from\":\"claimed\",\"note\":null,\"to\":\"done\"}",
+      "created_at": "2026-11-01T11:44:00.594670+00:00"
+    }
+  ]
+}

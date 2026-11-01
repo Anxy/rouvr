@@ -1,0 +1,30 @@
+{
+  "receipts": [
+    {
+      "id": 11,
+      "task_id": 6,
+      "idempotency_key": "cronproof1793533438:a:claim",
+      "action": "transition:claimed",
+      "body": "{\"from\":\"open\",\"note\":null,\"to\":\"claimed\"}",
+      "created_at": "2026-11-01T11:44:00.328585+00:00"
+    },
+    {
+      "id": 12,
+      "task_id": 6,
+      "idempotency_key": "cronproof1793533438:a:done",
+      "action": "transition:done",
+      "body": "{\"from\":\"claimed\",\"note\":null,\"to\":\"done\"}",
+      "created_at": "2026-11-01T11:44:00.594670+00:00"
+    }
+  ],
+  "ops_receipt": [
+    {
+      "id": 20,
+      "task_id": 6,
+      "kind": "ops_receipt",
+      "body": "{\"digest\":\"Done. No action needed.\",\"figures\":{\"blocked\":0,\"done\":5,\"failed\":0},\"message_id\":\"11d697bc4fefc84c\",\"sink\":\"primary\"}",
+      "sha256": "21a8dba99313d3b6829fb17b39a3eb92f30766999aea7b5ae4ea24752d491191",
+      "created_at": "2026-11-01T11:44:00.599314+00:00"
+    }
+  ]
+}

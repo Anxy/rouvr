@@ -1,0 +1,17 @@
+{
+  "task": {
+    "id": 7,
+    "title": "cronproof1793533438:b",
+    "intent": "cronproof v2 tick B",
+    "state": "blocked",
+    "owner": null,
+    "tenant": "cron",
+    "project": "demo",
+    "created_at": "2026-11-01T11:49:00.179248+00:00",
+    "updated_at": "2026-11-01T11:49:00.287901+00:00",
+    "created_by": "supervisor"
+  },
+  "evidence_kinds": [
+    "escalation"
+  ]
+}

@@ -94,8 +94,9 @@ async def run_schedule_ops(*, run_key: str, instruction: str, tenant: str,
         raise RuntimeError(f"schedule refused: no active grant for scope {scope!r}")
     sid = schedule_id or default_ops_schedule_id(run_key)
     client = await Client.connect(s.temporal_address, namespace=s.temporal_namespace)
-    await create_ops_schedule(client, OpsInput(run_key, instruction, tenant, project),
-                              sid, cron, tz)
+    await create_ops_schedule(
+        client, OpsInput(run_key, instruction, tenant, project, grant_scope=scope),
+        sid, cron, tz)
     return sid
 
 

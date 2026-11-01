@@ -1,6 +1,6 @@
 # Roadmap
 
-Shipped items are checked (see `docs/system/ROUVR-SPRINT-INDEX.json`, 19/19 PASS); the rest below is planned, not done.
+Shipped items are checked (see `docs/system/ROUVR-SPRINT-INDEX.json`, 22/22 PASS); the rest below is planned, not done.
 
 ## Before hackathon submission (Nov 2026)
 - [ ] Run the full stack (`make up`) from a clean checkout and document it

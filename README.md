@@ -133,7 +133,7 @@ What's in this repo, as published:
 - The core runtime and the FastAPI service import cleanly with the vendored `libs/hyeve_core`.
 - `make test-public` is green: the ledger, the demo (happy path, day 2, and all three injected failures), lane, workers, cli, and the provider.
 - Most of the core backend tests pass (last local run: 3,996 passed, 472 failed, 42 skipped, 27 errors). The failures need the private WorkHub/Auth/OpsBus services, fixtures that weren't published, or a live Postgres. The private repo has a similar pre-existing failure set, so treat the full `core/backend/tests` run as **not green**.
-- `demo/morning_report.py` runs the §4 flow locally: contract → claim → deliver → independent readback and figure check → receipts → `done`, and "Done. No action needed." on rerun. Delivery goes to a local file outbox, not real email. It uses the stub model unless `ROUVR_MODEL_PROVIDER` is set. This script doesn't use Temporal yet; its crash-resume comes from the ledger's idempotency keys.
+- `demo/morning_report.py` runs the §4 flow locally: contract → claim → deliver → independent readback and figure check → receipts → `done`, and "Done. No action needed." on rerun. Delivery goes to a local file outbox, not real email. It uses the stub model unless `ROUVR_MODEL_PROVIDER` is set. The same flow also runs as `OpsTaskWorkflow` under Temporal (S018, covered by `tests/test_ops.py::test_ops_workflow_done_digest`); the standalone script's own crash-resume comes from the ledger's idempotency keys.
 
 Not yet proven from this repo:
 - The full stack running under `docker compose` from a clean checkout.
@@ -142,7 +142,7 @@ Not yet proven from this repo:
 
 Other limitations:
 - Rouvr was formerly "AIX" on the "Hyeve" platform. Internal module names (`aix_core`, `hyeve_aix_service`, the `HYEVE_AIX_SERVICE_` env prefix) haven't been renamed, to avoid breaking imports.
-- `ledger/` is a first-pass WorkHub-lite. It has no auth, principals, leases or multi-tenancy, and the core backend's WorkHub client doesn't speak its API yet. `ledger/stub_workhub/` is kept as a generic in-memory stand-in.
+- `ledger/` is WorkHub-lite with token auth on local ports (shared stack token plus per-user tokens, S011/S016), leases, and mandatory tenant/project partitions (S022). The core backend's WorkHub client still speaks the private `/api/v1` + `/api/workhub` API, not this ledger's `/v1` API. `ledger/stub_workhub/` is kept as a generic in-memory stand-in.
 - `lane/` contains only the generic parts of the private lane. Two of its tests need the private canary controller and are skipped.
 - This is dev software. The compose stack isn't hardened.
 

@@ -5,6 +5,12 @@ from pathlib import Path
 
 import pytest
 
+_REPO = Path(__file__).resolve().parents[3]
+if not any((_REPO / rel / "schemas" / "aix" / "model_ingress").is_dir()
+           for rel in ("", "core", "core/backend")):
+    pytest.skip("schemas/aix/model_ingress not in this cut (unpublished asset)",
+                allow_module_level=True)
+
 from backend.services.aix_model_ingress_gate_service import (
     CLI_EXECUTOR_INGRESS_SCHEMA,
     CURRENT_INGRESS_SCHEMA_CATALOG,

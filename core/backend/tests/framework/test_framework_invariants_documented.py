@@ -11,6 +11,12 @@ AIX_ROOT = BACKEND_ROOT.parents[1]
 ROADMAP_ROOT = AIX_ROOT / "docs" / "current" / "AIX-Framework-Roadmap"
 VALIDATOR = ROADMAP_ROOT / "scripts" / "validate_f0_baseline.py"
 
+if not VALIDATOR.is_file():
+    import pytest as _pytest
+
+    _pytest.skip("docs/current/AIX-Framework-Roadmap validator not in this cut",
+                 allow_module_level=True)
+
 
 def _load_validator():
     spec = importlib.util.spec_from_file_location("validate_f0_baseline", VALIDATOR)

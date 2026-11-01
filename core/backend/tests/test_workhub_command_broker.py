@@ -27,7 +27,12 @@ def projection_type():
         module = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(module)
         return module.WorkHubProjection
-    from backend.workhub_projection import WorkHubProjection
+    try:
+        from backend.workhub_projection import WorkHubProjection
+    except ImportError:
+        pytest.skip(
+            "backend.workhub_projection not in this cut (unpublished companion); "
+            "set AIX_PROJECTION_MODULE to the reviewed companion file")
     return WorkHubProjection
 
 

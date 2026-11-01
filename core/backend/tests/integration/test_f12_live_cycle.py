@@ -32,6 +32,12 @@ FIXTURE_ROOT = (
     Path(__file__).resolve().parents[3] / "fixtures" / "expense-tracker-failed-cycle"
 )
 
+if not FIXTURE_ROOT.is_dir():
+    import pytest as _pytest
+
+    _pytest.skip("fixtures/expense-tracker-failed-cycle not in this cut",
+                 allow_module_level=True)
+
 
 def _sqlite_repair_api_py() -> str:
     return (

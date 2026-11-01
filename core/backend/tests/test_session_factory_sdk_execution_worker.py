@@ -12,6 +12,10 @@ from backend.session_factory.sdk_execution_worker import (
 )
 
 ROOT = Path(__file__).parents[2]
+
+if not (ROOT / "vendor" / "hyeve-agent-sdk-0.9.0-pilot.2.tgz").is_file():
+    pytest.skip("vendored hyeve-agent-sdk tarball not in this cut (private SDK)",
+                allow_module_level=True)
 PROFILE = json.loads(
     (Path(__file__).parent / "fixtures/sdk_worker/profile.v1.json").read_text()
 )

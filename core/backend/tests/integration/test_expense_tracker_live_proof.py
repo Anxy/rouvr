@@ -45,6 +45,12 @@ FIXTURE_ROOT = (
     / "expense-tracker-failed-cycle"
 )
 
+if not FIXTURE_ROOT.is_dir():
+    import pytest as _pytest
+
+    _pytest.skip("fixtures/expense-tracker-failed-cycle not in this cut",
+                 allow_module_level=True)
+
 
 def _fixture_deliverable() -> Path:
     path = FIXTURE_ROOT / "deliverable"

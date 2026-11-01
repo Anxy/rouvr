@@ -27,6 +27,12 @@ from backend.tests.artifact_normalizer import ArtifactNormalizer, _convert_ref_l
 # All are retries of the same WH ticket — identical ticket_id, different
 # run-specific IDs (invocation, attestation, transition, timestamps).
 _ARTIFACTS_DIR = Path(__file__).parents[3] / "artifacts" / "run_fire"
+
+if not _ARTIFACTS_DIR.is_dir():
+    import pytest as _pytest
+
+    _pytest.skip("artifacts/run_fire live-run outputs not in this cut",
+                 allow_module_level=True)
 _RUN_LATEST = "20260319-152105-codeintel-136"
 _RUN_PRECurrent = "20260319-141422-codeintel-136"
 _RUN_PREV2 = "20260319-140557-codeintel-136"

@@ -72,7 +72,7 @@ flowchart LR
 
 ## Quickstart
 
-Requires Python 3.12+. Docker is optional, for the full stack.
+Requires Python 3.12 or 3.13 (3.14 currently breaks the `tiktoken` build). Docker is required for the full stack.
 
 ```bash
 cp .env.example .env              # defaults to the offline stub model provider
@@ -84,6 +84,12 @@ demo/failure_injection/kill_midstep.sh      # also: silent_delivery.sh, revoked_
 make up                            # demo/docker-compose.yml: Postgres, Redis, Temporal (+UI :8080), ledger :8221
 set -a; . ./.env; set +a
 make api                           # core FastAPI on :8000, docs at /docs
+
+# supervisor stack (canonical full stack; verified from a clean checkout 2026-11-01):
+make setup PY=python3.12           # if your default python3 is not 3.12/3.13
+./scripts/rouvr --no-chat          # Temporal + ledger :8221 + 4 workers + MCP :8231
+./scripts/rouvr status             # health of every piece
+./scripts/rouvr down               # stop everything
 ```
 
 ### Use a Meta model
@@ -136,8 +142,7 @@ What's in this repo, as published:
 - `demo/morning_report.py` runs the §4 flow locally: contract → claim → deliver → independent readback and figure check → receipts → `done`, and "Done. No action needed." on rerun. Delivery goes to a local file outbox, not real email. It uses the stub model unless `ROUVR_MODEL_PROVIDER` is set. The same flow also runs as `OpsTaskWorkflow` under Temporal (S018, covered by `tests/test_ops.py::test_ops_workflow_done_digest`); the standalone script's own crash-resume comes from the ledger's idempotency keys.
 
 Not yet proven from this repo:
-- The full stack running under `docker compose` from a clean checkout.
-- The hackathon demo end to end on the real stack (Temporal worker kill, real mail delivery and readback, Meta model as judge). Only the local simulation above runs today.
+- The hackathon demo end to end on the real stack (Temporal worker kill, real mail delivery and readback, Meta model as judge). Only the local simulation above runs today. (The supervisor stack itself — Temporal, ledger, workers, MCP — was verified from a clean checkout on 2026-11-01 via `make setup PY=python3.12` then `./scripts/rouvr --no-chat`, including a ledger tenant/project/task smoke and a clean teardown.)
 - Calls to the live Meta Model API from this code path.
 
 Other limitations:

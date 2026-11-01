@@ -3,7 +3,7 @@
 Shipped items are checked (see `docs/system/ROUVR-SPRINT-INDEX.json`, 22/22 PASS); the rest below is planned, not done.
 
 ## Before hackathon submission (Nov 2026)
-- [ ] Run the full stack (`make up`) from a clean checkout and document it
+- [x] Run the full stack from a clean checkout and document it — supervisor stack (`scripts/rouvr`) verified 2026-11-01; `make up` remains the compose-only subset
 - [ ] Demo against the live Meta Model API (contract compile, narration, judge)
 - [ ] Recorded end-to-end demo video
 

@@ -155,6 +155,30 @@ def test_ops_contract_valid_merge_passes(monkeypatch):
     assert compile_ops_contract("do it")["expires_in_hours"] == 3
 
 
+def test_ops_contract_alien_model_shape_keeps_defaults(monkeypatch):
+    """Live-model regression: a verbose nested contract with mistyped known
+    keys must not overwrite the safe defaults (E_CONTRACT block)."""
+    from rouvr.ops import compile_ops_contract
+    from backend.rouvr_models.providers import ModelProvider
+
+    class AlienProvider(ModelProvider):
+        def __init__(self):
+            super().__init__("meta", "http://x", "m")
+
+        def chat(self, messages, **kw):
+            return json.dumps({"execution_contract": {"id": "x"},
+                               "steps": [{"name": "a"}],
+                               "success_criteria": "a single string, not an array",
+                               "escalation": {"to": "owner"},
+                               "expires_in_hours": "24 hours"})
+
+    monkeypatch.setattr("backend.rouvr_models.providers.get_provider",
+                        lambda name=None, env=None: AlienProvider())
+    got = compile_ops_contract("do it")
+    assert got["steps"] == ["health_probe", "compile_report", "deliver", "verify"]
+    assert got["escalation"] == "owner" and got["expires_in_hours"] == 24
+
+
 # ---- T5: grants + schedule ----
 
 @pytest.fixture(scope="module")

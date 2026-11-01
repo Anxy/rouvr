@@ -51,8 +51,14 @@ def compile_ops_contract(instruction: str) -> dict:
     p = get_provider()
     if os.environ.get("ROUVR_INJECT") == "revoked_key":
         raise RouvrError(Code.AUTHZ, "model credential revoked (injected)")
-    raw = p.chat([{"role": "system", "content": "Return a JSON execution contract."},
-                  {"role": "user", "content": instruction}])
+    raw = p.chat(
+        [{"role": "system",
+          "content": ("Return ONLY a JSON object with any subset of these keys: "
+                      "steps (array of strings), success_criteria (array of strings), "
+                      "side_effects (array of strings), stakeholders (array of strings), "
+                      "escalation (string), expires_in_hours (number). "
+                      "No other top-level keys, no prose.")},
+         {"role": "user", "content": instruction}])
     contract = {
         "steps": ["health_probe", "compile_report", "deliver", "verify"],
         "success_criteria": ["report delivered and read back", "figures match ledger", "health ok"],
@@ -69,7 +75,18 @@ def compile_ops_contract(instruction: str) -> dict:
             raise RouvrError(Code.CONTRACT, "model contract is not JSON: refused, not merged")
         if not isinstance(model_json, dict):
             raise RouvrError(Code.CONTRACT, "model contract is not an object: refused, not merged")
-        contract.update(model_json)
+        # Governed merge: only well-typed known keys land; an alien model
+        # shape (observed live: string success_criteria, nested objects)
+        # leaves the safe defaults standing instead of breaking validation.
+        for key in ("steps", "success_criteria", "side_effects", "stakeholders"):
+            val = model_json.get(key)
+            if isinstance(val, list) and all(isinstance(x, str) for x in val):
+                contract[key] = val
+        if isinstance(model_json.get("escalation"), str):
+            contract["escalation"] = model_json["escalation"]
+        hours = model_json.get("expires_in_hours")
+        if isinstance(hours, (int, float)) and not isinstance(hours, bool) and hours > 0:
+            contract["expires_in_hours"] = hours
     return validate_ops_contract(contract)
 
 

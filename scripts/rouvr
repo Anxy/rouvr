@@ -125,6 +125,8 @@ _start() {  # $1 = name, $2 = log, rest = command: detached, pid recorded
 }
 
 up() {
+  [ -x .venv/bin/python ] || { echo "[rouvr] ERROR: .venv missing; run 'make setup' once" >&2; exit 1; }
+  docker info >/dev/null 2>&1 || { echo "[rouvr] ERROR: Docker daemon not reachable; start Docker first" >&2; exit 1; }
   write_override; load_env
   echo "[rouvr] Temporal stack (Docker)..."
   docker compose -p rouvr -f demo/docker-compose.yml -f "$OVERRIDE" up -d db redis temporal >/dev/null

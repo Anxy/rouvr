@@ -30,12 +30,12 @@ body = ("export ROUVR_MODEL_PROVIDER=meta\n"
         "export META_MODEL_API_BASE_URL=https://api.meta.ai/v1\n"
         "export META_MODEL_NAME=muse-spark-1.3\n"
         f"export META_API_KEY={key}\n")
-open("/tmp/rouvr-supervisor/meta-provider-env.sh", "w").write(body)
-import os; os.chmod("/tmp/rouvr-supervisor/meta-provider-env.sh", 0o600)
+open(".data/meta-provider-env.sh", "w").write(body)
+import os; os.chmod(".data/meta-provider-env.sh", 0o600)
 EOF
 # After changing worker code or env, restart workers so they pick it up:
-for q in orch build test verify; do kill $(cat /tmp/rouvr-supervisor/pids/worker-$q.pid); done
-for q in orch build test verify; do setsid -f scripts/rouvr-worker-start.sh "$q" </dev/null >>/tmp/rouvr-supervisor/logs/$q.log 2>&1; done
+for q in orch build test verify; do kill $(cat .data/pids/worker-$q.pid); done
+for q in orch build test verify; do setsid -f scripts/rouvr-worker-start.sh "$q" </dev/null >>.data/logs/$q.log 2>&1; done
 # Also build the clean-room test image once per host:
 docker build -f testrunner.Dockerfile -t rouvr-runner:py313-p9 .
 ```
@@ -100,7 +100,7 @@ no rate card for the demo key).
 
 ```bash
 ./scripts/rouvr down
-rm -f /tmp/rouvr-supervisor/ledger.db* demo/.outbox/*
+rm -f .data/ledger.db* demo/.outbox/*
 ROUVR_LAUNCH_WINDOWS=0 ./scripts/rouvr --no-chat
 ```
 
@@ -149,6 +149,19 @@ All on the supervisor stack with `model: meta` (muse-spark-1.3). Artifacts under
 An earlier t1 attempt is kept as failure evidence (`t1-blocked-contract/`):
 the live model returned a verbose non-schema contract and the old merge broke
 validation (E_CONTRACT). The merge now keeps safe defaults on mistyped keys.
+
+## Data location (never /tmp for state)
+
+All supervisor runtime state lives in `<repo>/.data/` (git-ignored, 0700;
+secrets 0600): `ledger.db` (the ledger), `workspaces/`, `specs/`,
+`evidence/`, `hidden-tests/`, `grants/`, `keys/`, `logs/`, `pids/`,
+`api-token`, `env.sh`. Every launcher resolves its ops root as
+`$ROOT/.data` unless `ROUVR_OPS_DIR` is set (`scripts/rouvr`,
+`scripts/seed-user`, `plugin/mcp/run.sh`, `scripts/rouvr-worker-start.sh`,
+`demo/rehearsal/run_tick.py`, `demo/rehearsal/live_coding.py`). /tmp is
+never used for state: it is quota-limited on the shared host and once
+made the ledger sqlite unwritable mid-rehearsal (HTTP 500 on every
+write until the DB moved).
 
 ## Test scope (CI)
 

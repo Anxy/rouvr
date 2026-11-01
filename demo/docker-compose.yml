@@ -33,10 +33,13 @@ services:
     ports: ["8080:8080"]
   ledger:
     # Rouvr ledger (WorkHub-lite). SQLite only: the app fails fast on postgres URLs.
+    # NOTE: the supervisor flow runs the ledger via scripts/rouvr (uvicorn on
+    # $OPS/ledger.db), not via this service. Its URL must still never point at
+    # /tmp (quota-limited): state lives under the repo .data/ dir.
     image: python:3.13-slim
     working_dir: /app
     volumes: ["..:/app:ro"]
     environment:
-      ROUVR_LEDGER_DATABASE_URL: sqlite:////tmp/rouvr-ledger.db
+      ROUVR_LEDGER_DATABASE_URL: sqlite:////app/.data/ledger-compose.db
     command: sh -c "pip install -q fastapi uvicorn sqlalchemy && uvicorn ledger.app:app --host 0.0.0.0 --port 8221"
     ports: ["8221:8221"]

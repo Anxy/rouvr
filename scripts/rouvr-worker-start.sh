@@ -5,7 +5,7 @@
 set -euo pipefail
 q="${1:?queue required: orch|build|test|verify}"
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-OPS="${ROUVR_OPS_DIR:-/tmp/rouvr-supervisor}"
+OPS="${ROUVR_OPS_DIR:-$ROOT/.data}"
 # shellcheck disable=SC1090
 source "$OPS/env.sh"
 if [ -f "$OPS/meta-provider-env.sh" ]; then

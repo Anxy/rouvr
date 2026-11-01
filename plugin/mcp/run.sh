@@ -11,7 +11,7 @@ if [ -z "$ROOT" ]; then
   done
 fi
 [ -n "$ROOT" ] || { echo "rouvr checkout not found (set ROUVR_ROOT)" >&2; exit 1; }
-OPS="${ROUVR_OPS_DIR:-/tmp/rouvr-supervisor}"
+OPS="${ROUVR_OPS_DIR:-$ROOT/.data}"
 _pre_token="${ROUVR_LEDGER_TOKEN:-}"
 [ -f "$OPS/env.sh" ] && { set -a; . "$OPS/env.sh"; set +a; }
 [ -n "$_pre_token" ] && export ROUVR_LEDGER_TOKEN="$_pre_token"

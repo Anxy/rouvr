@@ -28,7 +28,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(ROOT / "core"))
-OPS = Path(os.environ.get("ROUVR_OPS_DIR", "/tmp/rouvr-supervisor"))
+OPS = Path(os.environ.get("ROUVR_OPS_DIR") or str(ROOT / ".data"))
 
 
 def load_stack_env():

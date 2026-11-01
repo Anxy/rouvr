@@ -28,5 +28,8 @@ D:*
 demo/.outbox/
 demo/.rouvr-demo.db
 *.db
+# Supervisor runtime state (ledger DB, workspaces, grants, keys, logs).
+# Lives in the repo so state survives /tmp pressure; never committed.
+/.data/
 lane/tools/canary_lane_config.py
 .secrets/

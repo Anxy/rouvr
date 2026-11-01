@@ -42,9 +42,9 @@ def test_script_operands_and_token_scoping():
     assert "receipt_ed25519.pem" in rouvr and "RECEIPT_SIGNING_KEY_PATH=$OPS/keys/receipt_ed25519.pem" in rouvr
     assert 'ROUVR_PERSONA_CREDS_DIR:-$HOME/Repository/hackathon/.secrets/rouvr/personas' in rouvr
     assert "foreign process" in rouvr and "_adopt ledger" in rouvr and "_adopt mcp" in rouvr
-    assert 'OPS="${ROUVR_OPS_DIR:-/tmp/rouvr-supervisor}"' in (ROOT / "scripts/seed-user").read_text()
+    assert 'OPS="${ROUVR_OPS_DIR:-$ROOT/.data}"' in (ROOT / "scripts/seed-user").read_text()
     run = (ROOT / "plugin/mcp/run.sh").read_text()
-    assert 'OPS="${ROUVR_OPS_DIR:-/tmp/rouvr-supervisor}"' in run
+    assert 'OPS="${ROUVR_OPS_DIR:-$ROOT/.data}"' in run
     assert '_pre_token="${ROUVR_LEDGER_TOKEN:-}"' in run
     assert run.index("_pre_token") < run.index('. "$OPS/env.sh"') < run.index('ROUVR_LEDGER_TOKEN="$_pre_token"')
 

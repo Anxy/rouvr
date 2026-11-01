@@ -325,6 +325,8 @@ def test_consumer_to_broker_projection_to_canonical_temporal(setup, tmp_path, mo
 
 
 def test_real_daemon_entrypoint_external_projection_restart(setup, tmp_path):
+    if "AIX_PROJECTION_MODULE" not in os.environ:
+        pytest.skip("needs the unpublished companion projection via AIX_PROJECTION_MODULE")
     """Real HTTP/socket/process integration; remote server is a labelled double."""
     import hashlib
     import subprocess

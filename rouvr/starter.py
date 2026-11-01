@@ -84,7 +84,10 @@ async def run_schedule_ops(*, run_key: str, instruction: str, tenant: str,
 
     s = Settings.from_env()
     scope = ops_schedule_scope(run_key)
-    async with httpx.AsyncClient(base_url=s.workhub_base_url, timeout=10) as http:
+    token = os.environ.get("ROUVR_LEDGER_TOKEN", "")
+    headers = {"X-Rouvr-Token": token} if token else {}
+    async with httpx.AsyncClient(base_url=s.workhub_base_url, timeout=10,
+                                 headers=headers) as http:
         g = (await http.get("/v1/grants/active", params={"scope": scope})
              ).raise_for_status().json()
     if not g.get("active"):

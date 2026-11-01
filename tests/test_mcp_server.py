@@ -111,6 +111,26 @@ def test_mcp_create_writes_hidden_suite_as_test_author(monkeypatch, ledger_url, 
     assert_coder_clean(coder_ws, hidden_dir, manifest_obj)  # coder ws untouched
 
 
+def test_mcp_create_refuses_empty_criteria_before_any_write(monkeypatch, ledger_url, tmp_path):
+    """G2: no criteria means no sealable suite, so the create is refused
+    before any ledger write — the test step never hits 'no hidden suite'."""
+    import httpx
+
+    monkeypatch.setenv("WORKHUB_BASE_URL", ledger_url)
+    monkeypatch.setenv("HIDDEN_TESTS_ROOT", str(tmp_path / "hidden"))
+    import importlib
+    import rouvr.mcp_server as ms
+    importlib.reload(ms)
+    _ensure_scope(ledger_url)
+    with httpx.Client(base_url=ledger_url, timeout=10) as c:
+        before = c.get("/v1/tasks").json()["items"]
+    with pytest.raises(RuntimeError, match="acceptance criterion"):
+        ms.workhub_create_task("t-empty", "do the thing", [], "acme", "site")
+    with httpx.Client(base_url=ledger_url, timeout=10) as c:
+        after = c.get("/v1/tasks").json()["items"]
+    assert after == before  # refused before any ledger write
+
+
 def test_mcp_agent_messages_roundtrip(monkeypatch, ledger_url, tmp_path):
     monkeypatch.setenv("WORKHUB_BASE_URL", ledger_url)
     monkeypatch.setenv("HIDDEN_TESTS_ROOT", str(tmp_path / "hidden"))

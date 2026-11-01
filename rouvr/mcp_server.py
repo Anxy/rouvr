@@ -106,7 +106,12 @@ def workhub_create_task(title: str, description: str, acceptance_criteria: list[
 
     from rouvr.hiddentests import write_hidden_suite
 
-    files = _author_hidden_suite(acceptance_criteria)  # fail closed before any ledger write
+    criteria = [c for c in (acceptance_criteria or []) if isinstance(c, str) and c.strip()]
+    if not criteria:  # G2: no criteria means no sealable suite; refuse before any ledger write
+        raise RuntimeError(
+            "create refused: at least one acceptance criterion is required "
+            "so the hidden suite can be sealed at creation")
+    files = _author_hidden_suite(criteria)  # fail closed before any ledger write
     try:
         candidate = _decompose_brief(title, description, acceptance_criteria)
         decomposition: dict = {"status": "enriched", "candidate": candidate}

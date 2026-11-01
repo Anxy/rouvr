@@ -1,7 +1,7 @@
 """Meta Model API worker adapter (stub, first pass).
 
 Uses the pluggable provider (backend.rouvr_models) with ROUVR_MODEL_PROVIDER=meta.
-The key is read only from META_MODEL_API_KEY in the environment. Three roles map
+The key is read only from META_API_KEY in the environment. Three roles map
 to the demo: compile (intent -> contract), narrate (report text), judge (verifier).
 """
 from __future__ import annotations

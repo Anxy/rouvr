@@ -146,9 +146,10 @@ class OpsTaskWorkflow:
     async def run(self, inp: OpsInput) -> OpsResult:
         wh = retry_policy_for("workhub")
         ops = timedelta(seconds=60)
+        hb = timedelta(seconds=20)  # kill detection: healthy ops steps finish in seconds
         prep = await workflow.execute_activity_method(
             Activities.ops_prepare, inp, task_queue=Q_ORCH,
-            start_to_close_timeout=ops, retry_policy=wh)
+            start_to_close_timeout=ops, heartbeat_timeout=hb, retry_policy=wh)
         if prep["state"] == "done":  # rerun after completion: hand back the receipt
             return OpsResult("done", OPS_DIGEST_DONE, prep["task_id"],
                              prep["message_id"], prep["sink"])
@@ -158,27 +159,31 @@ class OpsTaskWorkflow:
         try:
             await workflow.execute_activity_method(
                 Activities.ops_compile, args=[inp, prep["task_id"]], task_queue=Q_ORCH,
-                start_to_close_timeout=ops, retry_policy=wh)
+                start_to_close_timeout=ops, heartbeat_timeout=hb, retry_policy=wh)
             claimed = await workflow.execute_activity_method(
                 Activities.ops_claim, args=[inp, prep["task_id"]], task_queue=Q_ORCH,
-                start_to_close_timeout=ops, retry_policy=wh)
+                start_to_close_timeout=ops, heartbeat_timeout=hb, retry_policy=wh)
             for sink in ("primary", "fallback"):
                 sent = await workflow.execute_activity_method(
                     Activities.ops_deliver, args=[inp, prep["task_id"], sink, claimed["report"]],
-                    task_queue=Q_ORCH, start_to_close_timeout=ops, retry_policy=wh)
+                    task_queue=Q_ORCH, start_to_close_timeout=ops, heartbeat_timeout=hb,
+                    retry_policy=wh)
                 v = await workflow.execute_activity_method(
                     Activities.ops_verify,
                     args=[inp, prep["task_id"], sink, sent["message_id"]],
-                    task_queue=Q_ORCH, start_to_close_timeout=ops, retry_policy=wh)
+                    task_queue=Q_ORCH, start_to_close_timeout=ops, heartbeat_timeout=hb,
+                    retry_policy=wh)
                 if v["verdict"] == "pass":
                     return await workflow.execute_activity_method(
                         Activities.ops_close,
                         args=[inp, prep["task_id"], "pass", sink, sent["message_id"], v["figures"]],
-                        task_queue=Q_ORCH, start_to_close_timeout=ops, retry_policy=wh)
+                        task_queue=Q_ORCH, start_to_close_timeout=ops, heartbeat_timeout=hb,
+                        retry_policy=wh)
             return await workflow.execute_activity_method(
                 Activities.ops_close,
                 args=[inp, prep["task_id"], "fail", "fallback", sent["message_id"], v["figures"]],
-                task_queue=Q_ORCH, start_to_close_timeout=ops, retry_policy=wh)
+                task_queue=Q_ORCH, start_to_close_timeout=ops, heartbeat_timeout=hb,
+                retry_policy=wh)
         except ActivityError as e:
             return await self._park(inp, prep["task_id"], _code(e), wh, ops)
 
@@ -186,7 +191,8 @@ class OpsTaskWorkflow:
         try:
             return await workflow.execute_activity_method(
                 Activities.ops_block, args=[inp, task_id, reason], task_queue=Q_ORCH,
-                start_to_close_timeout=ops, retry_policy=wh)
+                start_to_close_timeout=ops, heartbeat_timeout=timedelta(seconds=20),
+                retry_policy=wh)
         except ActivityError:
             return OpsResult("blocked", f"ESCALATED: {reason}", task_id)
 

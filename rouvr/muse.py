@@ -129,7 +129,7 @@ def chat_command(title: str, cwd: Path, prompt_file: Path, model: str,
     # shortcut: HOME stays real (muse login lives there), so file reads
     # outside the workspace are bounded by muse's sandbox, not by us —
     # revisit if muse supports a portable login dir.
-    muse = (f"env -u GH_TOKEN -u ROUVR_LEDGER_TOKEN -u META_MODEL_API_KEY -u WORKHUB_JWT "
+    muse = (f"env -u GH_TOKEN -u ROUVR_LEDGER_TOKEN -u META_API_KEY -u WORKHUB_JWT "
             f"{shlex.quote(bin_path)} --yolo --workspace {shlex.quote(str(cwd))}")
     if model:
         muse += f" --model {shlex.quote(model)}"

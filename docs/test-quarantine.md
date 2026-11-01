@@ -23,6 +23,7 @@ All paths below are relative to the repo root unless noted.
 | `core/backend/tests/test_workhub_command_broker.py` (`projection_type` fixture skip) | projection companion unpublished | `backend.workhub_projection` module, or set `AIX_PROJECTION_MODULE` to the reviewed companion file | reviewed-companion author (WorkHub projection) |
 | `core/backend/tests/aix_core/control_plane_reachability/test_reachability_manifest.py::test_write_and_reload_manifest` (in-test skip) | monorepo-scale manifest needs static extras not in this cut | component_count >= 100 (static extras that register the missing components) | reachability-manifest owners |
 | `tests/test_hyeve_demo.py` live legs (env-gated skip, S023) | live Hyeve legs need a live backend plus credentials | `ROUVR_HYEVE_LIVE=1`, `HYEVE_AUTH_BASE_URL`, `HYEVE_WORKHUB_BASE_URL`, `ROUVR_HYEVE_CREDS_FILE` | live-Hyeve environment owner |
+| `tests/test_ops.py::test_scheduled_duplicate_tick_deduped` (skip, rev3) | time-skipping test server races two concurrent completions (`temporalio_sdk_core ... Task not found when completing`); flakes ~1/3 of full-file runs, ~1/10 solo; not a product-code failure | 50 consecutive green runs or a pinned SDK without the race; T5 dedupe also covered live (duplicate schedule ticks attach to one task) | test-server/SDK owners |
 
 ## Known quarantine hole (not yet skipping)
 

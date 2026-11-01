@@ -196,8 +196,13 @@ class Activities:
                             evidence_ids=ev)
 
     def _git_grant(self, task_id: str) -> str:
-        """Supervisor-written grant file (0600, never in WorkHub): {github_token}."""
-        p = self.h.settings.workspace_root / f".git-grant-{task_id}.json"
+        """Supervisor-written grant file (0600, never in WorkHub): {github_token}.
+
+        Lives beside the workspace tree (see gitops.grant_path): a coder turn
+        running as the worker uid must not find its grant next to its checkout.
+        """
+        from rouvr.gitops import grant_path
+        p = grant_path(self.h.settings.workspace_root, task_id)
         try:
             if p.stat().st_mode & 0o077:
                 return ""
@@ -262,7 +267,9 @@ class Activities:
             hidden_run = await h.tests.run(clone, ["python", "-m", "pytest", "_rouvr_hidden", "-v"],
                                            spec.timeout_s, f"{fence}:hidden")
             diff = await diff_range(clone, f"origin/{spec.base_branch}", built.head_sha)
-        outcomes = parse_criterion_outcomes(hidden_run.output_tail)
+        # Parse from the full output: tail-only parsing silently drops sealed
+        # groups whose result lines fall outside the display window.
+        outcomes = parse_criterion_outcomes(hidden_run.output_full or hidden_run.output_tail)
         flags = scan_diff(diff, hidden_literals=hidden_literals(hidden_dir))
         criteria_ok = bool(outcomes) and all(outcomes.values())
         passed = repo_run.passed and hidden_run.passed and criteria_ok and not flags
@@ -539,6 +546,17 @@ class Activities:
         c = _ops_ledger()
         _ops_post(c, f"/v1/tasks/{task_id}/evidence",
                   {"kind": "escalation", "body": {"reason": reason, "run_key": inp.run_key}})
-        _ops_post(c, f"/v1/tasks/{task_id}/transition",
-                  {"to": "blocked", "idempotency_key": f"{inp.run_key}:park"})
+        r = c.post(f"/v1/tasks/{task_id}/transition",
+                   json={"to": "blocked", "idempotency_key": f"{inp.run_key}:park"})
+        if r.status_code == 409 and r.json().get("detail", "").startswith("illegal transition"):
+            # Late tick on an already-terminal task (live finding: a schedule tick
+            # kept retrying done -> blocked for hours, starving the worker): the
+            # park is moot, history is not rewritten, and crucially this returns
+            # instead of raising into an infinite retry storm.
+            cur = c.get(f"/v1/tasks/{task_id}").json().get("state")
+            if cur in ("done", "blocked", "failed"):
+                return OpsResult("blocked", f"ESCALATED: {reason}", task_id)
+        if r.status_code >= 400:
+            raise RouvrError(Code.DOWNSTREAM,
+                             f"ops block: {r.status_code} {str(r.text)[:200]}")
         return OpsResult("blocked", f"ESCALATED: {reason}", task_id)

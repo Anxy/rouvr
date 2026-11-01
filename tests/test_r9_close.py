@@ -74,7 +74,9 @@ async def test_close_already_there_is_success():
 
 
 async def test_close_terminal_revokes_grant_needs_review_keeps(tmp_path):
-    grant = tmp_path / ".git-grant-t1.json"
+    from rouvr.gitops import grant_path
+    grant = grant_path(tmp_path, "t1")
+    grant.parent.mkdir(parents=True, exist_ok=True)
     grant.write_text('{"github_token": "tok"}')
     fake = FakeWH([{"record_version": 9, "status": "blocked"}])
     acts = Activities(SimpleNamespace(workhub_for=lambda p: fake,

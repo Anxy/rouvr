@@ -3,7 +3,7 @@
 # Kill target is only this script's own setsid child. The API key is never printed.
 set -euo pipefail
 
-: "${META_MODEL_API_KEY:?set META_MODEL_API_KEY first (do not pass it as an argument)}"
+: "${META_API_KEY:?set META_API_KEY first (do not pass it as an argument)}"
 OUT="${SPIKE_OUT:-$(mktemp -d /tmp/r2-spike.XXXXXX)}"
 WORK="$OUT/work"
 SID="${SPIKE_SESSION_ID:-$(cat /proc/sys/kernel/random/uuid)}"
@@ -14,8 +14,8 @@ MUSE_BIN="${MUSE_BIN:-muse}"
 mkdir -p "$WORK"
 
 redact() { # stdin -> stdout with the key replaced; never fails the pipe
-  META_MODEL_API_KEY="$META_MODEL_API_KEY" python3 -c \
-    'import os,sys; k=os.environ.get("META_MODEL_API_KEY",""); sys.stdout.write(sys.stdin.read().replace(k,"[REDACTED]") if k else sys.stdin.read())'
+  META_API_KEY="$META_API_KEY" python3 -c \
+    'import os,sys; k=os.environ.get("META_API_KEY",""); sys.stdout.write(sys.stdin.read().replace(k,"[REDACTED]") if k else sys.stdin.read())'
 }
 
 echo "out=$OUT sid=$SID nonce=[hidden] files=$NFILES"

@@ -1,11 +1,10 @@
 {
-  "run_key": "morning-report:t2-537096",
-  "workflow_id": "rerun-morning-report:t2-537096-1793537096",
-  "kill_landed_at_task_state": "open",
-  "elapsed_s": 486.3,
-  "digest": "Done. No action needed.",
-  "message_id": "d10638cafa462b06",
-  "sink": "primary",
+  "run_key": "morning-report:t2-546589",
+  "workflow_id": "rerun-morning-report:t2-546589-1793546598",
+  "elapsed_s": 29.6,
   "state": "done",
-  "task_id": 17
+  "digest": "Done. No action needed.",
+  "sink": "primary",
+  "message_id": "82e505f6ff49420c",
+  "task_id": "28"
 }

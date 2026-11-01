@@ -20,6 +20,7 @@ class TestRun:
     passed: bool
     exit_code: int
     output_tail: str
+    output_full: str = ""  # full sanitized output for outcome parsing; tail is display-only
 
 
 class TestRunner(Protocol):
@@ -43,7 +44,11 @@ async def _exec(argv: list[str], cwd: Path, timeout_s: int, *, container_name: s
             except Exception:
                 pass
         raise RouvrError(Code.DOWNSTREAM, "tests timed out") from e
-    return proc.returncode or 0, sanitize_for_log(out.decode(errors="replace")[-4000:])
+    # Full output (bounded) for outcome parsing; callers truncate for display.
+    # A tail-only parse silently drops criterion groups whose PASSED lines fall
+    # outside the window (live finding: the last sealed group went unrecorded).
+    full = sanitize_for_log(out.decode(errors="replace"), limit=262144)
+    return proc.returncode or 0, full
 
 
 def _run_id(prefix: str, run_key: str) -> str:
@@ -61,7 +66,8 @@ class ContainerTestRunner:
         argv = ["docker", "run", "--rm", "--name", name, "--network", "none", "--pull", "never",
                "-v", f"{cwd}:/src:ro", "-w", "/src", self.image, *command]
         try:
-            rc, tail = await _exec(argv, cwd, timeout_s, container_name=name)
+            rc, full = await _exec(argv, cwd, timeout_s, container_name=name)
         except FileNotFoundError as e:
             raise RouvrError(Code.DOWNSTREAM, "docker is not installed") from e
-        return TestRun(run_id=_run_id("ctr", run_key), passed=rc == 0, exit_code=rc, output_tail=tail)
+        return TestRun(run_id=_run_id("ctr", run_key), passed=rc == 0, exit_code=rc,
+                        output_tail=full[-2000:], output_full=full)

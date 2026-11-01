@@ -1,10 +1,10 @@
 [
   {
-    "id": 135,
-    "task_id": 17,
+    "id": 269,
+    "task_id": 28,
     "kind": "reviewer",
-    "body": "{\"executor\":\"ops-worker\",\"figures_match\":true,\"health\":true,\"judge\":{\"judge_principal\":\"ops-judge\",\"reason\":\"All three figures match the ledger exactly.\",\"verdict\":\"pass\"},\"judge_principal\":\"ops-judge\",\"model\":\"meta\",\"readback\":true,\"sink\":\"primary\",\"verdict\":\"pass\"}",
-    "sha256": "8b24039bd29d34fdd42a11a8da97567e7eff10d2953fa82a5aebd22edc503e8c",
-    "created_at": "2026-11-01T12:52:43.890956+00:00"
+    "body": "{\"executor\":\"ops-worker\",\"figures_match\":true,\"health\":true,\"judge\":{\"judge_principal\":\"ops-judge\",\"reason\":\"All figures match ledger values.\",\"verdict\":\"pass\"},\"judge_principal\":\"ops-judge\",\"model\":\"meta\",\"readback\":true,\"sink\":\"primary\",\"verdict\":\"pass\"}",
+    "sha256": "e69f03cf38ca2bc645b22f12615a50cea562c6a53cab91abea5afb2a926100d7",
+    "created_at": "2026-11-01T15:23:47.580482+00:00"
   }
 ]

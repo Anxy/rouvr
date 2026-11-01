@@ -80,7 +80,8 @@ def compile_ops_contract(instruction: str) -> dict:
         # leaves the safe defaults standing instead of breaking validation.
         for key in ("steps", "success_criteria", "side_effects", "stakeholders"):
             val = model_json.get(key)
-            if isinstance(val, list) and all(isinstance(x, str) for x in val):
+            # Non-empty: an empty list is well-typed but breaks minItems below.
+            if isinstance(val, list) and val and all(isinstance(x, str) for x in val):
                 contract[key] = val
         if isinstance(model_json.get("escalation"), str):
             contract["escalation"] = model_json["escalation"]
@@ -112,7 +113,7 @@ def judge_ops_report(report: str, figures: dict, *, chat) -> dict:
         raise RouvrError(Code.CONTRACT, "ops judge output is not JSON: refused") from e
     if not isinstance(data, dict) or data.get("verdict") not in ("pass", "fail"):
         raise RouvrError(Code.CONTRACT, "ops judge verdict must be pass|fail: refused")
-    return {"verdict": data["verdict"], "reason": str(data.get("reason") or ""),
+    return {"verdict": data["verdict"], "reason": str(data.get("reason") or "")[:500],
             "judge_principal": OPS_JUDGE}
 
 
@@ -127,7 +128,18 @@ def verify_with_judge(*, deterministic_pass: bool, report: str, figures: dict,
         return {"verdict": "pass" if deterministic_pass else "fail",
                 "judge": {"verdict": "skipped", "reason": "no model judge on stub",
                           "judge_principal": OPS_JUDGE}}
-    judged = judge_ops_report(report, figures, chat=chat)
+    try:
+        judged = judge_ops_report(report, figures, chat=chat)
+    except RouvrError as e:  # judge outage is a fail, never a raised block:
+        # the deterministic path keeps its verdict and the sink fallback stays
+        # available (an uncaught raise would park the tick, skipping fallback).
+        judged = {"verdict": "error", "reason": f"judge unavailable: {e}"[:500],
+                  "judge_principal": OPS_JUDGE}
+        return {"verdict": "fail", "judge": judged}
+    except Exception as e:  # transport errors fail the same way, never propagate
+        judged = {"verdict": "error", "reason": f"judge transport: {type(e).__name__}"[:500],
+                  "judge_principal": OPS_JUDGE}
+        return {"verdict": "fail", "judge": judged}
     verdict = "pass" if (deterministic_pass and judged["verdict"] == "pass") else "fail"
     return {"verdict": verdict, "judge": judged}
 

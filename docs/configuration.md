@@ -5,7 +5,7 @@ Copy `.env.example` to `.env`. Secrets are read from the environment only; never
 | Variable | Default | Purpose |
 |---|---|---|
 | `ROUVR_MODEL_PROVIDER` | `stub` | `stub` (offline), `meta` (Meta Model API), `ollama` (local open weights) |
-| `META_MODEL_API_KEY` | – | Key for the Meta Model API when provider is `meta` |
+| `META_API_KEY` | – | Key for the Meta Model API when provider is `meta` |
 | `OLLAMA_MODEL` | – | Model name for Ollama, e.g. `llama3.1` |
 | `HYEVE_AIX_SERVICE_*` | see `.env.example` | Core service settings (database, Redis, Temporal) |
 | `RECEIPT_SIGNING_KEY_PATH` | `/srv/rouvr/keys/receipt_ed25519.pem` | Ed25519 private key (PEM, PKCS8, no encryption) for signed receipts; file must be `0600` |

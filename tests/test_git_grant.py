@@ -14,14 +14,27 @@ def _acts(tmp_path):
 
 
 def test_grant_requires_0600_and_token(tmp_path):
+    from rouvr.gitops import grant_path
     acts = _acts(tmp_path)
-    assert acts._git_grant("7") == ""
-    p = tmp_path / ".git-grant-7.json"
+    assert acts._git_grant("7a") == ""
+    p = grant_path(tmp_path, "7a")
+    p.parent.mkdir(parents=True, exist_ok=True)
     p.write_text(json.dumps({"github_token": "tok"}))
     os.chmod(p, 0o644)
-    assert acts._git_grant("7") == ""  # world-readable grant refused
+    assert acts._git_grant("7a") == ""  # world-readable grant refused
     os.chmod(p, 0o600)
-    assert acts._git_grant("7") == "tok"
+    assert acts._git_grant("7a") == "tok"
+
+
+def test_grant_lives_outside_workspace_tree(tmp_path):
+    """Audit S2: a decoy grant inside the workspace tree must be ignored —
+    an unsandboxed turn must not self-grant from a sibling directory."""
+    from rouvr.gitops import grant_path
+    acts = _acts(tmp_path)
+    (tmp_path / ".git-grant-7b.json").write_text(json.dumps({"github_token": "decoy"}))
+    assert acts._git_grant("7b") == ""
+    assert grant_path(tmp_path, "7").parent != tmp_path
+    assert grant_path(tmp_path, "7").parent.name == "grants"
 
 
 def test_coder_prompt_forbids_push():
@@ -62,19 +75,36 @@ def test_clone_env_minimal(tmp_path, monkeypatch):
     monkeypatch.setenv("ROUVR_GH_TOKEN_FILE", str(p))
     monkeypatch.setenv("GH_TOKEN", "host-token")
     monkeypatch.setenv("ROUVR_LEDGER_TOKEN", "ledger-token")
-    monkeypatch.setenv("META_MODEL_API_KEY", "meta-key")
+    monkeypatch.setenv("META_API_KEY", "meta-key")
     monkeypatch.setenv("WORKHUB_JWT", "jwt")
     env = clone_env()
     assert env["GH_TOKEN"] == "filetok"  # scoped file wins, host env never leaks
     assert env["GIT_TERMINAL_PROMPT"] == "0"
-    for leaked in ("ROUVR_LEDGER_TOKEN", "META_MODEL_API_KEY", "WORKHUB_JWT"):
+    for leaked in ("ROUVR_LEDGER_TOKEN", "META_API_KEY", "WORKHUB_JWT"):
         assert leaked not in env
 
 
 def test_revoke_git_grant(tmp_path):
-    from rouvr.gitops import revoke_git_grant
-    p = tmp_path / ".git-grant-7.json"
+    from rouvr.gitops import grant_path, revoke_git_grant
+    p = grant_path(tmp_path, "7c")
+    p.parent.mkdir(parents=True, exist_ok=True)
     p.write_text("{}")
-    assert revoke_git_grant(tmp_path, "7") is True
+    assert revoke_git_grant(tmp_path, "7c") is True
     assert not p.exists()
-    assert revoke_git_grant(tmp_path, "7") is False
+    assert revoke_git_grant(tmp_path, "7c") is False
+
+
+async def test_run_hides_worker_secrets_from_children(tmp_path, monkeypatch):
+    """Audit S1/T1 negative: worker secrets must not reach _run children,
+    while PATH/HOME and caller vars do."""
+    import sys
+    from rouvr.gitops import _run
+    monkeypatch.setenv("ROUVR_LEDGER_TOKEN", "ledger-canary")
+    monkeypatch.setenv("META_API_KEY", "model-canary")
+    out = await _run(sys.executable, "-c",
+                     "import os;print(os.environ.get('ROUVR_PROBE_Y'),"
+                     "os.environ.get('PATH', '') != '',"
+                     "os.environ.get('ROUVR_LEDGER_TOKEN'),"
+                     "os.environ.get('META_API_KEY'))",
+                     env={"ROUVR_PROBE_Y": "1"})
+    assert out.split() == ["1", "True", "None", "None"]

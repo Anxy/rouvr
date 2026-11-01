@@ -12,7 +12,7 @@ from dataclasses import dataclass
 
 _PRESETS = {
     # Meta Model API — OpenAI-compatible surface; endpoint+model from env only.
-    "meta": ("META_MODEL_API_BASE_URL", "", "META_MODEL_API_KEY", "META_MODEL_NAME", ""),
+    "meta": ("META_MODEL_API_BASE_URL", "", "META_API_KEY", "META_MODEL_NAME", ""),
     # Open weights served locally (Ollama / vLLM / llama.cpp server).
     "ollama": ("OLLAMA_BASE_URL", "http://localhost:11434/v1", None, "OLLAMA_MODEL", "llama3.1"),
     "openrouter": ("OPENROUTER_BASE_URL", "https://openrouter.ai/api/v1", "OPENROUTER_API_KEY", "OPENROUTER_DEFAULT_MODEL", "meta-llama/llama-3.1-70b-instruct"),

@@ -97,7 +97,7 @@ make setup PY=python3.12           # if your default python3 is not 3.12/3.13
 ```bash
 # .env
 ROUVR_MODEL_PROVIDER=meta
-META_MODEL_API_KEY=<your key>    # only ever read from the environment
+META_API_KEY=<your key>    # only ever read from the environment
 # or open weights, locally:
 ROUVR_MODEL_PROVIDER=ollama
 OLLAMA_MODEL=llama3.1

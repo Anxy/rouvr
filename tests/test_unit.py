@@ -311,6 +311,21 @@ async def test_container_names_unique_run_id_deterministic(tmp_path, monkeypatch
     assert r1.run_id == r2.run_id and len(set(names)) == 2
 
 
+async def test_outcome_parse_sees_beyond_tail_window(tmp_path):
+    """Live-audit regression: a criterion PASSED line before the 2000-char
+    display window must still be recorded (tail-only parse dropped it)."""
+    import sys
+    from rouvr.hiddentests import parse_criterion_outcomes
+    from rouvr.testrunner import _exec
+    early = "test_x.py::test_alpha_first PASSED"
+    rc, full = await _exec(
+        [sys.executable, "-c", f"print({early!r}); print('n' * 5000)"],
+        tmp_path, 30)
+    assert rc == 0
+    assert early not in full[-2000:]  # outside the display window
+    assert parse_criterion_outcomes(full).get("alpha") is True
+
+
 @pytest.mark.parametrize("spec_text", [
     "repo: 123\nbase_branch: main\ntest_command: [pytest]\n",
     "repo: org/repo\nbase_branch: [main]\ntest_command: [pytest]\n",

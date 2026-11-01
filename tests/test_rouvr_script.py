@@ -10,23 +10,30 @@ def test_rouvr_script_bash_syntax():
     subprocess.run(["bash", "-n", "scripts/rouvr"], cwd=ROOT, check=True)
 
 
-def test_stop_adopts_untracked_own_worker(tmp_path):
+def test_stop_kills_only_pidfile_recorded(tmp_path):
+    """Rev3: stop is pidfile-scoped. A recorded fake dies; an untracked
+    same-checkout decoy with a matching cmdline (e.g. another session's live
+    worker) MUST survive — pattern kills here used to murder live stacks."""
     home = tmp_path / "home"; home.mkdir()
-    ops = tmp_path / "ops"; ops.mkdir()
+    ops = tmp_path / "ops"; pids = ops / "pids"; pids.mkdir(parents=True)
     own = subprocess.Popen(["python3", "-c", "import time; time.sleep(60)  # rouvr.worker orch"],
                            cwd=ROOT)
+    decoy = subprocess.Popen(["python3", "-c", "import time; time.sleep(60)  # rouvr.worker orch"],
+                             cwd=ROOT)
+    (pids / "worker-orch.pid").write_text(str(own.pid))
     env = {**os.environ, "HOME": str(home), "ROUVR_OPS_DIR": str(ops)}
     try:
-        for _ in range(3):  # another own matching pid may be adopted first
-            r = subprocess.run(["bash", "scripts/rouvr", "stop"], cwd=ROOT, env=env,
-                               capture_output=True, text=True, timeout=30)
-            assert r.returncode == 0, r.stderr
-            if own.poll() is not None:
-                break
-        own.wait(timeout=5)  # adopted via pattern, then killed despite no pidfile
+        r = subprocess.run(["bash", "scripts/rouvr", "stop"], cwd=ROOT, env=env,
+                           capture_output=True, text=True, timeout=30)
+        assert r.returncode == 0, r.stderr
+        own.wait(timeout=5)  # recorded: killed, pidfile cleaned
+        assert not (pids / "worker-orch.pid").exists()
+        assert decoy.poll() is None  # untracked: untouched
     finally:
         if own.poll() is None:
             own.kill()
+        if decoy.poll() is None:
+            decoy.kill()
 
 
 def test_script_operands_and_token_scoping():
@@ -45,7 +52,7 @@ def test_script_operands_and_token_scoping():
 def test_script_scopes_secrets_and_spec():
     rouvr = (ROOT / "scripts/rouvr").read_text()
     assert "export GH_TOKEN=" not in rouvr  # never stack-wide: scoped file + per-task grant
-    assert "export META_MODEL_API_KEY=" not in rouvr  # persona turns use 0600 creds files
+    assert "export META_API_KEY=" not in rouvr  # headless turns take it per-call, never stack-wide
     assert "ROUVR_GH_TOKEN_FILE=$OPS/gh-token" in rouvr
     assert "ROUVR_SPEC_REPO:-" in rouvr and "ROUVR_SPEC_BASE:-" in rouvr
 
@@ -81,28 +88,21 @@ def test_creds_dir_rewritten_on_every_write_operands(tmp_path):
     assert f'credential_file: "{new}/coder-1.json"' in (ops / "personas" / "tenants.yaml").read_text()
 
 
-def test_stop_kills_every_duplicate_worker(tmp_path):
+def test_stop_cleans_stale_pidfile_without_killing(tmp_path):
     home = tmp_path / "home"; home.mkdir()
-    ops = tmp_path / "ops"; ops.mkdir()
-    procs = [subprocess.Popen(["python3", "-c", "import time; time.sleep(60)  # rouvr.worker orch"],
-                              cwd=ROOT) for _ in range(2)]
+    ops = tmp_path / "ops"; pids = ops / "pids"; pids.mkdir(parents=True)
+    (pids / "worker-orch.pid").write_text("987654321")  # dead pid: stale record
     env = {**os.environ, "HOME": str(home), "ROUVR_OPS_DIR": str(ops)}
-    try:
-        r = subprocess.run(["bash", "scripts/rouvr", "stop"], cwd=ROOT, env=env,
-                           capture_output=True, text=True, timeout=30)
-        assert r.returncode == 0, r.stderr
-        for p in procs:
-            p.wait(timeout=5)
-    finally:
-        for p in procs:
-            if p.poll() is None:
-                p.kill()
+    r = subprocess.run(["bash", "scripts/rouvr", "stop"], cwd=ROOT, env=env,
+                       capture_output=True, text=True, timeout=30)
+    assert r.returncode == 0, r.stderr
+    assert not (pids / "worker-orch.pid").exists()
 
 
 def test_up_health_and_plugin_order_static():
     rouvr = (ROOT / "scripts/rouvr").read_text()
     assert "Temporal did not answer" in rouvr and "temporal_ok" in rouvr
-    assert "_kill_matching" in rouvr
+    assert "_kill_matching" not in rouvr  # stop is pidfile-scoped; no pattern kills
     assert "ledger did not answer /health" in rouvr and "MCP did not answer" in rouvr
     assert 'grep -qF "$ROOT/"' in rouvr
     run = (ROOT / "plugin/mcp/run.sh").read_text()

@@ -4,8 +4,8 @@ from workers.meta_worker.worker import MetaWorker
 
 
 def test_requires_key_from_env_only(monkeypatch):
-    monkeypatch.delenv("META_MODEL_API_KEY", raising=False)
-    with pytest.raises(RuntimeError, match="META_MODEL_API_KEY"):
+    monkeypatch.delenv("META_API_KEY", raising=False)
+    with pytest.raises(RuntimeError, match="META_API_KEY"):
         MetaWorker()
 
 

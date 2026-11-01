@@ -1,19 +1,137 @@
 {
+  "checked_at": "2026-11-01T15:19:55.099425+00:00",
   "figures": {
-    "done": 10,
-    "blocked": 5,
+    "done": 15,
+    "blocked": 8,
     "failed": 0
   },
+  "task_states": [
+    [
+      1,
+      "morning-report:r1",
+      "done"
+    ],
+    [
+      2,
+      "morning-report:r2",
+      "done"
+    ],
+    [
+      3,
+      "morning-report:r3",
+      "done"
+    ],
+    [
+      4,
+      "morning-report:cron-a",
+      "done"
+    ],
+    [
+      5,
+      "morning-report:cron-b",
+      "done"
+    ],
+    [
+      6,
+      "cronproof1793533438:a",
+      "done"
+    ],
+    [
+      7,
+      "cronproof1793533438:b",
+      "blocked"
+    ],
+    [
+      8,
+      "liveproof: implement parse_duration",
+      "blocked"
+    ],
+    [
+      9,
+      "morning-report:t1",
+      "blocked"
+    ],
+    [
+      10,
+      "morning-report:t1-534875",
+      "done"
+    ],
+    [
+      11,
+      "liveproof: implement parse_duration",
+      "blocked"
+    ],
+    [
+      12,
+      "liveproof: implement parse_duration",
+      "blocked"
+    ],
+    [
+      13,
+      "liveproof: implement parse_duration",
+      "done"
+    ],
+    [
+      14,
+      "liveproof: parse_duration without regex",
+      "done"
+    ],
+    [
+      15,
+      "liveproof: parse_duration documented",
+      "done"
+    ],
+    [
+      16,
+      "morning-report:t2-536755",
+      "done"
+    ],
+    [
+      17,
+      "morning-report:t2-537096",
+      "done"
+    ],
+    [
+      18,
+      "morning-report:t3-538542",
+      "done"
+    ],
+    [
+      19,
+      "liveproof: multi-format durations",
+      "blocked"
+    ],
+    [
+      20,
+      "liveproof: durations toolkit",
+      "blocked"
+    ],
+    [
+      21,
+      "liveproof: parse_duration strict",
+      "done"
+    ],
+    [
+      22,
+      "liveproof: parse_duration strictness",
+      "done"
+    ],
+    [
+      23,
+      "liveproof: parse_duration edge contract",
+      "blocked"
+    ]
+  ],
   "good": {
     "verdict": "pass",
-    "reason": "All figures match ledger values.",
+    "reason": "All ledger figures are correctly stated in the report.",
     "judge_principal": "ops-judge"
   },
   "bad": {
     "verdict": "fail",
-    "reason": "Report done value 11 does not match ledger done value 10.",
+    "reason": "done is 16 in report but 15 in ledger.",
     "judge_principal": "ops-judge"
   },
   "model": "muse-spark-1.3",
-  "seconds": 5.4
+  "seconds": 6.8
 }

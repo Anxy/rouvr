@@ -87,7 +87,7 @@ load_env() {
   write_operands
   set -a; . "$OPS/env.sh"; set +a
   export PYTHONPATH="$ROOT"
-  # No stack-wide GH_TOKEN or META_MODEL_API_KEY: persona turns already run
+  # No stack-wide GH_TOKEN or META_API_KEY: persona turns already run
   # with minimal env (creds come from 0600 files), and every git subprocess
   # takes an explicit token. Exporting host secrets here would hand them to
   # all workers and every child process.
@@ -220,21 +220,12 @@ try: print([(t['id'], t['state']) for t in json.load(sys.stdin)['items']])
 except Exception: print('n/a')" 2>/dev/null)"
 }
 
-_kill_matching() {  # $1 = pgrep pattern: kill every own-checkout match, not just the first
-  local pid
-  for pid in $(pgrep -f "$1" || true); do
-    if _ours "$pid"; then kill "$pid" 2>/dev/null || true; fi
-  done
-}
-
 stop() {
-  local name f pid q
-  _kill_matching 'ledger[.]app'
-  _kill_matching 'rouvr[.]mcp_server'
-  for q in orch build test verify; do _kill_matching "rouvr[.]worker $q"; done
-  _adopt ledger 'ledger[.]app' || true
-  _adopt mcp 'rouvr[.]mcp_server' || true
-  for q in orch build test verify; do _adopt "worker-$q" "rouvr[.]worker $q" || true; done
+  local name f pid
+  # Pidfile-scoped ONLY: never kill by process-name pattern. An untracked
+  # same-checkout process (another session's live stack, a test fake) is not
+  # ours to kill: pattern kills here used to murder live stacks during runs.
+  # (_adopt stays for up(); stop must not adopt-then-kill strays.)
   for name in worker-orch worker-build worker-test worker-verify mcp ledger; do
     f="$PID_DIR/$name.pid"
     [ -f "$f" ] || continue

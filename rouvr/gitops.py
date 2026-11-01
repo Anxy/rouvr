@@ -9,10 +9,11 @@ from rouvr.errors import Code, RouvrError
 
 
 async def _run(*argv: str, cwd: Path | None = None, env: dict[str, str] | None = None) -> str:
-    # env augments, never replaces: a bare {"GH_TOKEN": ...} must keep PATH
-    # so git/gh resolve (live-model finding: FileNotFoundError 'gh' broke PRs).
-    import os
-    merged = {**os.environ, **(env or {})}
+    # env augments the minimal clone_env, never the whole worker environ: a
+    # bare {"GH_TOKEN": ...} keeps PATH/HOME so git/gh resolve (live-model
+    # finding: FileNotFoundError 'gh' broke PRs) without leaking worker
+    # secrets (ledger/model/JWT tokens) into children (audit S1).
+    merged = {**clone_env(), **(env or {})}
     p = await asyncio.create_subprocess_exec(*argv, cwd=str(cwd) if cwd else None, env=merged,
                                              stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
     out, err = await p.communicate()
@@ -60,10 +61,20 @@ def clone_env() -> dict[str, str]:
     return env
 
 
+def grant_path(root: Path, task_id: str) -> Path:
+    """Per-task git grant file: BESIDE the workspace tree, never inside it.
+
+    An unsandboxed coder turn runs as the worker uid and could otherwise read
+    its own grant file out of a sibling workspace directory and self-grant
+    push/PR (audit S2). `root` is the workspace root; grants live next to it.
+    """
+    return root.parent / "grants" / f".git-grant-{task_id}.json"
+
+
 def revoke_git_grant(root: Path, task_id: str) -> bool:
     """Delete the per-task git grant file. Best-effort: False when absent."""
     try:
-        (root / f".git-grant-{task_id}.json").unlink()
+        grant_path(root, task_id).unlink()
         return True
     except OSError:
         return False

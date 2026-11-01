@@ -1,81 +1,81 @@
 {
-  "id": 18,
-  "title": "morning-report:t3-538542",
+  "id": 29,
+  "title": "morning-report:t3-546589",
   "intent": "Every morning, compile yesterday's lane report (tasks closed, parks and escalations), publish it to the stakeholder inbox, make sure the ledger is healthy, and escalate if anything fails.",
   "state": "done",
   "owner": "ops-worker",
   "tenant": "rehearse",
   "project": "demo",
-  "created_at": "2026-11-01T13:09:08.197747+00:00",
-  "updated_at": "2026-11-01T13:09:19.970584+00:00",
+  "created_at": "2026-11-01T15:23:52.853243+00:00",
+  "updated_at": "2026-11-01T15:24:03.786870+00:00",
   "created_by": "supervisor",
   "contracts": [
     {
-      "id": 16,
-      "task_id": 18,
-      "body": "{\"escalation\":\"Escalate if anything fails\",\"expires_in_hours\":24,\"provider\":\"meta\",\"side_effects\":[\"Publishes to stakeholder inbox\"],\"stakeholders\":[\"stakeholder inbox\"],\"steps\":[\"Compile yesterday's lane report with tasks closed, parks and escalations\",\"Publish report to stakeholder inbox\",\"Verify ledger health\",\"Escalate if anything fails\"],\"success_criteria\":[\"Yesterday's lane report compiled\",\"Report published to stakeholder inbox\",\"Ledger verified healthy\"]}",
-      "sha256": "d188fcc1585ad0e28bf34340d5093a424234b124d91b87de2cd5cddc934da185",
-      "created_at": "2026-11-01T13:09:13.898963+00:00"
+      "id": 27,
+      "task_id": 29,
+      "body": "{\"escalation\":\"Escalate if compilation, publishing, or ledger health check fails\",\"expires_in_hours\":24,\"provider\":\"meta\",\"side_effects\":[\"Publishes report to stakeholder inbox\",\"Sends escalation on failure\"],\"stakeholders\":[\"stakeholders\"],\"steps\":[\"Fetch yesterday's closed tasks\",\"Fetch yesterday's parks and escalations\",\"Compile yesterday's lane report\",\"Publish report to stakeholder inbox\",\"Verify ledger health\",\"Escalate if any step fails\"],\"success_criteria\":[\"Report includes tasks closed, parks and escalations for yesterday\",\"Report is published to stakeholder inbox\",\"Ledger is verified healthy\"]}",
+      "sha256": "a9c64c5d4e78072fa4e0597f3b66a4a4a4969cf2e306089925ca1f6bb6583cb9",
+      "created_at": "2026-11-01T15:23:57.277986+00:00"
     }
   ],
   "evidence": [
     {
-      "id": 138,
-      "task_id": 18,
+      "id": 271,
+      "task_id": 29,
       "kind": "delivery",
-      "body": "{\"message_id\":\"e97d2f02553e266f\",\"ok\":true,\"sink\":\"primary\"}",
-      "sha256": "c556a597f674ebb9d43ec4486c3a47cc62fdf1b6b686fe85c4f12df6e54e5394",
-      "created_at": "2026-11-01T13:09:13.986226+00:00"
+      "body": "{\"message_id\":\"7e2ef8744390e8c5\",\"ok\":true,\"sink\":\"primary\"}",
+      "sha256": "e07037ab48a62a7e162ddeb3b0af17986ff99d00f4fee41d8a5fc7804307034d",
+      "created_at": "2026-11-01T15:23:57.366270+00:00"
     },
     {
-      "id": 139,
-      "task_id": 18,
+      "id": 272,
+      "task_id": 29,
       "kind": "reviewer",
-      "body": "{\"executor\":\"ops-worker\",\"figures_match\":false,\"health\":true,\"judge\":{\"judge_principal\":\"ops-judge\",\"reason\":\"Report is empty and missing all ledger figures.\",\"verdict\":\"fail\"},\"judge_principal\":\"ops-judge\",\"model\":\"meta\",\"readback\":true,\"sink\":\"primary\",\"verdict\":\"fail\"}",
-      "sha256": "d648baefb3fb135b6f1cdc244e819b719dc38e71ac76c0638892e8b22965a5f7",
-      "created_at": "2026-11-01T13:09:16.947662+00:00"
+      "body": "{\"executor\":\"ops-worker\",\"figures_match\":false,\"health\":true,\"judge\":{\"judge_principal\":\"ops-judge\",\"reason\":\"Report is empty and does not state any required figures.\",\"verdict\":\"fail\"},\"judge_principal\":\"ops-judge\",\"model\":\"meta\",\"readback\":true,\"sink\":\"primary\",\"verdict\":\"fail\"}",
+      "sha256": "8e0643b19e13b7e9c382039a597c9b8c3e2a01938aa66ebbdf63912442da4077",
+      "created_at": "2026-11-01T15:24:00.508646+00:00"
     },
     {
-      "id": 140,
-      "task_id": 18,
+      "id": 273,
+      "task_id": 29,
       "kind": "delivery",
-      "body": "{\"message_id\":\"4b378c5c6fa3b3b9\",\"ok\":true,\"sink\":\"fallback\"}",
-      "sha256": "0ce0b49e0055e2399ac27fdf0d0978951f08b4077db7f6cc9487017c7f64eb8a",
-      "created_at": "2026-11-01T13:09:16.989565+00:00"
+      "body": "{\"message_id\":\"d122e5fd3812b36d\",\"ok\":true,\"sink\":\"fallback\"}",
+      "sha256": "6d38a53fd2f6f25055fe81126c84d412dfcee034156fdaf78cf2a904ed692e9e",
+      "created_at": "2026-11-01T15:24:00.592283+00:00"
     },
     {
-      "id": 141,
-      "task_id": 18,
+      "id": 274,
+      "task_id": 29,
       "kind": "reviewer",
-      "body": "{\"executor\":\"ops-worker\",\"figures_match\":true,\"health\":true,\"judge\":{\"judge_principal\":\"ops-judge\",\"reason\":\"All figures match ledger.\",\"verdict\":\"pass\"},\"judge_principal\":\"ops-judge\",\"model\":\"meta\",\"readback\":true,\"sink\":\"fallback\",\"verdict\":\"pass\"}",
-      "sha256": "1f7f7a6a8ac3be8d72c18393efcb883817ceb432bf371a42c3499477e46f2613",
-      "created_at": "2026-11-01T13:09:19.934397+00:00"
+      "body": "{\"executor\":\"ops-worker\",\"figures_match\":true,\"health\":true,\"judge\":{\"judge_principal\":\"ops-judge\",\"reason\":\"All figures match ledger values.\",\"verdict\":\"pass\"},\"judge_principal\":\"ops-judge\",\"model\":\"meta\",\"readback\":true,\"sink\":\"fallback\",\"verdict\":\"pass\"}",
+      "sha256": "a6347ee31216590a9e98ed8f6014d71d8818f198a31ef85dad6c60c539973dba",
+      "created_at": "2026-11-01T15:24:03.733415+00:00"
     },
     {
-      "id": 142,
-      "task_id": 18,
+      "id": 275,
+      "task_id": 29,
       "kind": "ops_receipt",
-      "body": "{\"digest\":\"Done. No action needed.\",\"figures\":{\"blocked\":5,\"done\":12,\"failed\":0},\"message_id\":\"4b378c5c6fa3b3b9\",\"sink\":\"fallback\"}",
-      "sha256": "341ad12e47ccf1848dbcceb40c5e0f5462c5346c8d1eab91f82dd7bdbb265c11",
-      "created_at": "2026-11-01T13:09:19.973645+00:00"
+      "body": "{\"digest\":\"Done. No action needed.\",\"figures\":{\"blocked\":8,\"done\":20,\"failed\":0},\"message_id\":\"d122e5fd3812b36d\",\"sink\":\"fallback\"}",
+      "sha256": "91638084fcbf58716c071dc0d82d2fdfca7d1998d2545959c1ec9c0c9e523e63",
+      "created_at": "2026-11-01T15:24:03.790595+00:00"
     }
   ],
   "receipts": [
     {
-      "id": 99,
-      "task_id": 18,
-      "idempotency_key": "morning-report:t3-538542:claim",
+      "id": 192,
+      "task_id": 29,
+      "idempotency_key": "morning-report:t3-546589:claim",
       "action": "transition:claimed",
       "body": "{\"from\":\"open\",\"note\":null,\"to\":\"claimed\"}",
-      "created_at": "2026-11-01T13:09:13.946679+00:00"
+      "created_at": "2026-11-01T15:23:57.324321+00:00"
     },
     {
-      "id": 100,
-      "task_id": 18,
-      "idempotency_key": "morning-report:t3-538542:done",
+      "id": 193,
+      "task_id": 29,
+      "idempotency_key": "morning-report:t3-546589:done",
       "action": "transition:done",
       "body": "{\"from\":\"claimed\",\"note\":null,\"to\":\"done\"}",
-      "created_at": "2026-11-01T13:09:19.970680+00:00"
+      "created_at": "2026-11-01T15:24:03.787007+00:00"
     }
   ]
 }

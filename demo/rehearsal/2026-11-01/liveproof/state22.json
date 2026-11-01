@@ -1,0 +1,11 @@
+{
+  "task_id": 22,
+  "hidden_files": [
+    "test_parse_duration.py"
+  ],
+  "hidden_created_by": "test_author",
+  "workflow_id": "rouvr-task-supervisor-22-82d49407e52641ef",
+  "watch_t0": 1793545555.9858425,
+  "create_s": 45.2,
+  "judge": "green"
+}

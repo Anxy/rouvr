@@ -14,7 +14,7 @@ from temporalio.common import WorkflowIDReusePolicy
 from temporalio.exceptions import WorkflowAlreadyStartedError
 
 from rouvr.config import Settings
-from rouvr.contracts import TaskWorkflowInput
+from rouvr.contracts import OpsInput, TaskWorkflowInput
 from rouvr.ids import workflow_id
 from rouvr.workflows import Q_ORCH, ScheduledRunWorkflow, TaskWorkflow
 from rouvr.workhub.client import WorkHubClient

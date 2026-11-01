@@ -192,6 +192,9 @@ ROUTER_POLICY: dict[str, tuple[RuntimeStatus, Disposition, str, str]] = {
         "none",
         "Model gateway resolve/registry; not objective completion authority.",
     ),
+    "codeintel_v2_router": ("LIVE", "KEEP", "none", "Code intelligence v2 surface."),
+    "contract_amendment_router": ("LIVE", "KEEP", "none", "Contract amendment surface."),
+    "session_factory_router": ("LIVE", "KEEP", "none", "Session factory surface."),
     "integration_contract_router": (
         "PARTIALLY_LIVE",
         "KEEP",

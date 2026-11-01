@@ -69,7 +69,7 @@ def test_parse_mounted_routers_matches_main_py() -> None:
     assert "devexecutor_runtime_router" not in stems
     assert "aix_runtime_pool_router" not in stems
     assert "langgraph_orchestration_router" not in stems
-    assert len(mounted) == 18
+    assert len(mounted) == 21
 
 
 def test_generate_manifest_classifies_every_mounted_router() -> None:
@@ -101,17 +101,14 @@ def test_generate_manifest_includes_objective_cycle_as_expand() -> None:
     assert lg.production_caller == "none"
     assert lg.runtime_status == "IMPLEMENTED_NOT_WIRED"
 
-    dead_pw = next(c for c in manifest.components if c.component == "package:aix_core.patchworker")
-    assert dead_pw.disposition == "ARCHIVE"
-    assert dead_pw.runtime_status == "DEAD"
+    # patchworker package was deleted outright (stronger than ARCHIVE).
+    assert not any(c.component == "package:aix_core.patchworker" for c in manifest.components)
 
 
 def test_unmounted_devexecutor_is_not_live() -> None:
     manifest = generate_reachability_manifest(backend_root=BACKEND_ROOT)
-    de = next(c for c in manifest.components if c.component == "router:devexecutor_runtime_router")
-    assert de.production_caller == "none"
-    assert de.runtime_status == "IMPLEMENTED_NOT_WIRED"
-    assert de.disposition == "ARCHIVE"
+    # devexecutor_runtime_router module was deleted from routers/ entirely.
+    assert not any(c.component == "router:devexecutor_runtime_router" for c in manifest.components)
 
 
 def test_validate_fails_on_unclassified_mounted_router() -> None:
@@ -168,7 +165,7 @@ def test_live_main_mounted_routes_covered_by_router_components() -> None:
     covered by existing endpoint_classification tests when hyeve_core is present.
     """
     mounted = parse_mounted_routers(MAIN_PY)
-    assert len(mounted) == 18
+    assert len(mounted) == 21
 
     manifest = generate_reachability_manifest(backend_root=BACKEND_ROOT)
     assert manifest_is_green(manifest)
@@ -199,8 +196,9 @@ def test_live_main_mounted_routes_covered_by_router_components() -> None:
             "router:langgraph_orchestration_router",
         }
     }
-    assert unmounted["router:devexecutor_runtime_router"].production_caller == "none"
-    assert unmounted["router:aix_runtime_pool_router"].production_caller == "none"
+    # devexecutor/runtime_pool router modules were deleted, not just unmounted.
+    assert "router:devexecutor_runtime_router" not in unmounted
+    assert "router:aix_runtime_pool_router" not in unmounted
     assert unmounted["router:langgraph_orchestration_router"].production_caller == "none"
 
 

@@ -49,15 +49,14 @@ def test_reachability_manifest_still_green_after_retirement() -> None:
 
 def test_dead_stack_packages_remain_archived_disposition() -> None:
     manifest = generate_reachability_manifest(backend_root=BACKEND_ROOT)
+    # All four dead-stack packages were deleted outright (stronger than ARCHIVE).
     for name in (
         "package:aix_core.patchworker",
         "package:aix_core.runtime_langgraph_mvp",
         "package:aix_core.planner_coder_lane",
         "package:aix_core.e2e_fake_runtime",
     ):
-        item = next(c for c in manifest.components if c.component == name)
-        assert item.disposition == "ARCHIVE"
-        assert item.runtime_status in {"DEAD", "SCAFFOLD", "TEST_ONLY"}
+        assert not any(c.component == name for c in manifest.components), name
 
 
 def test_canonical_identity_and_completion_modules_importable() -> None:

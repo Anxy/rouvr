@@ -72,6 +72,12 @@ def classify_operation(*, method: str, path: str) -> EndpointInclusionClass:
         return EndpointInclusionClass.INTERNAL
     if any(path.startswith(prefix) for prefix in _ADMIN_AUDIT_PREFIXES):
         return EndpointInclusionClass.ADMIN
+    if path.startswith("/api/v1/codeintel/"):
+        return EndpointInclusionClass.OPERATOR
+    if path.startswith("/contracts/amendments"):
+        return EndpointInclusionClass.PRODUCT
+    if path.startswith("/v1/aix"):
+        return EndpointInclusionClass.INTERNAL
     if path == "/api/aix/model-gateway/resolve":
         return EndpointInclusionClass.INTERNAL
     if path in _MODEL_GATEWAY_OPERATOR_PATHS:

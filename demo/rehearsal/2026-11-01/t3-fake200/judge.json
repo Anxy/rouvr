@@ -1,18 +1,18 @@
 [
   {
-    "id": 272,
-    "task_id": 29,
+    "id": 359,
+    "task_id": 37,
     "kind": "reviewer",
-    "body": "{\"executor\":\"ops-worker\",\"figures_match\":false,\"health\":true,\"judge\":{\"judge_principal\":\"ops-judge\",\"reason\":\"Report is empty and does not state any required figures.\",\"verdict\":\"fail\"},\"judge_principal\":\"ops-judge\",\"model\":\"meta\",\"readback\":true,\"sink\":\"primary\",\"verdict\":\"fail\"}",
-    "sha256": "8e0643b19e13b7e9c382039a597c9b8c3e2a01938aa66ebbdf63912442da4077",
-    "created_at": "2026-11-01T15:24:00.508646+00:00"
+    "body": "{\"executor\":\"ops-worker\",\"figures_match\":false,\"health\":true,\"judge\":{\"judge_principal\":\"ops-judge\",\"reason\":\"Report is empty and omits all required figures.\",\"verdict\":\"fail\"},\"judge_principal\":\"ops-judge\",\"model\":\"meta\",\"readback\":true,\"sink\":\"primary\",\"verdict\":\"fail\"}",
+    "sha256": "97e084c45a16cf91b9aa86167c9c1fb2521d3b499964bc73a007290260406765",
+    "created_at": "2026-11-01T17:03:52.280546+00:00"
   },
   {
-    "id": 274,
-    "task_id": 29,
+    "id": 361,
+    "task_id": 37,
     "kind": "reviewer",
     "body": "{\"executor\":\"ops-worker\",\"figures_match\":true,\"health\":true,\"judge\":{\"judge_principal\":\"ops-judge\",\"reason\":\"All figures match ledger values.\",\"verdict\":\"pass\"},\"judge_principal\":\"ops-judge\",\"model\":\"meta\",\"readback\":true,\"sink\":\"fallback\",\"verdict\":\"pass\"}",
     "sha256": "a6347ee31216590a9e98ed8f6014d71d8818f198a31ef85dad6c60c539973dba",
-    "created_at": "2026-11-01T15:24:03.733415+00:00"
+    "created_at": "2026-11-01T17:03:56.080258+00:00"
   }
 ]

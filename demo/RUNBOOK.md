@@ -116,13 +116,14 @@ pids as its own.
 All on the supervisor stack with `model: meta` (muse-spark-1.3). Artifacts under
 `demo/rehearsal/2026-11-01/`.
 
-- **t1 clean** — 7.4s wall. Done, primary sink, one `ops_receipt`, live judge
+- **t1 clean** — 5s wall. Done, primary sink, one `ops_receipt`, live judge
   pass ("All figures match ledger values."). (`t1-clean/`)
-- **t2 kill** — 486s wall (includes ~3 min with all workers dead). Orch workers
-  SIGKILLed mid-run at task state `open`; Temporal resumed on restart; done,
-  primary sink, exactly one outbox file for the message id, live judge pass.
-  (`t2-kill/`)
-- **t3 fake-200** — 13.9s wall. `ROUVR_INJECT=silent_delivery`: primary
+- **t2 kill** — 29s wall (was 486s: a 7m40s schedule→start gap plus the 60s
+  activity timeout with no heartbeats; fixed with a 20s `heartbeat_timeout`
+  on ops activities in `rouvr/workflows.py`). Orch workers SIGKILLed mid-run
+  at task state `open`; Temporal resumed on restart; done, primary sink,
+  exactly one outbox file for the message id, live judge pass. (`t2-kill/`)
+- **t3 fake-200** — 10s wall. `ROUVR_INJECT=silent_delivery`: primary
   reviewer evidence records deterministic fail + judge fail ("Report is empty
   and missing all ledger figures."); delivery falls back; fallback reviewer
   evidence records pass/pass ("All figures match ledger."). (`t3-fake200/`)
@@ -134,10 +135,24 @@ All on the supervisor stack with `model: meta` (muse-spark-1.3). Artifacts under
   corrected 2026-11-01). Sealed hidden suite, PR, hidden-tests pass, live
   reviewer approve with per-criterion notes, signed receipt bound to head
   SHA. (`liveproof/`)
+- **later rounds** — 21/22/30/31 first-pass approve (141–221s); 34 converged
+  after 2 test-gated reworks (repo collection collision → renamed tests →
+  8/8 approve, PR #24); 23/32/33 blocked (cheat-flag criterion conflict,
+  leak-check name false positive, uncollectable hidden_ filename —
+  all three fixed with regression tests, see `liveproof/task*-summary.json`).
 
 An earlier t1 attempt is kept as failure evidence (`t1-blocked-contract/`):
 the live model returned a verbose non-schema contract and the old merge broke
 validation (E_CONTRACT). The merge now keeps safe defaults on mistyped keys.
+
+## Test scope (CI)
+
+Demo CI ([ci.yml](../.github/workflows/ci.yml)) runs only the public cut:
+`make test-public` (437 passed, 5 skipped on 2026-11-01) plus the hygiene job
+(`scripts/hygiene.sh` + gitleaks). The full tree (`make test`) additionally
+covers `core/backend/tests`, whose failures in this cut are pre-existing
+missing-monorepo-asset environment failures — reproduced identically on the
+clean base, not demo regressions (see `docs/test-quarantine.md`).
 
 ## Slow-model fallback
 

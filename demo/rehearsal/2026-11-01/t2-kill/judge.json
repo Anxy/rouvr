@@ -1,10 +1,10 @@
 [
   {
-    "id": 269,
-    "task_id": 28,
+    "id": 356,
+    "task_id": 36,
     "kind": "reviewer",
     "body": "{\"executor\":\"ops-worker\",\"figures_match\":true,\"health\":true,\"judge\":{\"judge_principal\":\"ops-judge\",\"reason\":\"All figures match ledger values.\",\"verdict\":\"pass\"},\"judge_principal\":\"ops-judge\",\"model\":\"meta\",\"readback\":true,\"sink\":\"primary\",\"verdict\":\"pass\"}",
     "sha256": "e69f03cf38ca2bc645b22f12615a50cea562c6a53cab91abea5afb2a926100d7",
-    "created_at": "2026-11-01T15:23:47.580482+00:00"
+    "created_at": "2026-11-01T17:03:42.563623+00:00"
   }
 ]

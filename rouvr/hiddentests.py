@@ -14,9 +14,25 @@ import json
 from dataclasses import dataclass
 from pathlib import Path
 
+from rouvr.cheatscan import literals_in
 from rouvr.errors import Code, RouvrError
 
 MANIFEST = "MANIFEST.json"
+HIDDEN_FILE_PREFIX = "test_rouvr_hidden_"
+
+
+def is_hidden_suite_name(name: str) -> bool:
+    """Hidden suite filenames live in a reserved namespace: test_rouvr_hidden_*.py.
+
+    The prefix satisfies both constraints at once: it matches pytest's default
+    collection (test_*.py) so the sealed suite is collected in the clean-room
+    clone, and no coder names its own tests that way, so a coder file can never
+    collide by basename (task-34 lesson: identical basenames abort collection
+    with an import-file-mismatch error and fail the whole repo run)."""
+
+    return (isinstance(name, str) and "/" not in name and name not in {".", ".."}
+            and name.startswith(HIDDEN_FILE_PREFIX) and name.endswith(".py")
+            and len(name) > len(HIDDEN_FILE_PREFIX) + len(".py"))
 _TRIVIAL = frozenset({"", "test", "tests", "true", "false", "none", "ok", "200", "0", "1"})
 
 
@@ -91,8 +107,13 @@ def assert_coder_clean(coder_ws: Path, task_dir: Path, manifest: HiddenManifest)
     for path in sorted(coder_ws.rglob("*")):
         if not path.is_file() or ".git/" in str(path):
             continue
+        # Same filename alone is not a leak (task-32 lesson: the coder's own
+        # tests/test_durations.py collided by name with the hidden suite but
+        # held different bytes). Only identical bytes prove a copy.
         if path.name in hidden_names:
-            raise RouvrError(Code.EVIDENCE, f"coder workspace leaks hidden tests: {path.name}")
+            if path.read_bytes() in hidden_bytes:
+                raise RouvrError(Code.EVIDENCE, f"coder workspace leaks hidden tests: {path.name}")
+            continue
         if path.stat().st_size in hidden_sizes and path.read_bytes() in hidden_bytes:
             raise RouvrError(Code.EVIDENCE, f"coder workspace leaks hidden tests: {path.name}")
 
@@ -108,6 +129,21 @@ def hidden_literals(hidden_dir: Path) -> frozenset[str]:
         for node in ast.walk(tree):
             if isinstance(node, ast.Constant) and isinstance(node.value, str):
                 token = node.value.strip().lower()
+                if len(token) >= 6 and token not in _TRIVIAL and " " not in token:
+                    out.add(token)
+    return frozenset(out)
+
+
+def criteria_literals(*texts: str) -> frozenset[str]:
+    """Quoted tokens from task criteria/spec text that compliant prod code may
+    contain (e.g. a mandated `__all__` entry). Same token shape as
+    hidden_literals so the two sets compare directly; bracket/quote edge
+    punctuation from prose like `['parse_duration']` is stripped."""
+    out: set[str] = set()
+    for text in texts:
+        for line in (text or "").splitlines():
+            for lit in literals_in(line):
+                token = lit.strip().strip("[](){}\"'")
                 if len(token) >= 6 and token not in _TRIVIAL and " " not in token:
                     out.add(token)
     return frozenset(out)

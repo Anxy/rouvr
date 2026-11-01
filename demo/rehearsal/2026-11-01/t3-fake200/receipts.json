@@ -1,10 +1,10 @@
 [
   {
-    "id": 275,
-    "task_id": 29,
+    "id": 362,
+    "task_id": 37,
     "kind": "ops_receipt",
-    "body": "{\"digest\":\"Done. No action needed.\",\"figures\":{\"blocked\":8,\"done\":20,\"failed\":0},\"message_id\":\"d122e5fd3812b36d\",\"sink\":\"fallback\"}",
-    "sha256": "91638084fcbf58716c071dc0d82d2fdfca7d1998d2545959c1ec9c0c9e523e63",
-    "created_at": "2026-11-01T15:24:03.790595+00:00"
+    "body": "{\"digest\":\"Done. No action needed.\",\"figures\":{\"blocked\":10,\"done\":26,\"failed\":0},\"message_id\":\"f7187be8515a2314\",\"sink\":\"fallback\"}",
+    "sha256": "80f56575dbe3038dfb7e444ec920d29dfb4a2cf3a977b87e6097b4c8bcedc3bb",
+    "created_at": "2026-11-01T17:03:56.136893+00:00"
   }
 ]

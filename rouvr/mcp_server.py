@@ -59,9 +59,14 @@ def _author_hidden_suite(criteria: list[str]) -> dict[str, str]:
     raw = provider.chat([
         {"role": "system", "content": (
             "Write pytest checks for the acceptance criteria. Reply with ONLY a "
-            "JSON object mapping flat filenames (*.py, no directories) to file "
+            "JSON object mapping flat filenames (test_rouvr_hidden_*.py, no "
+            "directories) to file "
             "contents. Every test name must start with test_. No placeholders: "
-            "every test must assert real behavior.")},
+            "every test must assert real behavior. Assert behavior, never exact "
+            "production string literals: do not require the implementation to "
+            "contain any particular string (such as module __all__ contents or "
+            "identifier spellings as strings) — compliant code must be writable "
+            "without tripping literal-cheat detection.")},
         {"role": "user", "content": "\n".join(f"- {c}" for c in criteria)}])
     try:
         files = json.loads(raw)
@@ -70,9 +75,11 @@ def _author_hidden_suite(criteria: list[str]) -> dict[str, str]:
     if not isinstance(files, dict) or not files or \
             any(not isinstance(k, str) or not isinstance(v, str) for k, v in files.items()):
         raise RuntimeError("test_author returned an unusable suite; create refused")
+    from rouvr.hiddentests import HIDDEN_FILE_PREFIX, is_hidden_suite_name
     for name in files:
-        if "/" in name or name in {".", ".."} or not name.endswith(".py"):
-            raise RuntimeError(f"test_author returned a bad test name: {name!r}; create refused")
+        if not is_hidden_suite_name(name):
+            raise RuntimeError(f"test_author must name hidden suites "
+                               f"{HIDDEN_FILE_PREFIX}*.py, got: {name!r}; create refused")
     return files
 
 

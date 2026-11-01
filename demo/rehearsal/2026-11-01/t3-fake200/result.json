@@ -1,10 +1,10 @@
 {
-  "run_key": "morning-report:t3-546589",
-  "workflow_id": "rerun-morning-report:t3-546589-1793546630",
-  "elapsed_s": 13.0,
+  "run_key": "morning-report:t3-552588",
+  "workflow_id": "rerun-morning-report:t3-552588-1793552625",
+  "elapsed_s": 10.4,
   "state": "done",
   "digest": "Done. No action needed.",
   "sink": "fallback",
-  "message_id": "d122e5fd3812b36d",
-  "task_id": "29"
+  "message_id": "f7187be8515a2314",
+  "task_id": "37"
 }

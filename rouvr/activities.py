@@ -25,8 +25,8 @@ from rouvr.gate import (SUBMIT_ATTEMPT_TYPE, GateEvidence, count_prior_submits, 
                         read_submission_file)
 from rouvr.gitops import (branch_for, clone_at, diff_range, ensure_pr, pr_facts, prepare_workspace,
                           workspace_path)
-from rouvr.hiddentests import (assert_coder_clean, fetch_hidden_suite, hidden_literals,
-                               parse_criterion_outcomes)
+from rouvr.hiddentests import (assert_coder_clean, criteria_literals, fetch_hidden_suite,
+                               hidden_literals, parse_criterion_outcomes)
 from rouvr.host import Host
 from rouvr.ids import handoff_fence
 from rouvr.lease import (LeaseKeeper, claim_assignment_and_lease, open_or_reuse_attempt, resume_or_claim,
@@ -270,7 +270,13 @@ class Activities:
         # Parse from the full output: tail-only parsing silently drops sealed
         # groups whose result lines fall outside the display window.
         outcomes = parse_criterion_outcomes(hidden_run.output_full or hidden_run.output_tail)
-        flags = scan_diff(diff, hidden_literals=hidden_literals(hidden_dir))
+        # Literals the task spec itself mandates (task-23 lesson) are allowed
+        # in prod code; everything else hidden-test-only still flags.
+        spec_texts = [(c.get("text", "") if isinstance(c, dict) else str(c))
+                      for c in task.get("acceptance_criteria") or []
+                      ] + [task.get("description") or ""]
+        flags = scan_diff(diff, hidden_literals=hidden_literals(hidden_dir),
+                          allowed_literals=criteria_literals(*spec_texts))
         criteria_ok = bool(outcomes) and all(outcomes.values())
         passed = repo_run.passed and hidden_run.passed and criteria_ok and not flags
         summary = (f"repo={'pass' if repo_run.passed else 'fail'} "

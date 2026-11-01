@@ -248,6 +248,14 @@ def test_mcp_author_rejects_malformed_model_output(monkeypatch):
     with pytest.raises(RuntimeError, match="[Ff]lat|name"):
         ms._author_hidden_suite(["c1"])
 
+    class Plain:
+        name = "meta"
+        def chat(self, messages):
+            return '{"test_durations.py": "def test_x():\\n    assert 1\\n"}'
+    monkeypatch.setattr("backend.rouvr_models.providers.get_provider", lambda *a, **k: Plain())
+    with pytest.raises(RuntimeError, match="test_rouvr_hidden_"):
+        ms._author_hidden_suite(["c1"])
+
 
 def test_waiting_lists_escalation_reason_from_json_string_body(monkeypatch, ledger_url, tmp_path):
     """F3: ledger string bodies parse; malformed bodies fall back, never raise."""

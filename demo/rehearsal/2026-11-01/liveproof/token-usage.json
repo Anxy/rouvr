@@ -253,6 +253,138 @@
     ]
   },
   {
+    "workspace": "rouvr__30__a1",
+    "session": "703781b9",
+    "model_calls": 75,
+    "input_max_ctx": 40564,
+    "output_sum": 20991,
+    "reasoning_sum": 12312,
+    "models": [
+      "muse-spark-1.3-contributor"
+    ]
+  },
+  {
+    "workspace": "rouvr__30__a1__verify",
+    "session": "f63cd634",
+    "model_calls": 16,
+    "input_max_ctx": 29011,
+    "output_sum": 11649,
+    "reasoning_sum": 9214,
+    "models": [
+      "muse-spark-1.3-contributor"
+    ]
+  },
+  {
+    "workspace": "rouvr__31__a1",
+    "session": "fff84ec5",
+    "model_calls": 68,
+    "input_max_ctx": 38829,
+    "output_sum": 26573,
+    "reasoning_sum": 16893,
+    "models": [
+      "muse-spark-1.3-contributor"
+    ]
+  },
+  {
+    "workspace": "rouvr__31__a1__verify",
+    "session": "7e6e1032",
+    "model_calls": 19,
+    "input_max_ctx": 30791,
+    "output_sum": 15840,
+    "reasoning_sum": 13098,
+    "models": [
+      "muse-spark-1.3-contributor"
+    ]
+  },
+  {
+    "workspace": "rouvr__32__a1",
+    "session": "2979ed78",
+    "model_calls": 79,
+    "input_max_ctx": 43313,
+    "output_sum": 31138,
+    "reasoning_sum": 20695,
+    "models": [
+      "muse-spark-1.3-contributor"
+    ]
+  },
+  {
+    "workspace": "rouvr__33__a1",
+    "session": "7c2412d9",
+    "model_calls": 65,
+    "input_max_ctx": 39152,
+    "output_sum": 32137,
+    "reasoning_sum": 22389,
+    "models": [
+      "muse-spark-1.3-contributor"
+    ]
+  },
+  {
+    "workspace": "rouvr__33__a2",
+    "session": "7c2412d9",
+    "model_calls": 82,
+    "input_max_ctx": 44797,
+    "output_sum": 37587,
+    "reasoning_sum": 25448,
+    "models": [
+      "muse-spark-1.3-contributor"
+    ]
+  },
+  {
+    "workspace": "rouvr__33__a3",
+    "session": "7c2412d9",
+    "model_calls": 49,
+    "input_max_ctx": 34460,
+    "output_sum": 21590,
+    "reasoning_sum": 12963,
+    "models": [
+      "muse-spark-1.3-contributor"
+    ]
+  },
+  {
+    "workspace": "rouvr__34__a1",
+    "session": "ee55f4e6",
+    "model_calls": 71,
+    "input_max_ctx": 36338,
+    "output_sum": 22202,
+    "reasoning_sum": 13015,
+    "models": [
+      "muse-spark-1.3-contributor"
+    ]
+  },
+  {
+    "workspace": "rouvr__34__a2",
+    "session": "ee55f4e6",
+    "model_calls": 100,
+    "input_max_ctx": 68782,
+    "output_sum": 39752,
+    "reasoning_sum": 25099,
+    "models": [
+      "muse-spark-1.3-contributor"
+    ]
+  },
+  {
+    "workspace": "rouvr__34__a3",
+    "session": "ee55f4e6",
+    "model_calls": 37,
+    "input_max_ctx": 32734,
+    "output_sum": 23027,
+    "reasoning_sum": 15876,
+    "models": [
+      "muse-spark-1.3-contributor"
+    ]
+  },
+  {
+    "workspace": "rouvr__34__a3__verify",
+    "session": "b2fe309f",
+    "model_calls": 10,
+    "input_max_ctx": 27425,
+    "output_sum": 8036,
+    "reasoning_sum": 6430,
+    "models": [
+      "muse-spark-1.3-contributor"
+    ]
+  },
+  {
     "workspace": "rouvr__8__a1",
     "session": "565461f3",
     "model_calls": 9,

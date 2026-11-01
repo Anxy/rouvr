@@ -3,7 +3,8 @@ import pytest
 
 from rouvr.cheatscan import scan_diff
 from rouvr.errors import Code, RouvrError
-from rouvr.hiddentests import (assert_coder_clean, fetch_hidden_suite, hidden_literals,
+from rouvr.hiddentests import (assert_coder_clean, criteria_literals, fetch_hidden_suite,
+                               hidden_literals, is_hidden_suite_name,
                                parse_criterion_outcomes, write_hidden_suite)
 
 HIDDEN = {"test_hidden.py": "def test_c1_returns_200():\n    assert check() == 'zx-AlPhA-42'\n"}
@@ -74,10 +75,8 @@ def test_coder_clean(tmp_path):
     ws.mkdir()
     (ws / "app.py").write_text("print('hi')\n")
     assert_coder_clean(ws, d, m)
-    (ws / "test_hidden.py").write_text("# lookalike name, different bytes\n")
-    with pytest.raises(RouvrError) as e:
-        assert_coder_clean(ws, d, m)
-    assert e.value.code is Code.EVIDENCE
+    (ws / "test_hidden.py").write_text("# lookalike name, different bytes: clean, not a leak\n")
+    assert_coder_clean(ws, d, m)
     (ws / "test_hidden.py").unlink()
     (ws / "notes.txt").write_bytes((d / "test_hidden.py").read_bytes())  # same bytes, other name
     with pytest.raises(RouvrError):
@@ -304,3 +303,92 @@ def test_scan_diff_flags_dunder_test_false():
 def test_scan_diff_flags_config_testpaths(cfg, line):
     diff = f"+++ b/{cfg}\n@@ -1 +1 @@\n+{line}\n"
     assert [f.rule for f in scan_diff(diff, hidden_literals=frozenset())] == ["SKIP"]
+
+
+# Task-23 regression: the criteria mandated `__all__ == ['parse_duration']`,
+# so compliant prod code contains that literal and must not be flagged when
+# the allowlist carries it.
+TASK23_DIFF = """\
++++ b/durations.py
+@@ -1,2 +1,5 @@
++\"\"\"Duration parsing utilities.\"\"\"
++
++__all__ = ["parse_duration"]
++
+ def parse_duration(s: str) -> int:
+"""
+
+TASK23_CRITERIA = [
+    "parse_duration('1h30m') returns 5400 (regression anchor)",
+    "durations.py sets module __all__ to exactly ['parse_duration']",
+]
+
+
+def test_criteria_literals_extracts_spec_mandated_tokens():
+    assert criteria_literals(*TASK23_CRITERIA) == frozenset({"parse_duration"})
+    assert criteria_literals("parse_duration('1h30m') returns 5400") == frozenset()
+
+
+def test_scan_diff_flags_mandated_literal_without_allowlist():
+    flags = scan_diff(TASK23_DIFF, hidden_literals=frozenset({"parse_duration"}))
+    assert [f.rule for f in flags] == ["LITERAL"]
+
+
+def test_scan_diff_allows_criteria_mandated_literal():
+    allowed = criteria_literals(*TASK23_CRITERIA)
+    flags = scan_diff(TASK23_DIFF, hidden_literals=frozenset({"parse_duration"}),
+                      allowed_literals=allowed)
+    assert [f.rule for f in flags if f.rule == "LITERAL"] == []
+
+
+@pytest.mark.parametrize("name,ok", [
+    ("test_rouvr_hidden_durations.py", True),
+    ("test_rouvr_hidden_a.py", True),
+    ("test_durations.py", False),          # collectable but collides with coder names
+    ("hidden_test_durations.py", False),   # unique but NOT collected by default
+    ("test_rouvr_hidden_.py", False),
+    ("test_rouvr_hidden_x.txt", False),
+    ("../test_rouvr_hidden_x.py", False),
+    ("", False),
+])
+def test_is_hidden_suite_name(name, ok):
+    assert is_hidden_suite_name(name) is ok
+
+
+# Task-32 regression: the coder's own tests/test_durations.py collided by
+# filename with the hidden suite but held different bytes — a name-only match
+# is not a leak. Only identical bytes prove a copy.
+def test_coder_clean_same_name_different_bytes_passes(tmp_path):
+    hidden = {"test_durations.py": "def test_hidden_a():\n    assert 1 == 1\n"}
+    m = write_hidden_suite(tmp_path / "hidden", task_id="t1", files=hidden,
+                           created_by="test_author")
+    d, _ = fetch_hidden_suite(tmp_path / "hidden", "t1")
+    ws = tmp_path / "ws"
+    (ws / "tests").mkdir(parents=True)
+    (ws / "tests" / "test_durations.py").write_text(
+        "def test_coder_a():\n    assert 2 == 2\n")
+    assert_coder_clean(ws, d, m)
+
+
+def test_coder_clean_same_name_same_bytes_fails(tmp_path):
+    body = "def test_hidden_a():\n    assert 1 == 1\n"
+    m = write_hidden_suite(tmp_path / "hidden", task_id="t1",
+                           files={"test_durations.py": body}, created_by="test_author")
+    d, _ = fetch_hidden_suite(tmp_path / "hidden", "t1")
+    ws = tmp_path / "ws"
+    (ws / "tests").mkdir(parents=True)
+    (ws / "tests" / "test_durations.py").write_text(body)
+    with pytest.raises(RouvrError) as e:
+        assert_coder_clean(ws, d, m)
+    assert e.value.code is Code.EVIDENCE
+
+
+def test_coder_clean_hidden_prefix_never_collides_by_name(tmp_path):
+    m = write_hidden_suite(tmp_path / "hidden", task_id="t1",
+                           files={"hidden_test_durations.py": "def test_h():\n    assert 1\n"},
+                           created_by="test_author")
+    d, _ = fetch_hidden_suite(tmp_path / "hidden", "t1")
+    ws = tmp_path / "ws"
+    (ws / "tests").mkdir(parents=True)
+    (ws / "tests" / "test_durations.py").write_text("def test_c():\n    assert 2\n")
+    assert_coder_clean(ws, d, m)

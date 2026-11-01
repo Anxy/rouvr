@@ -29,22 +29,23 @@ def merge_headers(headers: dict[str, str] | None, *, tenant: str, token: str,
     keeps a caller idempotency key or mints one. Pure: no network, no secrets
     invented (the token comes from the host credential, never from inputs).
     """
-    if not tenant.strip():
+    if not isinstance(tenant, str) or not tenant.strip():
         raise ValueError("tenant is required: no default tenant")
-    if not token.strip():
+    if not isinstance(token, str) or not token.strip():
         raise ValueError("service token is required: mint first, never default")
     merged = {name: value for name, value in (headers or {}).items()
               if name.casefold() not in IDENTITY_HEADERS}
     merged["Authorization"] = f"Bearer {token.strip()}"
     merged[TENANT_HEADER] = tenant.strip()
-    if IDEMPOTENCY_HEADER not in merged:
+    if IDEMPOTENCY_HEADER.casefold() not in {n.casefold() for n in merged}:
         merged[IDEMPOTENCY_HEADER] = idempotency_key or str(uuid4())
     return merged
 
 
 def require_scope(tenant: str, project: str) -> tuple[str, str]:
     """Mandatory demo scope. Both fields required; no defaults anywhere."""
-    if not tenant.strip() or not project.strip():
+    if (not isinstance(tenant, str) or not tenant.strip()
+            or not isinstance(project, str) or not project.strip()):
         raise ValueError("demo scope needs tenant plus project: set both, never default")
     return tenant.strip(), project.strip()
 

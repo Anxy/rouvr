@@ -1643,9 +1643,9 @@
         }
       ],
       "claimed_at": "2026-11-01",
-      "pre_task": "Hyeve auth/comms seams: pure header/scope/file-backend plus TDD-blocked live legs",
-      "tests": "pytest tests/test_hyeve_demo.py: 5 passed + 2 skipped offline; 7 passed live (mint validated, send parked on project gate)",
-      "evidence": "validator --expect pass: T1,T2,T4-T9 valid; T3 trips on new uncommitted files (clears on commit); T10 TDD-blocked on creds. hygiene clean (2011 files). Files: rouvr/hyeve.py, tests/test_hyeve_demo.py, roadmap.json R7-R10/T7-T10, S023 sheet."
+      "pre_task": "Hyeve auth/comms seams: pure header/scope/file-backend; mint validated live, send parked on project gate",
+      "tests": "pytest tests/test_hyeve_demo.py: 7 passed + 2 skipped offline; 9 passed live (mint validated, send parked on project gate)",
+      "evidence": "validator --expect pass: T1,T2,T4-T9 valid; T3 trips on new uncommitted files (clears on commit); T10 mint validated live for both identities; send parked on project gate. hygiene clean. Files: rouvr/hyeve.py, tests/test_hyeve_demo.py, roadmap.json R7-R10/T7-T10, S023 sheet."
     }
   ]
 }

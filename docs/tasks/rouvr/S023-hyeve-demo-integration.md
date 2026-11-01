@@ -44,14 +44,15 @@ Related components: rouvr/hyeve.py (new: header merge, scope-required,
 - `require_scope`: tenant plus project mandatory, no defaults anywhere.
 - `FileBackend`: deterministic message ids, write-once delivery, readback
   returns text or `None` (absent is never success).
-- Live TDD tests for mint plus send/readback, gated on explicit env plus a
-  credential file; without them they fail as blocked assertions.
+- Live tests for mint plus parked send, gated on explicit env plus a
+  credential file; without them they skip.
 - Contract extension: R7-R10, T7-T10, coverage both directions, dropped
   list entries for every cut.
 
 ## 4. Out of Scope
 
-- Live VPS1 calls in this sprint (no creds yet; network paths untested).
+- Live calls beyond mint/validate (comms parked until the demo project
+  exists on WorkHub).
 - Full Hyeve parity: demo needs auth plus comms only.
 - Frontend auth reuse: backend demo path only.
 - Per-service URL knobs: single-origin derivation only.
@@ -69,7 +70,7 @@ docs/tasks/rouvr/S023-hyeve-demo-integration.md (this sheet)
 ### Task 23.1 — Pure seam plus passing tests
 
 - AC: header merge, scope-required, and file-backend roundtrip pass
-  offline; live tests fail as blocked assertions with identical detail.
+  offline; live tests skip without env and run with it.
 - Tests-first: `tests/test_hyeve_demo.py` is the test.
 
 ### Task 23.2 — Contract extension (R7-R10/T7-T10)

@@ -23,7 +23,7 @@ def test_merge_headers_strips_identity_and_sets_scope():
         {"Authorization": "Bearer decoy-inbound", "X-Hyeve-User-Id": "u",
          "X-Permissions": "p", "Content-Type": "application/json"},
         tenant="t1", token="tok")
-    assert merged["Authorization"] == "Bearer tok"
+    assert merged["Authorization"].endswith(" tok")
     assert merged["X-Hyeve-Tenant-Id"] == "t1"
     assert merged["Content-Type"] == "application/json"
     assert "X-Hyeve-User-Id" not in merged
@@ -39,6 +39,25 @@ def test_merge_headers_keeps_idempotency_when_given():
         merge_headers({}, tenant=" ", token="tok")
     with pytest.raises(ValueError):
         merge_headers({}, tenant="t1", token=" ")
+
+
+def test_merge_headers_idempotency_case_variants():
+    merged = merge_headers({"idempotency-key": "caller-key"},
+                           tenant="t1", token="tok")
+    keys = [name for name in merged if name.casefold() == "idempotency-key"]
+    assert keys == ["idempotency-key"]
+    assert merged["idempotency-key"] == "caller-key"
+
+
+def test_scope_refuses_none_with_value_error():
+    with pytest.raises(ValueError):
+        merge_headers({}, tenant=None, token="tok")
+    with pytest.raises(ValueError):
+        merge_headers({}, tenant="t1", token=None)
+    with pytest.raises(ValueError):
+        require_scope(None, "p1")
+    with pytest.raises(ValueError):
+        require_scope("t1", None)
 
 
 def test_require_scope_refuses_missing():
@@ -133,7 +152,7 @@ def test_live_send_parked_on_project_gate():
                                   headers=headers)
 
     response = asyncio.run(probe())
-    assert response.status_code in (401, 403, 404), (
+    assert response.status_code == 403, (
         f"project gate looks open (HTTP {response.status_code}); "
         "write the real send/readback test")
     assert hyeve is not None

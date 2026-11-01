@@ -517,3 +517,65 @@ async def test_scheduled_duplicate_tick_deduped(env):
     by_child = sorted([first, second], key=lambda r: (r.get("deduped") is True, r["child"]))
     assert by_child[0]["result"]["state"] == "done" and not by_child[0].get("deduped")
     assert by_child[1]["child"] == by_child[0]["child"] and by_child[1].get("deduped") is True
+
+
+FIGURES = {"done": 5, "blocked": 0, "failed": 0}
+GOOD_REPORT = 'Lane report for x\n{"blocked": 0, "done": 5, "failed": 0}'
+BAD_REPORT = 'Lane report for x\n{"blocked": 0, "done": 4, "failed": 1}'
+
+
+def _chat(returning):
+    def chat(messages):
+        assert messages[0]["role"] == "system"
+        return returning
+    return chat
+
+
+def test_judge_passes_matching_report():
+    from rouvr.ops import judge_ops_report
+    r = judge_ops_report(GOOD_REPORT, FIGURES,
+                         chat=_chat('{"verdict": "pass", "reason": "all figures stated"}'))
+    assert r["verdict"] == "pass" and r["judge_principal"] == "ops-judge"
+
+
+def test_judge_rejects_wrong_report():
+    from rouvr.ops import judge_ops_report
+    r = judge_ops_report(BAD_REPORT, FIGURES,
+                         chat=_chat('{"verdict": "fail", "reason": "done mismatch"}'))
+    assert r["verdict"] == "fail"
+
+
+def test_judge_refuses_unparsable_output():
+    from rouvr.errors import Code, RouvrError
+    from rouvr.ops import judge_ops_report
+    for bad in ("not json", "[1, 2]", '{"verdict": "maybe"}', '{"reason": "no verdict"}'):
+        try:
+            judge_ops_report(GOOD_REPORT, FIGURES, chat=_chat(bad))
+        except RouvrError as e:
+            assert e.code == Code.CONTRACT
+        else:
+            raise AssertionError(f"judge accepted {bad!r}")
+
+
+def test_verify_with_judge_skips_on_stub():
+    from rouvr.ops import verify_with_judge
+    assert verify_with_judge(deterministic_pass=True, report=GOOD_REPORT,
+                             figures=FIGURES, provider_name="stub")["judge"]["verdict"] == "skipped"
+    assert verify_with_judge(deterministic_pass=False, report=BAD_REPORT,
+                             figures=FIGURES, provider_name="stub")["verdict"] == "fail"
+
+
+def test_verify_with_judge_live_fail_overrides_deterministic_pass():
+    from rouvr.ops import verify_with_judge
+    r = verify_with_judge(deterministic_pass=True, report=BAD_REPORT, figures=FIGURES,
+                          provider_name="meta",
+                          chat=_chat('{"verdict": "fail", "reason": "done mismatch"}'))
+    assert r["verdict"] == "fail" and r["judge"]["verdict"] == "fail"
+
+
+def test_verify_with_judge_live_pass_passes():
+    from rouvr.ops import verify_with_judge
+    r = verify_with_judge(deterministic_pass=True, report=GOOD_REPORT, figures=FIGURES,
+                          provider_name="meta",
+                          chat=_chat('{"verdict": "pass", "reason": "all figures stated"}'))
+    assert r["verdict"] == "pass"

@@ -496,13 +496,23 @@ class Activities:
         figures = {s: sum(1 for t in items if t["state"] == s) for s in ("done", "blocked", "failed")}
         health = c.get("/health").status_code == 200
         readback, figures_match = check_readback(m.OUTBOX, msg_id, figures)
-        verdict = "pass" if (readback and figures_match and health) else "fail"
+        from rouvr.ops import verify_with_judge
+        provider = get_provider()
+        try:
+            report_text = (m.OUTBOX / f"{msg_id}.txt").read_text()
+        except OSError:
+            report_text = ""  # judge then fails: figures cannot be in a missing report
+        vwj = verify_with_judge(
+            deterministic_pass=bool(readback and figures_match and health),
+            report=report_text, figures=figures, provider_name=provider.name,
+            chat=None if provider.name == "stub" else provider.chat)
+        verdict = vwj["verdict"]
         _ops_post(c, f"/v1/tasks/{task_id}/evidence",
                   {"kind": "reviewer",
                    "body": {"sink": sink, "verdict": verdict, "readback": readback,
                             "figures_match": figures_match, "health": health,
                             "judge_principal": OPS_JUDGE, "executor": OPS_EXECUTOR,
-                            "model": get_provider().name}})
+                            "model": provider.name, "judge": vwj["judge"]}})
         return {"verdict": verdict, "figures": figures}
 
     @activity.defn(name="ops_close")

@@ -73,6 +73,48 @@ def compile_ops_contract(instruction: str) -> dict:
     return validate_ops_contract(contract)
 
 
+def judge_ops_report(report: str, figures: dict, *, chat) -> dict:
+    """Independent model judge: does this tick's report carry the ledger figures?
+
+    chat is a provider-style callable (messages) -> str. Unparsable or
+    off-schema model output fails closed (CONTRACT): a judge that cannot
+    speak verdict JSON is refused, never counted as pass.
+    """
+    raw = chat(
+        [{"role": "system",
+          "content": ("You verify a delivered ops report against ledger figures. "
+                      "Reply with ONLY a JSON object "
+                      '{"verdict": "pass|fail", "reason": "<one sentence>"}. '
+                      "Pass only if the report states every figure value. "
+                      "Any mismatch, missing figure, or wrong tick means fail.")},
+         {"role": "user",
+          "content": f"ledger figures: {json.dumps(figures, sort_keys=True)}\nreport:\n{report}"}])
+    try:
+        data = json.loads(raw)
+    except (ValueError, TypeError) as e:
+        raise RouvrError(Code.CONTRACT, "ops judge output is not JSON: refused") from e
+    if not isinstance(data, dict) or data.get("verdict") not in ("pass", "fail"):
+        raise RouvrError(Code.CONTRACT, "ops judge verdict must be pass|fail: refused")
+    return {"verdict": data["verdict"], "reason": str(data.get("reason") or ""),
+            "judge_principal": OPS_JUDGE}
+
+
+def verify_with_judge(*, deterministic_pass: bool, report: str, figures: dict,
+                      provider_name: str, chat=None) -> dict:
+    """Combine the deterministic read-back check with the model judge.
+
+    Stub providers cannot judge: recorded as skipped, never as pass. A live
+    judge fail overrides a deterministic pass; a judge error fails closed.
+    """
+    if provider_name == "stub" or chat is None:
+        return {"verdict": "pass" if deterministic_pass else "fail",
+                "judge": {"verdict": "skipped", "reason": "no model judge on stub",
+                          "judge_principal": OPS_JUDGE}}
+    judged = judge_ops_report(report, figures, chat=chat)
+    verdict = "pass" if (deterministic_pass and judged["verdict"] == "pass") else "fail"
+    return {"verdict": verdict, "judge": judged}
+
+
 def check_readback(outbox: Path, msg_id: str, figures: dict) -> tuple[bool, bool]:
     """Read back the delivered message; malformed files count as no-readback."""
     path = outbox / f"{msg_id}.txt"

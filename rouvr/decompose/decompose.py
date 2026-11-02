@@ -23,10 +23,12 @@ def decompose_brief(brief: str, *, model=None) -> dict:
             "Turn the brief into ONE v1.3 decomposition candidate. Reply with ONLY "
             "a JSON object with keys: requirements (list of {id, text, source_ref}), "
             "tasks (list of {id, title, type, allowed_paths, pinned_paths, verifier, "
-            "depends_on, covers} where verifier uses only test_passes, "
-            "no_changes_outside, path_absent joined with and), coverage_ledger "
+            "depends_on, covers}), coverage_ledger "
             "(requirement id -> [task ids]), dropped_content (list of {cut, why}). "
-            "One candidate only.")},
+            "Each verifier is a single-key JSON object using only the primitives "
+            "test_passes, no_changes_outside, path_absent. Conjunctions use ONLY "
+            "the object form {\"and\": [<verifier>, ...]} — never a joined string "
+            "like \"test_passes and no_changes_outside\". One candidate only.")},
         {"role": "user", "content": brief}])
     try:
         candidate = json.loads(raw)

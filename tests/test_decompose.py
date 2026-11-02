@@ -154,6 +154,32 @@ def test_decompose_one_candidate():
         D.decompose_brief("brief", model=Stub())
 
 
+def test_prompt_pins_and_object_form():
+    """The prompt must show the {"and": [...]} object form and forbid the
+    joined-string form, or models emit unverifiable conjunctions."""
+    import inspect
+    from rouvr.decompose import decompose as D
+    src = inspect.getsource(D.decompose_brief).replace('\\"', '"')
+    assert '{"and": [<verifier>, ...]}' in src
+    assert "never a joined string" in src
+
+
+def test_string_verifier_refused(tmp_path):
+    from rouvr.decompose import decompose as D
+
+    class Stringy:
+        name = "meta"
+        def chat(self, messages):
+            return json.dumps({"requirements": [{"id": "R1", "text": "t", "source_ref": "s"}],
+                               "tasks": [{"id": "T1", "title": "t", "type": "build",
+                                          "allowed_paths": ["a/"], "pinned_paths": ["b"],
+                                          "verifier": "test_passes and no_changes_outside",
+                                          "depends_on": [], "covers": ["R1"]}],
+                               "coverage_ledger": {"R1": ["T1"]}, "dropped_content": []})
+    with pytest.raises(RuntimeError, match="single-key"):
+        D.decompose_brief("brief", model=Stringy())
+
+
 def test_demo_covers_four_beats():
     body = (Path(__file__).parent.parent / "demo" / "decompose-demo.sh").read_text()
     for beat in ("BEAT 1", "BEAT 2", "BEAT 3", "BEAT 4"):

@@ -20,7 +20,7 @@ import secrets as _secrets
 
 from fastapi import FastAPI, HTTPException, Request
 from rapidfuzz import fuzz
-from sqlalchemy import create_engine, text
+from sqlalchemy import create_engine, event, text
 
 try:
     from ledger import hyeve_auth as _ha
@@ -239,17 +239,33 @@ def make_app(db_url: str = DB_URL) -> FastAPI:
                          "to a sqlite:/// URL (Postgres is not supported)")
     if db_url.startswith("sqlite:///./"):
         Path(db_url[len("sqlite:///"):]).parent.mkdir(parents=True, exist_ok=True)
-    eng = create_engine(db_url)
-    if db_url.startswith("sqlite"):  # S014: WAL — parallel workers write evidence
-        with eng.connect() as c:
-            c.execute(text("PRAGMA journal_mode=WAL"))
-            c.commit()
+    if db_url.startswith("sqlite"):
+        # FL-A5: single-writer discipline — one pooled connection per app, so
+        # concurrent API threads serialize instead of hitting "database is
+        # locked"; cross-process writers wait on the 5s busy timeout below.
+        eng = create_engine(
+            db_url,
+            connect_args={"timeout": 5.0, "check_same_thread": False},
+            pool_size=1,
+            max_overflow=0,
+            pool_timeout=30,
+        )
+
+        @event.listens_for(eng, "connect")
+        def _sqlite_hardening(dbapi_conn, _record):
+            cur = dbapi_conn.cursor()
+            cur.execute("PRAGMA journal_mode=WAL")
+            cur.execute("PRAGMA busy_timeout=5000")
+            cur.close()
+    else:
+        eng = create_engine(db_url)
     with eng.begin() as c:
         for stmt in (Path(__file__).with_name("schema.sql").read_text().split(";")):
             body = "\n".join(l for l in stmt.splitlines() if not l.strip().startswith("--"))
             if body.strip():
                 c.execute(text(body))
     app = FastAPI(title="Rouvr ledger")
+    app.state.engine = eng  # FL-A5: hardened SQLite config, observable for tests
 
     # Add created_by to pre-S016 databases (schema.sql covers fresh ones
     # only via CREATE TABLE; existing tables need the column explicitly).

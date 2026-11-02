@@ -10,6 +10,8 @@ def demo(tmp_path, monkeypatch):
     monkeypatch.setenv("ROUVR_TENANT_ID", "acme")
     monkeypatch.setenv("ROUVR_PROJECT_ID", "site")
     monkeypatch.delenv("ROUVR_INJECT", raising=False)
+    monkeypatch.setenv("ROUVR_INSECURE_DEV", "1")
+    monkeypatch.delenv("ROUVR_LEDGER_TOKEN", raising=False)
     from fastapi.testclient import TestClient
     from ledger.app import make_app
     with TestClient(make_app(f"sqlite:///{tmp_path}/d.db")) as c:

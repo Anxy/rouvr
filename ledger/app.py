@@ -12,11 +12,19 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import re
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
+import secrets as _secrets
+
 from fastapi import FastAPI, HTTPException, Request
 from sqlalchemy import create_engine, text
+
+try:
+    from ledger import hyeve_auth as _ha
+except ImportError:  # run as a bare module (python ledger/app.py)
+    import hyeve_auth as _ha  # type: ignore[no-redef]
 
 DB_URL = os.environ.get("ROUVR_LEDGER_DATABASE_URL", "sqlite:///./.rouvr/ledger.db")
 TRANSITIONS = {
@@ -31,6 +39,89 @@ TRANSITIONS = {
 
 def _now() -> str:
     return datetime.now(timezone.utc).isoformat()
+
+
+_ONBOARD_HTML = """<!doctype html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Rouvr — Register &amp; onboard</title>
+<style>
+ body{font-family:ui-sans-serif,system-ui,sans-serif;max-width:640px;margin:2rem auto;padding:0 1rem;color:#1c2430;background:#fff}
+ h1{font-size:1.4rem} h2{font-size:1.05rem;margin-top:2rem}
+ label{display:block;margin:.7rem 0 .2rem;font-weight:600;font-size:.9rem}
+ input,select,textarea{width:100%;padding:.5rem;border:1px solid #9aa6b5;border-radius:4px;font:inherit}
+ button{margin-top:1rem;padding:.55rem 1.2rem;border:0;border-radius:4px;background:#1668b4;color:#fff;font:inherit;cursor:pointer}
+ button:disabled{background:#7d8ea3}
+ .err{color:#b3261e;white-space:pre-wrap} .ok{background:#eef6ee;border:1px solid #9dbb9d;padding:1rem;border-radius:4px;white-space:pre-wrap}
+ .hidden{display:none} small{color:#45536a}
+</style></head><body>
+<h1>Rouvr — Register &amp; onboard</h1>
+<p>Step 1 creates your account on the Hyeve auth service. Step 2 tells Rouvr
+who you are and what your first project is; both profiles are stored in
+project knowledge, versioned and searchable.</p>
+
+<h2>1. Register</h2>
+<form id="reg">
+ <label>Username <input name="username" required autocomplete="username"></label>
+ <label>Email <input name="email" type="email" required autocomplete="email"></label>
+ <label>Password <input name="password" type="password" required autocomplete="new-password"></label>
+ <label>Given name <input name="given_name" required autocomplete="given-name"></label>
+ <label>Family name <input name="family_name" required autocomplete="family-name"></label>
+ <button>Register</button> <span id="reg-msg"></span>
+</form>
+<p><small>Already registered? <a href="#" id="show-login">Log in instead</a></small></p>
+<form id="login" class="hidden">
+ <label>Username <input name="username" required autocomplete="username"></label>
+ <label>Password <input name="password" type="password" required autocomplete="current-password"></label>
+ <button>Log in</button> <span id="login-msg"></span>
+</form>
+
+<h2>2. About you and your project</h2>
+<form id="onb">
+ <label>Display name <input name="display_name" required></label>
+ <label>Your role <input name="role_title" placeholder="Founder, ops lead, ..."></label>
+ <label>Organisation <input name="organisation" placeholder="Acme Legal"></label>
+ <label>What will you use Rouvr for? <textarea name="use_case" rows="2"></textarea></label>
+ <label>Project name <input name="project_name" required></label>
+ <label>Project purpose <textarea name="project_purpose" rows="2" required></textarea></label>
+ <label>Project type <select name="project_type">
+  <option>software</option><option>operations</option><option>content</option>
+  <option>research</option><option>mixed</option></select></label>
+ <label>North star / success measure <input name="north_star"></label>
+ <label>Standing rules for agents <textarea name="standing_rules" rows="2" placeholder="e.g. Cite every source."></textarea></label>
+ <button id="onb-btn" disabled>Complete onboarding</button>
+</form>
+<p id="msg" class="err"></p>
+<div id="result" class="ok hidden"></div>
+<script>
+let token = null;
+const msg = t => { document.getElementById('msg').textContent = t || ''; };
+async function post(path, data, headers) {
+  const r = await fetch(path, {method:'POST', headers:{'Content-Type':'application/json', ...(headers||{})}, body: JSON.stringify(data)});
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(j.detail || ('HTTP ' + r.status));
+  return j;
+}
+const collect = f => Object.fromEntries(new FormData(f).entries());
+function armed(t) { token = t; document.getElementById('onb-btn').disabled = !t; }
+document.getElementById('reg').onsubmit = async e => { e.preventDefault(); msg('');
+  try { const j = await post('/v1/onboard/register', collect(e.target)); armed(j.access_token);
+    document.getElementById('reg-msg').textContent = 'Registered. Now step 2.'; }
+  catch (err) { msg(err.message); } };
+document.getElementById('show-login').onclick = e => { e.preventDefault();
+  document.getElementById('login').classList.remove('hidden'); };
+document.getElementById('login').onsubmit = async e => { e.preventDefault(); msg('');
+  try { const j = await post('/v1/onboard/login', collect(e.target)); armed(j.access_token);
+    document.getElementById('login-msg').textContent = 'Logged in. Now step 2 (or done if already onboarded).'; }
+  catch (err) { msg(err.message); } };
+document.getElementById('onb').onsubmit = async e => { e.preventDefault(); msg('');
+  try { const j = await post('/v1/onboard/complete', collect(e.target), {Authorization: 'Bearer ' + token});
+    const box = document.getElementById('result'); box.classList.remove('hidden');
+    box.textContent = 'Welcome, ' + j.username + '.\\nTenant: ' + j.tenant + '  Project: ' + j.project +
+      (j.user_profile ? '\\nUser profile: ' + j.user_profile + '\\nProject profile: ' + j.project_profile : '\\n(already onboarded)') +
+      (j.rouvr_token ? '\\nYour Rouvr API token (shown once): ' + j.rouvr_token : ''); }
+  catch (err) { msg(err.message); } };
+</script></body></html>"""
 
 
 def _canon(obj) -> tuple[str, str]:
@@ -78,6 +169,27 @@ def make_app(db_url: str = DB_URL) -> FastAPI:
         ucols = [r[1] for r in c.execute(text("PRAGMA table_info(users)"))]
         if ucols and "tenant" not in ucols:
             c.execute(text("ALTER TABLE users ADD COLUMN tenant TEXT"))
+        # Knowledge Lite on pre-existing databases (schema.sql covers fresh).
+        c.execute(text("CREATE TABLE IF NOT EXISTS knowledge_entries ("
+                       "id INTEGER PRIMARY KEY, tenant TEXT NOT NULL, project TEXT NOT NULL,"
+                       "kind TEXT NOT NULL, title TEXT NOT NULL, body TEXT NOT NULL,"
+                       "version INTEGER NOT NULL DEFAULT 1,"
+                       "supersedes_id INTEGER REFERENCES knowledge_entries(id),"
+                       "verified INTEGER NOT NULL DEFAULT 0, author TEXT NOT NULL,"
+                       "visibility TEXT NOT NULL DEFAULT 'company',"
+                       "allowed_users TEXT NOT NULL DEFAULT '[]',"
+                       "created_at TEXT NOT NULL,"
+                       "FOREIGN KEY (tenant, project) REFERENCES projects(tenant, project))"))
+        kcols = [r[1] for r in c.execute(text("PRAGMA table_info(knowledge_entries)"))]
+        if kcols and "visibility" not in kcols:
+            c.execute(text("ALTER TABLE knowledge_entries ADD COLUMN visibility TEXT NOT NULL DEFAULT 'company'"))
+        if kcols and "allowed_users" not in kcols:
+            c.execute(text("ALTER TABLE knowledge_entries ADD COLUMN allowed_users TEXT NOT NULL DEFAULT '[]'"))
+        c.execute(text("CREATE VIRTUAL TABLE IF NOT EXISTS knowledge_fts USING fts5(title, body)"))
+        c.execute(text("CREATE TABLE IF NOT EXISTS external_identities ("
+                       "provider TEXT NOT NULL, subject TEXT NOT NULL,"
+                       "username TEXT NOT NULL REFERENCES users(username),"
+                       "created_at TEXT NOT NULL, PRIMARY KEY (provider, subject))"))
     with eng.begin() as c:  # begin: the receipts migration below must commit
         n = c.execute(text("SELECT COUNT(*) FROM tasks WHERE tenant IS NULL OR tenant=''"
                            " OR project IS NULL OR project=''")).scalar()
@@ -98,29 +210,73 @@ def make_app(db_url: str = DB_URL) -> FastAPI:
                 c.execute(text("DROP TABLE receipts"))
                 c.execute(text("ALTER TABLE receipts_new RENAME TO receipts"))
 
-    # Token auth (S011 + S016, partitions S022): the shared stack token
-    # authenticates as "supervisor" (stack/worker identity, sees all). A
-    # per-user token authenticates as that user, scoped to exactly its
-    # own tenant's projects and tasks. Unset shared token = open dev
-    # mode (identity supervisor).
+    # Token auth (S011 + S016, partitions S022, fail-closed Knowledge Lite):
+    # the shared stack token authenticates as "supervisor" (stack/worker
+    # identity, sees all). A per-user token authenticates as that user,
+    # scoped to exactly its own tenant's projects and tasks. There is no
+    # open-dev mode: with no token configured every /v1 request fails 401.
+    # Local dev bypass requires explicit ROUVR_INSECURE_DEV=1 (loud warning,
+    # refused on a public bind).
+    import sys as _sys
     _token = os.environ.get("ROUVR_LEDGER_TOKEN", "")
+    _insecure = os.environ.get("ROUVR_INSECURE_DEV", "") == "1"
+    _bind_host = os.environ.get("ROUVR_BIND_HOST",
+                                os.environ.get("ROUVR_LEDGER_HOST", "127.0.0.1"))
+    _public_bind = _bind_host.strip() in ("", "*", "0.0.0.0", "::",
+                                          "0:0:0:0:0:0:0:0") or \
+        _bind_host.strip().startswith("0.")
+    if _insecure and _public_bind:
+        raise RuntimeError("ROUVR_INSECURE_DEV=1 refused with public bind "
+                           f"{_bind_host!r}: bind 127.0.0.1 for local dev")
+    if _insecure and not _token:
+        print("WARNING: ROUVR_INSECURE_DEV=1 allows unauthenticated local dev "
+              "(no token configured); never use with a public bind",
+              file=_sys.stderr)
+
+    # Pre-account onboarding paths authenticate against hyeve-auth
+    # upstream, not the ledger token (the caller has no ledger user yet).
+    _ONBOARD_OPEN = {"/v1/onboard/register", "/v1/onboard/login"}
 
     @app.middleware("http")
     async def _auth(request, call_next):
         request.state.user = "supervisor"
-        if _token and request.url.path.startswith("/v1"):
+        request.state.hyeve_claims = None
+        path = request.url.path
+        if path.startswith("/v1") and path not in _ONBOARD_OPEN:
             from fastapi.responses import JSONResponse
-            hdr = request.headers.get("x-rouvr-token", "")
-            if hdr == _token:
-                pass  # stack identity
-            elif hdr:
-                h = hashlib.sha256(hdr.encode()).hexdigest()
+            authz = request.headers.get("authorization", "")
+            if authz.casefold().startswith("bearer "):
+                # Hyeve JWT: verified locally against JWKS. Maps to the
+                # onboarded ledger user; an un-onboarded subject gets a
+                # sentinel identity with no tenant (fails closed).
+                try:
+                    claims = _ha.verify_hyeve_jwt(authz[7:].strip())
+                except _ha.HyeveAuthError as e:
+                    return JSONResponse({"detail": str(e)}, status_code=401)
+                request.state.hyeve_claims = claims
                 with eng.connect() as c:
-                    u = c.execute(text("SELECT username, disabled FROM users WHERE token_hash=:h"),
-                                  {"h": h}).mappings().first()
-                if not u or u["disabled"]:
+                    link = c.execute(text(
+                        "SELECT username FROM external_identities"
+                        " WHERE provider='hyeve' AND subject=:s"),
+                        {"s": str(claims["sub"])}).mappings().first()
+                request.state.user = link["username"] if link else f"hyeve:{claims['sub']}"
+                return await call_next(request)
+            if _insecure and not _token:
+                pass  # explicit local-dev bypass (warned at startup, local bind only)
+            elif _token:
+                hdr = request.headers.get("x-rouvr-token", "")
+                if hdr == _token:
+                    pass  # stack identity
+                elif hdr:
+                    h = hashlib.sha256(hdr.encode()).hexdigest()
+                    with eng.connect() as c:
+                        u = c.execute(text("SELECT username, disabled FROM users WHERE token_hash=:h"),
+                                      {"h": h}).mappings().first()
+                    if not u or u["disabled"]:
+                        return JSONResponse({"detail": "unauthorized"}, status_code=401)
+                    request.state.user = u["username"]
+                else:
                     return JSONResponse({"detail": "unauthorized"}, status_code=401)
-                request.state.user = u["username"]
             else:
                 return JSONResponse({"detail": "unauthorized"}, status_code=401)
         return await call_next(request)
@@ -178,6 +334,11 @@ def make_app(db_url: str = DB_URL) -> FastAPI:
     @app.get("/health")
     def health():
         return {"status": "ok", "service": "rouvr-ledger"}
+
+    @app.get("/demo/onboard")
+    def demo_onboard():
+        from fastapi.responses import HTMLResponse
+        return HTMLResponse(_ONBOARD_HTML)
 
     @app.post("/v1/users")
     def create_user(body: dict, request: Request):
@@ -253,6 +414,575 @@ def make_app(db_url: str = DB_URL) -> FastAPI:
         with eng.begin() as c:
             c.execute(text("UPDATE users SET disabled=1 WHERE username=:u"), {"u": username})
             return {"disabled": username}
+
+    # -- Onboarding (hackathon cut of Slice 1): hyeve-auth owns identity
+    # (person-first: person_id required before user creation). The ledger
+    # owns Rouvr scope: complete() creates user/tenant/project + profiles
+    # as Knowledge entries, idempotently per Hyeve subject.
+    def _slug(raw: str, fallback: str) -> str:
+        s = re.sub(r"[^a-z0-9]+", "-", (raw or "").lower()).strip("-")
+        return s or re.sub(r"[^a-z0-9]+", "-", fallback.lower()).strip("-") or "user"
+
+    def _upstream(fn, **kw):
+        try:
+            return fn(**kw)
+        except _ha.HyeveAuthError as e:
+            code = str(e)
+            status = 503 if ("NOT_CONFIGURED" in code or "UNREACHABLE" in code) else 502
+            raise HTTPException(status, code) from e
+
+    @app.post("/v1/onboard/register")
+    def onboard_register(body: dict):
+        username = str(body.get("username") or "").strip()
+        password = str(body.get("password") or "")
+        email = str(body.get("email") or "").strip()
+        if not username or not password or not email:
+            raise HTTPException(422, "username, email and password are required")
+        # Person provisioning mode (HYEVE_PERSON_MODE): "inline" (default —
+        # auth creates/links the person from details, VPS1 build),
+        # "person_service" (create person first, hosted build), or an
+        # explicit person_id in the body wins over both.
+        person_id = str(body.get("person_id") or "").strip()
+        person = None
+        given = str(body.get("given_name") or "").strip()
+        family = str(body.get("family_name") or "").strip()
+        if not person_id:
+            if not given or not family:
+                raise HTTPException(422, "given_name and family_name are required"
+                                         " (person-first onboarding)")
+            display = str(body.get("display_name") or f"{given} {family}").strip()
+            if os.environ.get("HYEVE_PERSON_MODE", "inline") == "person_service":
+                person_id = _upstream(_ha.create_person, given_name=given,
+                                      family_name=family, display_name=display)
+            else:
+                person = {"person_type": str(body.get("person_type") or "Customer"),
+                          "given_name": given, "family_name": family,
+                          "display_name": display}
+        # Admin-driven identity (betademo/rouvr-demo): the tenant admin owns
+        # RBAC bootstrap and the trusted create call; new users get the
+        # rouvr-user role immediately.
+        admin = _upstream(_ha.admin_token)
+        _upstream(_ha.ensure_rouvr_rbac)
+        created = _upstream(_ha.create_user, username=username, password=password,
+                            email=email, person_id=person_id, person=person, token=admin)
+        uid = str(created.get("user_id") or "") if isinstance(created, dict) else ""
+        if not person_id and isinstance(created, dict):
+            person_id = str(created.get("person_id") or "")
+        if uid:
+            _upstream(_ha.assign_role, user_id=uid)
+        tokens = _upstream(_ha.login, username=username, password=password)
+        return {"username": username, "user_id": uid, "person_id": person_id, **tokens}
+
+    @app.post("/v1/onboard/login")
+    def onboard_login(body: dict):
+        username = str(body.get("username") or "").strip()
+        password = str(body.get("password") or "")
+        if not username or not password:
+            raise HTTPException(422, "username and password are required")
+        return _upstream(_ha.login, username=username, password=password)
+
+    @app.post("/v1/onboard/complete")
+    def onboard_complete(body: dict, request: Request):
+        claims = getattr(request.state, "hyeve_claims", None)
+        if not claims:
+            raise HTTPException(401, "a valid Hyeve token is required")
+        # Identity: sub is the stable key; the username always comes
+        # from /me, never from JWT claims (human tokens omit it).
+        sub = str(claims["sub"])
+        bearer = request.headers.get("authorization", "")[7:].strip()
+        hyeve_user = str(_upstream(_ha.me, token=bearer).get("username") or "").strip()
+        if not hyeve_user:
+            hyeve_user = str(claims.get("username")
+                             or claims.get("preferred_username") or "").strip()
+        if not hyeve_user:
+            raise HTTPException(422, "could not resolve a username for this token")
+        with eng.begin() as c:
+            link = row(c, "SELECT username FROM external_identities"
+                          " WHERE provider='hyeve' AND subject=:s", s=sub)
+            if link:  # idempotent: same subject returns its existing scope
+                u = row(c, "SELECT username, tenant FROM users WHERE username=:u",
+                        u=link["username"])
+                proj = row(c, "SELECT project FROM knowledge_entries"
+                              " WHERE tenant=:t AND kind='project_profile'"
+                              " ORDER BY id LIMIT 1", t=u["tenant"])
+                return {"username": u["username"], "tenant": u["tenant"],
+                        "project": proj["project"] if proj else None,
+                        "rouvr_token": None}
+            project_name = str(body.get("project_name") or "").strip()
+            purpose = str(body.get("project_purpose") or "").strip()
+            ptype = str(body.get("project_type") or "").strip()
+            if not project_name or not purpose or not ptype:
+                raise HTTPException(422, "project_name, project_purpose and"
+                                         " project_type are required")
+            if row(c, "SELECT username FROM users WHERE username=:u", u=hyeve_user):
+                raise HTTPException(409, f"ledger user {hyeve_user!r} already exists"
+                                         " under a different identity")
+            org = str(body.get("organisation") or "").strip()
+            tenant, base = _slug(org, hyeve_user), None
+            base, n = tenant, 2
+            while row(c, "SELECT tenant FROM tenants WHERE tenant=:t", t=tenant):
+                tenant, n = f"{base}-{n}", n + 1
+            project = _slug(project_name, "project")
+            now = _now()
+            c.execute(text("INSERT INTO tenants(tenant,created_at) VALUES(:t,:n)"),
+                      {"t": tenant, "n": now})
+            c.execute(text("INSERT INTO projects(tenant,project,created_at)"
+                           " VALUES(:t,:p,:n)"), {"t": tenant, "p": project, "n": now})
+            rouvr_token = _secrets.token_urlsafe(32)
+            c.execute(text("INSERT INTO users(username,display_name,token_hash,tenant,created_at)"
+                           " VALUES(:u,:d,:h,:t,:n)"),
+                      {"u": hyeve_user, "d": str(body.get("display_name") or ""),
+                       "h": hashlib.sha256(rouvr_token.encode()).hexdigest(),
+                       "t": tenant, "n": now})
+            c.execute(text("INSERT INTO external_identities(provider,subject,username,created_at)"
+                           " VALUES('hyeve',:s,:u,:n)"), {"s": sub, "u": hyeve_user, "n": now})
+            user_body = json.dumps({
+                "display_name": str(body.get("display_name") or ""),
+                "username": hyeve_user, "organisation": org,
+                "role_title": str(body.get("role_title") or ""),
+                "use_case": str(body.get("use_case") or "")}, indent=2)
+            proj_body = json.dumps({
+                "name": project_name, "purpose": purpose, "type": ptype,
+                "north_star": str(body.get("north_star") or ""),
+                "standing_rules": str(body.get("standing_rules") or "")}, indent=2)
+            up = _knowledge_insert(c, tenant, project, "user_profile",
+                                   f"User profile: {hyeve_user}", user_body, hyeve_user)
+            pp = _knowledge_insert(c, tenant, project, "project_profile",
+                                   f"Project profile: {project_name}", proj_body, hyeve_user)
+            # Owner-typed at onboarding: profiles are confirmed by definition.
+            c.execute(text("UPDATE knowledge_entries SET verified=1 WHERE id IN (:a,:b)"),
+                      {"a": up["id"], "b": pp["id"]})
+            rules = str(body.get("standing_rules") or "").strip()
+            if rules:
+                rk = _knowledge_insert(c, tenant, project, "rule",
+                                       "Standing rules (onboarding)", rules, hyeve_user)
+                c.execute(text("UPDATE knowledge_entries SET verified=1 WHERE id=:i"),
+                          {"i": rk["id"]})
+            return {"username": hyeve_user, "tenant": tenant, "project": project,
+                    "rouvr_token": rouvr_token,
+                    "user_profile": f"knowledge:{up['id']}@v1",
+                    "project_profile": f"knowledge:{pp['id']}@v1"}
+
+    # -- Knowledge Lite: append-only, versioned, visibility-scoped memory.
+    # Search returns latest versions only; the tenant+visibility filter is
+    # inside every query so titles/snippets cannot leak. Visibility:
+    # restricted (creator or named members), company (same tenant),
+    # public (any signed-in user, never anonymous).
+    KNOWLEDGE_KINDS = {"user_profile", "project_profile", "note", "decision", "rule", "snapshot"}
+    KNOWLEDGE_VIS = {"restricted", "company", "public"}
+    _LATEST = ("k.id NOT IN (SELECT supersedes_id FROM knowledge_entries"
+               " WHERE supersedes_id IS NOT NULL)")
+
+    def _krow(r):
+        d = dict(r)
+        d["citation"] = f"knowledge:{d['id']}@v{d['version']}"
+        try:
+            d["allowed_users"] = json.loads(d.get("allowed_users") or "[]")
+        except ValueError:
+            d["allowed_users"] = []
+        return d
+
+    def _allowed_list(raw) -> list:
+        if raw is None:
+            return []
+        if isinstance(raw, list):
+            return [str(x).strip() for x in raw if str(x).strip()]
+        if isinstance(raw, str):
+            try:
+                v = json.loads(raw)
+                return [str(x).strip() for x in v if str(x).strip()] if isinstance(v, list) else []
+            except ValueError:
+                return []
+        return []
+
+    def _can_see(k, identity, caller_tenant) -> bool:
+        if identity == "supervisor":
+            return True  # admin sees all
+        vis = k.get("visibility") or "company"
+        if vis == "public":
+            return True  # any signed-in user; anonymous never reaches here (401)
+        if vis == "company":
+            return caller_tenant is not None and k["tenant"] == caller_tenant
+        if vis == "restricted":
+            if identity == k.get("author"):
+                return True
+            return identity in _allowed_list(k.get("allowed_users"))
+        return False
+
+    def _knowledge_or_404(c, kid, identity):
+        k = row(c, "SELECT * FROM knowledge_entries WHERE id=:i", i=kid)
+        if not k:
+            raise HTTPException(404, "knowledge entry not found")
+        if identity == "supervisor":
+            return k
+        try:
+            caller_tenant = _tenant_of(c, identity)
+        except HTTPException:
+            caller_tenant = None  # sentinel hyeve:<sub>: public only
+            if (k.get("visibility") or "company") != "public":
+                raise HTTPException(404, "knowledge entry not found")
+            return k
+        if k["tenant"] != caller_tenant and (k.get("visibility") or "company") != "public":
+            raise HTTPException(404, "knowledge entry not found")  # no existence oracle
+        if not _can_see(k, identity, caller_tenant):
+            raise HTTPException(404, "knowledge entry not found")
+        return k
+
+    def _knowledge_insert(c, tenant, project, kind, title, body, author, version=1,
+                          supersedes=None, visibility="company", allowed=None):
+        vis = visibility if visibility in KNOWLEDGE_VIS else "company"
+        allow = json.dumps([str(x) for x in (allowed or [])])
+        rid = c.execute(text(
+            "INSERT INTO knowledge_entries(tenant,project,kind,title,body,version,"
+            "supersedes_id,verified,author,visibility,allowed_users,created_at)"
+            " VALUES(:tn,:p,:k,:t,:b,:v,:s,0,:a,:vis,:al,:n)"),
+            {"tn": tenant, "p": project, "k": kind, "t": title, "b": body,
+             "v": version, "s": supersedes, "a": author, "vis": vis,
+             "al": allow, "n": _now()}).lastrowid
+        c.execute(text("INSERT INTO knowledge_fts(rowid,title,body) VALUES(:i,:t,:b)"),
+                  {"i": rid, "t": title, "b": body})
+        return row(c, "SELECT * FROM knowledge_entries WHERE id=:i", i=rid)
+
+    @app.post("/v1/knowledge")
+    def create_knowledge(body: dict, request: Request):
+        ident = _identity(request)
+        tenant, project = _scope(body)
+        kind = str(body.get("kind") or "")
+        title = str(body.get("title") or "").strip()
+        kbody = str(body.get("body") or "")
+        vis = str(body.get("visibility") or "company")
+        if kind not in KNOWLEDGE_KINDS:
+            raise HTTPException(422, f"kind must be one of {sorted(KNOWLEDGE_KINDS)}")
+        if vis not in KNOWLEDGE_VIS:
+            raise HTTPException(422, f"visibility must be one of {sorted(KNOWLEDGE_VIS)}")
+        if not title or not kbody.strip():
+            raise HTTPException(422, "title and body are required")
+        allowed = _allowed_list(body.get("allowed_users"))
+        if vis != "restricted" and allowed:
+            raise HTTPException(422, "allowed_users only with visibility=restricted")
+        with eng.begin() as c:
+            _registered(c, tenant, project)
+            if _tenant_of(c, ident) not in (None, tenant):
+                raise HTTPException(403, f"knowledge in tenant {tenant!r}")
+            return _krow(_knowledge_insert(c, tenant, project, kind, title, kbody, ident,
+                                           visibility=vis, allowed=allowed))
+
+    @app.get("/v1/knowledge/search")
+    def search_knowledge(request: Request, q: str, project: str | None = None):
+        ident = _identity(request)
+        tokens = re.findall(r"\w+", q)
+        if not tokens:
+            raise HTTPException(422, "q must contain a searchable word")
+        match = " AND ".join(f'"{t}"*' for t in tokens)
+        with eng.begin() as c:
+            if ident == "supervisor":
+                mine = None
+            else:
+                try:
+                    mine = _tenant_of(c, ident)
+                except HTTPException:
+                    # A valid upstream identity is not a Rouvr principal until
+                    # onboarding binds it to a local user and tenant.
+                    raise HTTPException(403, "complete Rouvr onboarding first")
+            sql = (f"SELECT k.* FROM knowledge_fts f JOIN knowledge_entries k ON k.id=f.rowid"
+                   f" WHERE knowledge_fts MATCH :m AND {_LATEST}")
+            kw: dict = {"m": match}
+            if project:
+                sql += " AND k.project=:p"
+                kw["p"] = project
+            rows = [dict(r) for r in c.execute(text(sql + " ORDER BY f.rank LIMIT 50"), kw).mappings()]
+            out = []
+            for r in rows:
+                if ident == "supervisor":
+                    out.append(_krow(r))
+                elif (r.get("visibility") or "company") == "public":
+                    out.append(_krow(r))
+                elif mine is not None and r["tenant"] == mine and (r.get("visibility") or "company") == "company":
+                    out.append(_krow(r))
+                elif (r.get("visibility") or "company") == "restricted" and (
+                        r.get("author") == ident or ident in _allowed_list(r.get("allowed_users"))):
+                    out.append(_krow(r))
+            return {"items": out}
+
+    @app.get("/v1/knowledge/{kid}")
+    def get_knowledge(kid: int, request: Request):
+        with eng.begin() as c:
+            return _krow(_knowledge_or_404(c, kid, _identity(request)))
+
+    @app.get("/v1/knowledge/{kid}/history")
+    def knowledge_history(kid: int, request: Request):
+        """Version chain for one entry, oldest first. Append-only history
+        is the point: nothing here is ever rewritten, only superseded."""
+        ident = _identity(request)
+        with eng.begin() as c:
+            head = _knowledge_or_404(c, kid, ident)
+            chain, seen, cur = [], {head["id"]}, head
+            while cur:
+                chain.insert(0, _krow(cur))
+                nxt = cur.get("supersedes_id")
+                if not nxt or nxt in seen:
+                    break
+                seen.add(nxt)
+                cur = row(c, "SELECT * FROM knowledge_entries WHERE id=:i", i=nxt)
+                if cur:
+                    try:
+                        _knowledge_or_404(c, cur["id"], ident)
+                    except HTTPException:
+                        raise HTTPException(404, "knowledge entry not found")
+            return {"items": chain}
+
+    @app.post("/v1/knowledge/{kid}/versions")
+    def version_knowledge(kid: int, body: dict, request: Request):
+        ident = _identity(request)
+        title = str(body.get("title") or "").strip()
+        kbody = str(body.get("body") or "")
+        if not title or not kbody.strip():
+            raise HTTPException(422, "title and body are required")
+        with eng.begin() as c:
+            old = _knowledge_or_404(c, kid, ident)
+            if row(c, "SELECT id FROM knowledge_entries WHERE supersedes_id=:i", i=kid):
+                raise HTTPException(409, "entry already superseded: version the latest instead")
+            if ident != "supervisor":
+                try:
+                    caller_tenant = _tenant_of(c, ident)
+                except HTTPException:
+                    caller_tenant = None
+                if caller_tenant != old["tenant"]:
+                    raise HTTPException(403, "versions inherit the entry tenant: no cross-tenant writes")
+            vis = body.get("visibility", old.get("visibility") or "company")
+            vis = str(vis)
+            if vis not in KNOWLEDGE_VIS:
+                raise HTTPException(422, f"visibility must be one of {sorted(KNOWLEDGE_VIS)}")
+            allowed = _allowed_list(body.get("allowed_users", old.get("allowed_users")))
+            if (vis != old.get("visibility") or json.dumps(allowed) != (old.get("allowed_users") or "[]")):
+                if ident != "supervisor" and ident != old.get("author"):
+                    raise HTTPException(403, "only the creator or an admin changes visibility")
+            if vis != "restricted" and allowed:
+                raise HTTPException(422, "allowed_users only with visibility=restricted")
+            return _krow(_knowledge_insert(
+                c, old["tenant"], old["project"], old["kind"], title, kbody, ident,
+                version=old["version"] + 1, supersedes=kid,
+                visibility=vis, allowed=allowed))
+
+    @app.post("/v1/knowledge/{kid}/confirm")
+    def confirm_knowledge(kid: int, request: Request):
+        ident = _identity(request)
+        with eng.begin() as c:
+            k = _knowledge_or_404(c, kid, ident)
+            if ident != "supervisor" and ident != k.get("author"):
+                raise HTTPException(403, "only the creator or an admin confirms")
+            c.execute(text("UPDATE knowledge_entries SET verified=1 WHERE id=:i"), {"i": kid})
+            return _krow(row(c, "SELECT * FROM knowledge_entries WHERE id=:i", i=kid))
+
+    # -- Session commands (minimal): store / compact / snapshot / store-and-close.
+    @app.post("/v1/knowledge/store")
+    def knowledge_store(body: dict, request: Request):
+        ident = _identity(request)
+        tenant, project = _scope(body)
+        items = body.get("items")
+        if not isinstance(items, list) or not items:
+            raise HTTPException(422, "items is required")
+        out = []
+        with eng.begin() as c:
+            _registered(c, tenant, project)
+            if _tenant_of(c, ident) not in (None, tenant):
+                raise HTTPException(403, f"knowledge in tenant {tenant!r}")
+            for it in items:
+                if not isinstance(it, dict):
+                    raise HTTPException(422, "each item needs kind/title/body")
+                kind, title = str(it.get("kind") or ""), str(it.get("title") or "").strip()
+                kbody = str(it.get("body") or "")
+                vis = str(it.get("visibility") or "company")
+                if kind not in KNOWLEDGE_KINDS:
+                    raise HTTPException(422, f"kind must be one of {sorted(KNOWLEDGE_KINDS)}")
+                if vis not in KNOWLEDGE_VIS:
+                    raise HTTPException(422, "bad visibility")
+                if not title or not kbody.strip():
+                    raise HTTPException(422, "title and body are required")
+                allowed = _allowed_list(it.get("allowed_users"))
+                out.append(_krow(_knowledge_insert(c, tenant, project, kind, title,
+                                                  kbody, ident, visibility=vis, allowed=allowed)))
+        return {"items": out}
+
+    @app.post("/v1/knowledge/compact")
+    def knowledge_compact(body: dict, request: Request):
+        ident = _identity(request)
+        tenant, project = _scope(body)
+        title = str(body.get("title") or "Session compact").strip() or "Session compact"
+        with eng.begin() as c:
+            _registered(c, tenant, project)
+            if _tenant_of(c, ident) not in (None, tenant):
+                raise HTTPException(403, f"knowledge in tenant {tenant!r}")
+            rows = [dict(r) for r in c.execute(text(
+                "SELECT * FROM knowledge_entries WHERE tenant=:t AND project=:p"
+                " AND verified=1 ORDER BY id DESC LIMIT 50"),
+                {"t": tenant, "p": project}).mappings()]
+            # latest-versions only
+            sup = {r["supersedes_id"] for r in c.execute(
+                text("SELECT supersedes_id FROM knowledge_entries WHERE supersedes_id IS NOT NULL")
+            ).mappings()}
+            rows = [r for r in rows if r["id"] not in sup]
+            seen = [r for r in rows if _can_see(r, ident, _tenant_of(c, ident))]
+            lines = [f"- {r['title']} ({'knowledge:' + str(r['id']) + '@v' + str(r['version'])})"
+                     for r in reversed(seen)]
+            cbody = "Compact of verified entries:\n" + ("\n".join(lines) if lines else "(none)") \
+                + "\n\nSources:\n" + ("\n".join(
+                    f"knowledge:{r['id']}@v{r['version']}" for r in reversed(seen)) if seen else "(none)")
+            snap_vis, snap_allow = "company", []
+            if any((r.get("visibility") or "company") == "restricted" for r in seen):
+                snap_vis = "restricted"
+                allow: set = set()
+                for r in seen:
+                    if (r.get("visibility") or "company") == "restricted":
+                        allow.add(r.get("author"))
+                        allow.update(_allowed_list(r.get("allowed_users")))
+                allow.add(ident)
+                snap_allow = sorted(a for a in allow if a)
+            elif seen and all((r.get("visibility") or "company") == "public" for r in seen):
+                snap_vis = "public"
+            snap = _krow(_knowledge_insert(c, tenant, project, "snapshot", title, cbody, ident,
+                                           visibility=snap_vis, allowed=snap_allow))
+            return {"snapshot": snap,
+                    "sources": [f"knowledge:{r['id']}@v{r['version']}" for r in reversed(seen)]}
+
+    @app.post("/v1/knowledge/snapshot")
+    def knowledge_snapshot(body: dict, request: Request):
+        ident = _identity(request)
+        tenant, project = _scope(body)
+        with eng.begin() as c:
+            _registered(c, tenant, project)
+            if _tenant_of(c, ident) not in (None, tenant):
+                raise HTTPException(403, f"knowledge in tenant {tenant!r}")
+            rows = [dict(r) for r in c.execute(text(
+                "SELECT * FROM knowledge_entries WHERE tenant=:t AND project=:p"
+                " AND verified=1 ORDER BY id"),
+                {"t": tenant, "p": project}).mappings()]
+            sup = {r["supersedes_id"] for r in c.execute(
+                text("SELECT supersedes_id FROM knowledge_entries WHERE supersedes_id IS NOT NULL")
+            ).mappings()}
+            rows = [_krow(r) for r in rows if r["id"] not in sup
+                    and _can_see(r, ident, _tenant_of(c, ident))]
+        root = Path(os.environ.get("ROUVR_DATA_DIR", ".data")) / "knowledge-snapshots"
+        root.mkdir(parents=True, exist_ok=True)
+        ts = _now().replace(":", "").replace("+", "")
+        path = root / f"{tenant}-{project}-{ts}.json"
+        path.write_text(json.dumps({"tenant": tenant, "project": project,
+                                    "exported_at": _now(), "items": rows}, indent=2))
+        return {"path": str(path), "count": len(rows),
+                "citations": [r["citation"] for r in rows]}
+
+    @app.post("/v1/knowledge/store-and-close")
+    def knowledge_store_and_close(body: dict, request: Request):
+        ident = _identity(request)
+        tenant, project = _scope(body)
+        items = body.get("items") or []
+        title = str(body.get("title") or "Session close").strip() or "Session close"
+        with eng.begin() as c:
+            _registered(c, tenant, project)
+            if _tenant_of(c, ident) not in (None, tenant):
+                raise HTTPException(403, f"knowledge in tenant {tenant!r}")
+            stored = []
+            for it in items:
+                if not isinstance(it, dict):
+                    raise HTTPException(422, "each item needs kind/title/body")
+                kind, ititle = str(it.get("kind") or ""), str(it.get("title") or "").strip()
+                kbody = str(it.get("body") or "")
+                if kind not in KNOWLEDGE_KINDS or not ititle or not kbody.strip():
+                    raise HTTPException(422, "bad store item")
+                stored.append(_krow(_knowledge_insert(c, tenant, project, kind, ititle,
+                                                     kbody, ident)))
+        comp = knowledge_compact({"tenant": tenant, "project": project, "title": title},
+                                 request)
+        snap = knowledge_snapshot({"tenant": tenant, "project": project}, request)
+        return {"stored": stored, "compact": comp["snapshot"],
+                "sources": comp["sources"], "snapshot": snap}
+
+    @app.get("/v1/knowledge-rules")
+    def knowledge_verified_rules(request: Request, project: str | None = None):
+        ident = _identity(request)
+        with eng.begin() as c:
+            if ident == "supervisor":
+                mine = None
+            else:
+                try:
+                    mine = _tenant_of(c, ident)
+                except HTTPException:
+                    mine = None
+            rows = [dict(r) for r in c.execute(text(
+                "SELECT * FROM knowledge_entries WHERE kind='rule' AND verified=1"),
+                ).mappings()]
+            sup = {r["supersedes_id"] for r in c.execute(
+                text("SELECT supersedes_id FROM knowledge_entries WHERE supersedes_id IS NOT NULL")
+            ).mappings()}
+            out = []
+            for r in rows:
+                if r["id"] in sup:
+                    continue
+                if project and r["project"] != project:
+                    continue
+                if ident != "supervisor" and not _can_see(r, ident, mine):
+                    continue
+                out.append(_krow(r))
+            return {"items": out, "citations": [r["citation"] for r in out]}
+
+    @app.post("/v1/knowledge/curate")
+    def knowledge_curate(body: dict, request: Request):
+        """On-demand curator (light): suggestions only, never verifies/deletes."""
+        ident = _identity(request)
+        tenant, project = _scope(body)
+        with eng.begin() as c:
+            _registered(c, tenant, project)
+            if _tenant_of(c, ident) not in (None, tenant):
+                raise HTTPException(403, f"knowledge in tenant {tenant!r}")
+            rows = [dict(r) for r in c.execute(text(
+                "SELECT * FROM knowledge_entries WHERE tenant=:t AND project=:p"),
+                {"t": tenant, "p": project}).mappings()]
+            sup = {r["supersedes_id"] for r in rows if r.get("supersedes_id")}
+            latest = [r for r in rows if r["id"] not in sup
+                      and _can_see(r, ident, _tenant_of(c, ident))]
+        suggestions: list = []
+        seen_title: dict = {}
+        for r in latest:
+            key = re.sub(r"\W+", " ", r["title"]).strip().lower()
+            if key in seen_title:
+                suggestions.append({"type": "duplicate",
+                                    "entries": [seen_title[key], r["id"]],
+                                    "note": f"same title: {r['title']!r}",
+                                    "proposal": f"merge into knowledge:{seen_title[key]}"})
+            else:
+                seen_title[key] = r["id"]
+        for i, a in enumerate(latest):
+            for b in latest[i + 1:]:
+                ta, tb = (a["title"] + " " + a["body"]).lower(), (b["title"] + " " + b["body"]).lower()
+                if ("always" in ta and "never" in tb) or ("never" in ta and "always" in tb) \
+                        or ("must" in ta and "must not" in tb) or ("must not" in ta and "must" in tb):
+                    words = set(re.findall(r"\w+", ta)) & set(re.findall(r"\w+", tb))
+                    if len([w for w in words if len(w) > 4]) >= 2:
+                        suggestions.append({"type": "contradiction",
+                                            "entries": [a["id"], b["id"]],
+                                            "note": f"possible contradiction: {a['title']!r} vs {b['title']!r}",
+                                            "proposal": "human review, keep both until resolved"})
+        for r in latest:
+            try:
+                age = (datetime.now(timezone.utc)
+                       - datetime.fromisoformat(r["created_at"].replace("Z", "+00:00"))).days
+            except ValueError:
+                age = 0
+            if age > 90 and r["kind"] in ("note", "decision"):
+                suggestions.append({"type": "stale", "entries": [r["id"]],
+                                                "note": f"older than 90d ({age}d): {r['title']!r}",
+                                                "proposal": "confirm still valid or version it"})
+            low = (r["title"] + " " + r["body"]).lower()
+            imperative = any(w in low for w in ("must", "should", "always", "never", "require"))
+            if r["kind"] == "rule" and not imperative:
+                suggestions.append({"type": "kind_fix", "entries": [r["id"]],
+                                    "note": "rule without imperative wording",
+                                    "proposal": "change kind to note/decision as a new version"})
+            elif r["kind"] in ("note", "decision") and imperative and "standing rule" in low:
+                suggestions.append({"type": "kind_fix", "entries": [r["id"]],
+                                    "note": "looks like a standing rule",
+                                    "proposal": "change kind to rule as a new version"})
+        return {"suggestions": suggestions, "count": len(suggestions)}
 
     @app.post("/v1/tasks")
     def create_task(body: dict, request: Request):

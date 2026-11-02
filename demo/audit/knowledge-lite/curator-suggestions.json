@@ -1,0 +1,923 @@
+{
+  "suggestions": [
+    {
+      "type": "duplicate",
+      "entries": [
+        1,
+        6
+      ],
+      "note": "same title: 'Hackathon knowledge check'",
+      "proposal": "merge into knowledge:1"
+    },
+    {
+      "type": "duplicate",
+      "entries": [
+        1,
+        7
+      ],
+      "note": "same title: 'Hackathon knowledge check'",
+      "proposal": "merge into knowledge:1"
+    },
+    {
+      "type": "duplicate",
+      "entries": [
+        1,
+        113
+      ],
+      "note": "same title: 'Hackathon knowledge check'",
+      "proposal": "merge into knowledge:1"
+    },
+    {
+      "type": "duplicate",
+      "entries": [
+        1,
+        114
+      ],
+      "note": "same title: 'Hackathon knowledge check'",
+      "proposal": "merge into knowledge:1"
+    },
+    {
+      "type": "duplicate",
+      "entries": [
+        1,
+        115
+      ],
+      "note": "same title: 'Hackathon knowledge check'",
+      "proposal": "merge into knowledge:1"
+    },
+    {
+      "type": "duplicate",
+      "entries": [
+        1,
+        116
+      ],
+      "note": "same title: 'Hackathon knowledge check'",
+      "proposal": "merge into knowledge:1"
+    },
+    {
+      "type": "duplicate",
+      "entries": [
+        1,
+        117
+      ],
+      "note": "same title: 'Hackathon knowledge check'",
+      "proposal": "merge into knowledge:1"
+    },
+    {
+      "type": "duplicate",
+      "entries": [
+        1,
+        121
+      ],
+      "note": "same title: 'Hackathon knowledge check'",
+      "proposal": "merge into knowledge:1"
+    },
+    {
+      "type": "contradiction",
+      "entries": [
+        5,
+        153
+      ],
+      "note": "possible contradiction: 'Rule (proposed by agent): always cite' vs '[slice-1] Profiling interview: no form builder. The supervisor session runs the interview using'",
+      "proposal": "human review, keep both until resolved"
+    },
+    {
+      "type": "contradiction",
+      "entries": [
+        5,
+        171
+      ],
+      "note": "possible contradiction: 'Rule (proposed by agent): always cite' vs '[slice-2] D15: Separate curator agent runs on schedule (nightly default) to dedupe, compact, tag, li'",
+      "proposal": "human review, keep both until resolved"
+    },
+    {
+      "type": "contradiction",
+      "entries": [
+        5,
+        184
+      ],
+      "note": "possible contradiction: 'Rule (proposed by agent): always cite' vs '[slice-2] Visibility enforcement (D11/D12, S2): one `visible_to(principal)` predicate applied *i'",
+      "proposal": "human review, keep both until resolved"
+    },
+    {
+      "type": "contradiction",
+      "entries": [
+        124,
+        181
+      ],
+      "note": "possible contradiction: '[slice-1] D3: Roles per tenant: owner, admin, member, viewer. Bots get service identities, never a h' vs '[slice-2] Say no: no graph database, no always-on extraction pipeline rewriting what users wrote'",
+      "proposal": "human review, keep both until resolved"
+    },
+    {
+      "type": "contradiction",
+      "entries": [
+        124,
+        209
+      ],
+      "note": "possible contradiction: '[slice-1] D3: Roles per tenant: owner, admin, member, viewer. Bots get service identities, never a h' vs '[slice-3] Loop discipline partially exists. The deterministic submit gate caps judged submits at'",
+      "proposal": "human review, keep both until resolved"
+    },
+    {
+      "type": "contradiction",
+      "entries": [
+        124,
+        231
+      ],
+      "note": "possible contradiction: '[slice-1] D3: Roles per tenant: owner, admin, member, viewer. Bots get service identities, never a h' vs '[slice-3] Methodology functions as typed control-plane code, each writing evidence: `extract_fun'",
+      "proposal": "human review, keep both until resolved"
+    },
+    {
+      "type": "contradiction",
+      "entries": [
+        124,
+        236
+      ],
+      "note": "possible contradiction: '[slice-1] D3: Roles per tenant: owner, admin, member, viewer. Bots get service identities, never a h' vs '[slice-3] Review modes as prompt policy on the reviewer persona: change/refactor \u2192 Black Hat (ho'",
+      "proposal": "human review, keep both until resolved"
+    },
+    {
+      "type": "contradiction",
+      "entries": [
+        137,
+        181
+      ],
+      "note": "possible contradiction: '[slice-1] Sequence identity before OIDC, and keep OIDC thin. Google login pays off only where a' vs '[slice-2] Say no: no graph database, no always-on extraction pipeline rewriting what users wrote'",
+      "proposal": "human review, keep both until resolved"
+    },
+    {
+      "type": "contradiction",
+      "entries": [
+        137,
+        209
+      ],
+      "note": "possible contradiction: '[slice-1] Sequence identity before OIDC, and keep OIDC thin. Google login pays off only where a' vs '[slice-3] Loop discipline partially exists. The deterministic submit gate caps judged submits at'",
+      "proposal": "human review, keep both until resolved"
+    },
+    {
+      "type": "contradiction",
+      "entries": [
+        137,
+        231
+      ],
+      "note": "possible contradiction: '[slice-1] Sequence identity before OIDC, and keep OIDC thin. Google login pays off only where a' vs '[slice-3] Methodology functions as typed control-plane code, each writing evidence: `extract_fun'",
+      "proposal": "human review, keep both until resolved"
+    },
+    {
+      "type": "contradiction",
+      "entries": [
+        137,
+        236
+      ],
+      "note": "possible contradiction: '[slice-1] Sequence identity before OIDC, and keep OIDC thin. Google login pays off only where a' vs '[slice-3] Review modes as prompt policy on the reviewer persona: change/refactor \u2192 Black Hat (ho'",
+      "proposal": "human review, keep both until resolved"
+    },
+    {
+      "type": "contradiction",
+      "entries": [
+        143,
+        181
+      ],
+      "note": "possible contradiction: '[slice-1] D3: Roles owner/admin/member/viewer enforced server-side per tenant from one permission ma' vs '[slice-2] Say no: no graph database, no always-on extraction pipeline rewriting what users wrote'",
+      "proposal": "human review, keep both until resolved"
+    },
+    {
+      "type": "contradiction",
+      "entries": [
+        143,
+        209
+      ],
+      "note": "possible contradiction: '[slice-1] D3: Roles owner/admin/member/viewer enforced server-side per tenant from one permission ma' vs '[slice-3] Loop discipline partially exists. The deterministic submit gate caps judged submits at'",
+      "proposal": "human review, keep both until resolved"
+    },
+    {
+      "type": "contradiction",
+      "entries": [
+        143,
+        231
+      ],
+      "note": "possible contradiction: '[slice-1] D3: Roles owner/admin/member/viewer enforced server-side per tenant from one permission ma' vs '[slice-3] Methodology functions as typed control-plane code, each writing evidence: `extract_fun'",
+      "proposal": "human review, keep both until resolved"
+    },
+    {
+      "type": "contradiction",
+      "entries": [
+        143,
+        236
+      ],
+      "note": "possible contradiction: '[slice-1] D3: Roles owner/admin/member/viewer enforced server-side per tenant from one permission ma' vs '[slice-3] Review modes as prompt policy on the reviewer persona: change/refactor \u2192 Black Hat (ho'",
+      "proposal": "human review, keep both until resolved"
+    },
+    {
+      "type": "contradiction",
+      "entries": [
+        148,
+        181
+      ],
+      "note": "possible contradiction: '[slice-1] AuthN vs AuthZ split. A credential (OIDC session, local token, service token) authenti' vs '[slice-2] Say no: no graph database, no always-on extraction pipeline rewriting what users wrote'",
+      "proposal": "human review, keep both until resolved"
+    },
+    {
+      "type": "contradiction",
+      "entries": [
+        148,
+        209
+      ],
+      "note": "possible contradiction: '[slice-1] AuthN vs AuthZ split. A credential (OIDC session, local token, service token) authenti' vs '[slice-3] Loop discipline partially exists. The deterministic submit gate caps judged submits at'",
+      "proposal": "human review, keep both until resolved"
+    },
+    {
+      "type": "contradiction",
+      "entries": [
+        148,
+        231
+      ],
+      "note": "possible contradiction: '[slice-1] AuthN vs AuthZ split. A credential (OIDC session, local token, service token) authenti' vs '[slice-3] Methodology functions as typed control-plane code, each writing evidence: `extract_fun'",
+      "proposal": "human review, keep both until resolved"
+    },
+    {
+      "type": "contradiction",
+      "entries": [
+        148,
+        236
+      ],
+      "note": "possible contradiction: '[slice-1] AuthN vs AuthZ split. A credential (OIDC session, local token, service token) authenti' vs '[slice-3] Review modes as prompt policy on the reviewer persona: change/refactor \u2192 Black Hat (ho'",
+      "proposal": "human review, keep both until resolved"
+    },
+    {
+      "type": "contradiction",
+      "entries": [
+        150,
+        181
+      ],
+      "note": "possible contradiction: \"[slice-1] OIDC: Authlib's Starlette/FastAPI client against Google's discovery document, behind o\" vs '[slice-2] Say no: no graph database, no always-on extraction pipeline rewriting what users wrote'",
+      "proposal": "human review, keep both until resolved"
+    },
+    {
+      "type": "contradiction",
+      "entries": [
+        150,
+        209
+      ],
+      "note": "possible contradiction: \"[slice-1] OIDC: Authlib's Starlette/FastAPI client against Google's discovery document, behind o\" vs '[slice-3] Loop discipline partially exists. The deterministic submit gate caps judged submits at'",
+      "proposal": "human review, keep both until resolved"
+    },
+    {
+      "type": "contradiction",
+      "entries": [
+        150,
+        231
+      ],
+      "note": "possible contradiction: \"[slice-1] OIDC: Authlib's Starlette/FastAPI client against Google's discovery document, behind o\" vs '[slice-3] Methodology functions as typed control-plane code, each writing evidence: `extract_fun'",
+      "proposal": "human review, keep both until resolved"
+    },
+    {
+      "type": "contradiction",
+      "entries": [
+        150,
+        236
+      ],
+      "note": "possible contradiction: \"[slice-1] OIDC: Authlib's Starlette/FastAPI client against Google's discovery document, behind o\" vs '[slice-3] Review modes as prompt policy on the reviewer persona: change/refactor \u2192 Black Hat (ho'",
+      "proposal": "human review, keep both until resolved"
+    },
+    {
+      "type": "contradiction",
+      "entries": [
+        153,
+        181
+      ],
+      "note": "possible contradiction: '[slice-1] Profiling interview: no form builder. The supervisor session runs the interview using' vs '[slice-2] Say no: no graph database, no always-on extraction pipeline rewriting what users wrote'",
+      "proposal": "human review, keep both until resolved"
+    },
+    {
+      "type": "contradiction",
+      "entries": [
+        153,
+        209
+      ],
+      "note": "possible contradiction: '[slice-1] Profiling interview: no form builder. The supervisor session runs the interview using' vs '[slice-3] Loop discipline partially exists. The deterministic submit gate caps judged submits at'",
+      "proposal": "human review, keep both until resolved"
+    },
+    {
+      "type": "contradiction",
+      "entries": [
+        153,
+        231
+      ],
+      "note": "possible contradiction: '[slice-1] Profiling interview: no form builder. The supervisor session runs the interview using' vs '[slice-3] Methodology functions as typed control-plane code, each writing evidence: `extract_fun'",
+      "proposal": "human review, keep both until resolved"
+    },
+    {
+      "type": "contradiction",
+      "entries": [
+        153,
+        236
+      ],
+      "note": "possible contradiction: '[slice-1] Profiling interview: no form builder. The supervisor session runs the interview using' vs '[slice-3] Review modes as prompt policy on the reviewer persona: change/refactor \u2192 Black Hat (ho'",
+      "proposal": "human review, keep both until resolved"
+    },
+    {
+      "type": "contradiction",
+      "entries": [
+        154,
+        181
+      ],
+      "note": "possible contradiction: '[slice-1] Workers become tenant-agnostic. Remove single-scope `Settings`/API checks; scope comes' vs '[slice-2] Say no: no graph database, no always-on extraction pipeline rewriting what users wrote'",
+      "proposal": "human review, keep both until resolved"
+    },
+    {
+      "type": "contradiction",
+      "entries": [
+        154,
+        209
+      ],
+      "note": "possible contradiction: '[slice-1] Workers become tenant-agnostic. Remove single-scope `Settings`/API checks; scope comes' vs '[slice-3] Loop discipline partially exists. The deterministic submit gate caps judged submits at'",
+      "proposal": "human review, keep both until resolved"
+    },
+    {
+      "type": "contradiction",
+      "entries": [
+        154,
+        231
+      ],
+      "note": "possible contradiction: '[slice-1] Workers become tenant-agnostic. Remove single-scope `Settings`/API checks; scope comes' vs '[slice-3] Methodology functions as typed control-plane code, each writing evidence: `extract_fun'",
+      "proposal": "human review, keep both until resolved"
+    },
+    {
+      "type": "contradiction",
+      "entries": [
+        154,
+        236
+      ],
+      "note": "possible contradiction: '[slice-1] Workers become tenant-agnostic. Remove single-scope `Settings`/API checks; scope comes' vs '[slice-3] Review modes as prompt policy on the reviewer persona: change/refactor \u2192 Black Hat (ho'",
+      "proposal": "human review, keep both until resolved"
+    },
+    {
+      "type": "contradiction",
+      "entries": [
+        167,
+        181
+      ],
+      "note": "possible contradiction: '[slice-2] D11: Visibility set by creator: restricted (named users/roles), tenant-wide, or public (an' vs '[slice-2] Say no: no graph database, no always-on extraction pipeline rewriting what users wrote'",
+      "proposal": "human review, keep both until resolved"
+    },
+    {
+      "type": "contradiction",
+      "entries": [
+        167,
+        209
+      ],
+      "note": "possible contradiction: '[slice-2] D11: Visibility set by creator: restricted (named users/roles), tenant-wide, or public (an' vs '[slice-3] Loop discipline partially exists. The deterministic submit gate caps judged submits at'",
+      "proposal": "human review, keep both until resolved"
+    },
+    {
+      "type": "contradiction",
+      "entries": [
+        167,
+        231
+      ],
+      "note": "possible contradiction: '[slice-2] D11: Visibility set by creator: restricted (named users/roles), tenant-wide, or public (an' vs '[slice-3] Methodology functions as typed control-plane code, each writing evidence: `extract_fun'",
+      "proposal": "human review, keep both until resolved"
+    },
+    {
+      "type": "contradiction",
+      "entries": [
+        167,
+        236
+      ],
+      "note": "possible contradiction: '[slice-2] D11: Visibility set by creator: restricted (named users/roles), tenant-wide, or public (an' vs '[slice-3] Review modes as prompt policy on the reviewer persona: change/refactor \u2192 Black Hat (ho'",
+      "proposal": "human review, keep both until resolved"
+    },
+    {
+      "type": "contradiction",
+      "entries": [
+        168,
+        181
+      ],
+      "note": "possible contradiction: '[slice-2] D12: Rouvr and bots use knowledge via first-class tools: get, search, create, update, arch' vs '[slice-2] Say no: no graph database, no always-on extraction pipeline rewriting what users wrote'",
+      "proposal": "human review, keep both until resolved"
+    },
+    {
+      "type": "contradiction",
+      "entries": [
+        168,
+        209
+      ],
+      "note": "possible contradiction: '[slice-2] D12: Rouvr and bots use knowledge via first-class tools: get, search, create, update, arch' vs '[slice-3] Loop discipline partially exists. The deterministic submit gate caps judged submits at'",
+      "proposal": "human review, keep both until resolved"
+    },
+    {
+      "type": "contradiction",
+      "entries": [
+        168,
+        231
+      ],
+      "note": "possible contradiction: '[slice-2] D12: Rouvr and bots use knowledge via first-class tools: get, search, create, update, arch' vs '[slice-3] Methodology functions as typed control-plane code, each writing evidence: `extract_fun'",
+      "proposal": "human review, keep both until resolved"
+    },
+    {
+      "type": "contradiction",
+      "entries": [
+        168,
+        236
+      ],
+      "note": "possible contradiction: '[slice-2] D12: Rouvr and bots use knowledge via first-class tools: get, search, create, update, arch' vs '[slice-3] Review modes as prompt policy on the reviewer persona: change/refactor \u2192 Black Hat (ho'",
+      "proposal": "human review, keep both until resolved"
+    },
+    {
+      "type": "contradiction",
+      "entries": [
+        171,
+        181
+      ],
+      "note": "possible contradiction: '[slice-2] D15: Separate curator agent runs on schedule (nightly default) to dedupe, compact, tag, li' vs '[slice-2] Say no: no graph database, no always-on extraction pipeline rewriting what users wrote'",
+      "proposal": "human review, keep both until resolved"
+    },
+    {
+      "type": "contradiction",
+      "entries": [
+        171,
+        209
+      ],
+      "note": "possible contradiction: '[slice-2] D15: Separate curator agent runs on schedule (nightly default) to dedupe, compact, tag, li' vs '[slice-3] Loop discipline partially exists. The deterministic submit gate caps judged submits at'",
+      "proposal": "human review, keep both until resolved"
+    },
+    {
+      "type": "contradiction",
+      "entries": [
+        171,
+        231
+      ],
+      "note": "possible contradiction: '[slice-2] D15: Separate curator agent runs on schedule (nightly default) to dedupe, compact, tag, li' vs '[slice-3] Methodology functions as typed control-plane code, each writing evidence: `extract_fun'",
+      "proposal": "human review, keep both until resolved"
+    },
+    {
+      "type": "contradiction",
+      "entries": [
+        171,
+        236
+      ],
+      "note": "possible contradiction: '[slice-2] D15: Separate curator agent runs on schedule (nightly default) to dedupe, compact, tag, li' vs '[slice-3] Review modes as prompt policy on the reviewer persona: change/refactor \u2192 Black Hat (ho'",
+      "proposal": "human review, keep both until resolved"
+    },
+    {
+      "type": "contradiction",
+      "entries": [
+        181,
+        184
+      ],
+      "note": "possible contradiction: '[slice-2] Say no: no graph database, no always-on extraction pipeline rewriting what users wrote' vs '[slice-2] Visibility enforcement (D11/D12, S2): one `visible_to(principal)` predicate applied *i'",
+      "proposal": "human review, keep both until resolved"
+    },
+    {
+      "type": "contradiction",
+      "entries": [
+        181,
+        188
+      ],
+      "note": "possible contradiction: '[slice-2] Say no: no graph database, no always-on extraction pipeline rewriting what users wrote' vs '[slice-2] Curator (D15): a tenant-scoped service identity (Slice 1) running an Ops-style Tempora'",
+      "proposal": "human review, keep both until resolved"
+    },
+    {
+      "type": "contradiction",
+      "entries": [
+        181,
+        207
+      ],
+      "note": "possible contradiction: '[slice-2] Say no: no graph database, no always-on extraction pipeline rewriting what users wrote' vs '[slice-3] S021 already built half of B3, and production never used it. `rouvr/decompose/` has a'",
+      "proposal": "human review, keep both until resolved"
+    },
+    {
+      "type": "contradiction",
+      "entries": [
+        181,
+        216
+      ],
+      "note": "possible contradiction: '[slice-2] Say no: no graph database, no always-on extraction pipeline rewriting what users wrote' vs '[slice-3] The commercial claim is the receipt: \"admitted only after its verifier failed on basel'",
+      "proposal": "human review, keep both until resolved"
+    },
+    {
+      "type": "contradiction",
+      "entries": [
+        181,
+        217
+      ],
+      "note": "possible contradiction: '[slice-2] Say no: no graph database, no always-on extraction pipeline rewriting what users wrote' vs '[slice-3] The eval method as our S6 instrument: frozen task scenarios run with/without Decompose'",
+      "proposal": "human review, keep both until resolved"
+    },
+    {
+      "type": "contradiction",
+      "entries": [
+        181,
+        219
+      ],
+      "note": "possible contradiction: '[slice-2] Say no: no graph database, no always-on extraction pipeline rewriting what users wrote' vs '[slice-3] Verifier calibration discipline: binary, observable invariants only; LLM-judge only fo'",
+      "proposal": "human review, keep both until resolved"
+    },
+    {
+      "type": "contradiction",
+      "entries": [
+        181,
+        224
+      ],
+      "note": "possible contradiction: '[slice-2] Say no: no graph database, no always-on extraction pipeline rewriting what users wrote' vs '[slice-3] `build_succeeds{command_id: str}` \u2014 command resolved from an ExecSpec allowlist by id, nev'",
+      "proposal": "human review, keep both until resolved"
+    },
+    {
+      "type": "contradiction",
+      "entries": [
+        181,
+        231
+      ],
+      "note": "possible contradiction: '[slice-2] Say no: no graph database, no always-on extraction pipeline rewriting what users wrote' vs '[slice-3] Methodology functions as typed control-plane code, each writing evidence: `extract_fun'",
+      "proposal": "human review, keep both until resolved"
+    },
+    {
+      "type": "contradiction",
+      "entries": [
+        181,
+        233
+      ],
+      "note": "possible contradiction: '[slice-2] Say no: no graph database, no always-on extraction pipeline rewriting what users wrote' vs '[slice-3] Intake gates (before any task is pickable): DSL parses; inputs/bundles/fixtures resolv'",
+      "proposal": "human review, keep both until resolved"
+    },
+    {
+      "type": "contradiction",
+      "entries": [
+        181,
+        234
+      ],
+      "note": "possible contradiction: '[slice-2] Say no: no graph database, no always-on extraction pipeline rewriting what users wrote' vs '[slice-3] Parent/child execution (new, Lite-bounded): a parent task holds the decomposition; chi'",
+      "proposal": "human review, keep both until resolved"
+    },
+    {
+      "type": "contradiction",
+      "entries": [
+        181,
+        241
+      ],
+      "note": "possible contradiction: '[slice-2] Say no: no graph database, no always-on extraction pipeline rewriting what users wrote' vs '[slice-3] S9: intake test-suite over admitted tasks: every verifier FAIL-as-assertion 3/3 on bas'",
+      "proposal": "human review, keep both until resolved"
+    },
+    {
+      "type": "contradiction",
+      "entries": [
+        181,
+        245
+      ],
+      "note": "possible contradiction: '[slice-2] Say no: no graph database, no always-on extraction pipeline rewriting what users wrote' vs '[slice-3] Cost/latency: baseline triple-runs at intake run real pytest 3\u00d7 per child in a contain'",
+      "proposal": "human review, keep both until resolved"
+    },
+    {
+      "type": "contradiction",
+      "entries": [
+        181,
+        246
+      ],
+      "note": "possible contradiction: '[slice-2] Say no: no graph database, no always-on extraction pipeline rewriting what users wrote' vs '[slice-3] Risk: mandatory decomposition raises creation friction for trivial tasks. Mitigation:'",
+      "proposal": "human review, keep both until resolved"
+    },
+    {
+      "type": "contradiction",
+      "entries": [
+        184,
+        209
+      ],
+      "note": "possible contradiction: '[slice-2] Visibility enforcement (D11/D12, S2): one `visible_to(principal)` predicate applied *i' vs '[slice-3] Loop discipline partially exists. The deterministic submit gate caps judged submits at'",
+      "proposal": "human review, keep both until resolved"
+    },
+    {
+      "type": "contradiction",
+      "entries": [
+        184,
+        231
+      ],
+      "note": "possible contradiction: '[slice-2] Visibility enforcement (D11/D12, S2): one `visible_to(principal)` predicate applied *i' vs '[slice-3] Methodology functions as typed control-plane code, each writing evidence: `extract_fun'",
+      "proposal": "human review, keep both until resolved"
+    },
+    {
+      "type": "contradiction",
+      "entries": [
+        184,
+        236
+      ],
+      "note": "possible contradiction: '[slice-2] Visibility enforcement (D11/D12, S2): one `visible_to(principal)` predicate applied *i' vs '[slice-3] Review modes as prompt policy on the reviewer persona: change/refactor \u2192 Black Hat (ho'",
+      "proposal": "human review, keep both until resolved"
+    },
+    {
+      "type": "contradiction",
+      "entries": [
+        188,
+        209
+      ],
+      "note": "possible contradiction: '[slice-2] Curator (D15): a tenant-scoped service identity (Slice 1) running an Ops-style Tempora' vs '[slice-3] Loop discipline partially exists. The deterministic submit gate caps judged submits at'",
+      "proposal": "human review, keep both until resolved"
+    },
+    {
+      "type": "contradiction",
+      "entries": [
+        188,
+        231
+      ],
+      "note": "possible contradiction: '[slice-2] Curator (D15): a tenant-scoped service identity (Slice 1) running an Ops-style Tempora' vs '[slice-3] Methodology functions as typed control-plane code, each writing evidence: `extract_fun'",
+      "proposal": "human review, keep both until resolved"
+    },
+    {
+      "type": "contradiction",
+      "entries": [
+        188,
+        236
+      ],
+      "note": "possible contradiction: '[slice-2] Curator (D15): a tenant-scoped service identity (Slice 1) running an Ops-style Tempora' vs '[slice-3] Review modes as prompt policy on the reviewer persona: change/refactor \u2192 Black Hat (ho'",
+      "proposal": "human review, keep both until resolved"
+    },
+    {
+      "type": "contradiction",
+      "entries": [
+        207,
+        209
+      ],
+      "note": "possible contradiction: '[slice-3] S021 already built half of B3, and production never used it. `rouvr/decompose/` has a' vs '[slice-3] Loop discipline partially exists. The deterministic submit gate caps judged submits at'",
+      "proposal": "human review, keep both until resolved"
+    },
+    {
+      "type": "contradiction",
+      "entries": [
+        207,
+        231
+      ],
+      "note": "possible contradiction: '[slice-3] S021 already built half of B3, and production never used it. `rouvr/decompose/` has a' vs '[slice-3] Methodology functions as typed control-plane code, each writing evidence: `extract_fun'",
+      "proposal": "human review, keep both until resolved"
+    },
+    {
+      "type": "contradiction",
+      "entries": [
+        207,
+        236
+      ],
+      "note": "possible contradiction: '[slice-3] S021 already built half of B3, and production never used it. `rouvr/decompose/` has a' vs '[slice-3] Review modes as prompt policy on the reviewer persona: change/refactor \u2192 Black Hat (ho'",
+      "proposal": "human review, keep both until resolved"
+    },
+    {
+      "type": "contradiction",
+      "entries": [
+        209,
+        216
+      ],
+      "note": "possible contradiction: '[slice-3] Loop discipline partially exists. The deterministic submit gate caps judged submits at' vs '[slice-3] The commercial claim is the receipt: \"admitted only after its verifier failed on basel'",
+      "proposal": "human review, keep both until resolved"
+    },
+    {
+      "type": "contradiction",
+      "entries": [
+        209,
+        217
+      ],
+      "note": "possible contradiction: '[slice-3] Loop discipline partially exists. The deterministic submit gate caps judged submits at' vs '[slice-3] The eval method as our S6 instrument: frozen task scenarios run with/without Decompose'",
+      "proposal": "human review, keep both until resolved"
+    },
+    {
+      "type": "contradiction",
+      "entries": [
+        209,
+        219
+      ],
+      "note": "possible contradiction: '[slice-3] Loop discipline partially exists. The deterministic submit gate caps judged submits at' vs '[slice-3] Verifier calibration discipline: binary, observable invariants only; LLM-judge only fo'",
+      "proposal": "human review, keep both until resolved"
+    },
+    {
+      "type": "contradiction",
+      "entries": [
+        209,
+        224
+      ],
+      "note": "possible contradiction: '[slice-3] Loop discipline partially exists. The deterministic submit gate caps judged submits at' vs '[slice-3] `build_succeeds{command_id: str}` \u2014 command resolved from an ExecSpec allowlist by id, nev'",
+      "proposal": "human review, keep both until resolved"
+    },
+    {
+      "type": "contradiction",
+      "entries": [
+        209,
+        231
+      ],
+      "note": "possible contradiction: '[slice-3] Loop discipline partially exists. The deterministic submit gate caps judged submits at' vs '[slice-3] Methodology functions as typed control-plane code, each writing evidence: `extract_fun'",
+      "proposal": "human review, keep both until resolved"
+    },
+    {
+      "type": "contradiction",
+      "entries": [
+        209,
+        233
+      ],
+      "note": "possible contradiction: '[slice-3] Loop discipline partially exists. The deterministic submit gate caps judged submits at' vs '[slice-3] Intake gates (before any task is pickable): DSL parses; inputs/bundles/fixtures resolv'",
+      "proposal": "human review, keep both until resolved"
+    },
+    {
+      "type": "contradiction",
+      "entries": [
+        209,
+        234
+      ],
+      "note": "possible contradiction: '[slice-3] Loop discipline partially exists. The deterministic submit gate caps judged submits at' vs '[slice-3] Parent/child execution (new, Lite-bounded): a parent task holds the decomposition; chi'",
+      "proposal": "human review, keep both until resolved"
+    },
+    {
+      "type": "contradiction",
+      "entries": [
+        209,
+        241
+      ],
+      "note": "possible contradiction: '[slice-3] Loop discipline partially exists. The deterministic submit gate caps judged submits at' vs '[slice-3] S9: intake test-suite over admitted tasks: every verifier FAIL-as-assertion 3/3 on bas'",
+      "proposal": "human review, keep both until resolved"
+    },
+    {
+      "type": "contradiction",
+      "entries": [
+        209,
+        245
+      ],
+      "note": "possible contradiction: '[slice-3] Loop discipline partially exists. The deterministic submit gate caps judged submits at' vs '[slice-3] Cost/latency: baseline triple-runs at intake run real pytest 3\u00d7 per child in a contain'",
+      "proposal": "human review, keep both until resolved"
+    },
+    {
+      "type": "contradiction",
+      "entries": [
+        209,
+        246
+      ],
+      "note": "possible contradiction: '[slice-3] Loop discipline partially exists. The deterministic submit gate caps judged submits at' vs '[slice-3] Risk: mandatory decomposition raises creation friction for trivial tasks. Mitigation:'",
+      "proposal": "human review, keep both until resolved"
+    },
+    {
+      "type": "contradiction",
+      "entries": [
+        216,
+        231
+      ],
+      "note": "possible contradiction: '[slice-3] The commercial claim is the receipt: \"admitted only after its verifier failed on basel' vs '[slice-3] Methodology functions as typed control-plane code, each writing evidence: `extract_fun'",
+      "proposal": "human review, keep both until resolved"
+    },
+    {
+      "type": "contradiction",
+      "entries": [
+        216,
+        236
+      ],
+      "note": "possible contradiction: '[slice-3] The commercial claim is the receipt: \"admitted only after its verifier failed on basel' vs '[slice-3] Review modes as prompt policy on the reviewer persona: change/refactor \u2192 Black Hat (ho'",
+      "proposal": "human review, keep both until resolved"
+    },
+    {
+      "type": "contradiction",
+      "entries": [
+        217,
+        231
+      ],
+      "note": "possible contradiction: '[slice-3] The eval method as our S6 instrument: frozen task scenarios run with/without Decompose' vs '[slice-3] Methodology functions as typed control-plane code, each writing evidence: `extract_fun'",
+      "proposal": "human review, keep both until resolved"
+    },
+    {
+      "type": "contradiction",
+      "entries": [
+        217,
+        236
+      ],
+      "note": "possible contradiction: '[slice-3] The eval method as our S6 instrument: frozen task scenarios run with/without Decompose' vs '[slice-3] Review modes as prompt policy on the reviewer persona: change/refactor \u2192 Black Hat (ho'",
+      "proposal": "human review, keep both until resolved"
+    },
+    {
+      "type": "contradiction",
+      "entries": [
+        219,
+        231
+      ],
+      "note": "possible contradiction: '[slice-3] Verifier calibration discipline: binary, observable invariants only; LLM-judge only fo' vs '[slice-3] Methodology functions as typed control-plane code, each writing evidence: `extract_fun'",
+      "proposal": "human review, keep both until resolved"
+    },
+    {
+      "type": "contradiction",
+      "entries": [
+        219,
+        236
+      ],
+      "note": "possible contradiction: '[slice-3] Verifier calibration discipline: binary, observable invariants only; LLM-judge only fo' vs '[slice-3] Review modes as prompt policy on the reviewer persona: change/refactor \u2192 Black Hat (ho'",
+      "proposal": "human review, keep both until resolved"
+    },
+    {
+      "type": "contradiction",
+      "entries": [
+        224,
+        231
+      ],
+      "note": "possible contradiction: '[slice-3] `build_succeeds{command_id: str}` \u2014 command resolved from an ExecSpec allowlist by id, nev' vs '[slice-3] Methodology functions as typed control-plane code, each writing evidence: `extract_fun'",
+      "proposal": "human review, keep both until resolved"
+    },
+    {
+      "type": "contradiction",
+      "entries": [
+        224,
+        236
+      ],
+      "note": "possible contradiction: '[slice-3] `build_succeeds{command_id: str}` \u2014 command resolved from an ExecSpec allowlist by id, nev' vs '[slice-3] Review modes as prompt policy on the reviewer persona: change/refactor \u2192 Black Hat (ho'",
+      "proposal": "human review, keep both until resolved"
+    },
+    {
+      "type": "contradiction",
+      "entries": [
+        231,
+        233
+      ],
+      "note": "possible contradiction: '[slice-3] Methodology functions as typed control-plane code, each writing evidence: `extract_fun' vs '[slice-3] Intake gates (before any task is pickable): DSL parses; inputs/bundles/fixtures resolv'",
+      "proposal": "human review, keep both until resolved"
+    },
+    {
+      "type": "contradiction",
+      "entries": [
+        231,
+        234
+      ],
+      "note": "possible contradiction: '[slice-3] Methodology functions as typed control-plane code, each writing evidence: `extract_fun' vs '[slice-3] Parent/child execution (new, Lite-bounded): a parent task holds the decomposition; chi'",
+      "proposal": "human review, keep both until resolved"
+    },
+    {
+      "type": "contradiction",
+      "entries": [
+        231,
+        236
+      ],
+      "note": "possible contradiction: '[slice-3] Methodology functions as typed control-plane code, each writing evidence: `extract_fun' vs '[slice-3] Review modes as prompt policy on the reviewer persona: change/refactor \u2192 Black Hat (ho'",
+      "proposal": "human review, keep both until resolved"
+    },
+    {
+      "type": "contradiction",
+      "entries": [
+        231,
+        241
+      ],
+      "note": "possible contradiction: '[slice-3] Methodology functions as typed control-plane code, each writing evidence: `extract_fun' vs '[slice-3] S9: intake test-suite over admitted tasks: every verifier FAIL-as-assertion 3/3 on bas'",
+      "proposal": "human review, keep both until resolved"
+    },
+    {
+      "type": "contradiction",
+      "entries": [
+        231,
+        245
+      ],
+      "note": "possible contradiction: '[slice-3] Methodology functions as typed control-plane code, each writing evidence: `extract_fun' vs '[slice-3] Cost/latency: baseline triple-runs at intake run real pytest 3\u00d7 per child in a contain'",
+      "proposal": "human review, keep both until resolved"
+    },
+    {
+      "type": "contradiction",
+      "entries": [
+        231,
+        246
+      ],
+      "note": "possible contradiction: '[slice-3] Methodology functions as typed control-plane code, each writing evidence: `extract_fun' vs '[slice-3] Risk: mandatory decomposition raises creation friction for trivial tasks. Mitigation:'",
+      "proposal": "human review, keep both until resolved"
+    },
+    {
+      "type": "contradiction",
+      "entries": [
+        233,
+        236
+      ],
+      "note": "possible contradiction: '[slice-3] Intake gates (before any task is pickable): DSL parses; inputs/bundles/fixtures resolv' vs '[slice-3] Review modes as prompt policy on the reviewer persona: change/refactor \u2192 Black Hat (ho'",
+      "proposal": "human review, keep both until resolved"
+    },
+    {
+      "type": "contradiction",
+      "entries": [
+        234,
+        236
+      ],
+      "note": "possible contradiction: '[slice-3] Parent/child execution (new, Lite-bounded): a parent task holds the decomposition; chi' vs '[slice-3] Review modes as prompt policy on the reviewer persona: change/refactor \u2192 Black Hat (ho'",
+      "proposal": "human review, keep both until resolved"
+    },
+    {
+      "type": "contradiction",
+      "entries": [
+        236,
+        241
+      ],
+      "note": "possible contradiction: '[slice-3] Review modes as prompt policy on the reviewer persona: change/refactor \u2192 Black Hat (ho' vs '[slice-3] S9: intake test-suite over admitted tasks: every verifier FAIL-as-assertion 3/3 on bas'",
+      "proposal": "human review, keep both until resolved"
+    },
+    {
+      "type": "contradiction",
+      "entries": [
+        236,
+        245
+      ],
+      "note": "possible contradiction: '[slice-3] Review modes as prompt policy on the reviewer persona: change/refactor \u2192 Black Hat (ho' vs '[slice-3] Cost/latency: baseline triple-runs at intake run real pytest 3\u00d7 per child in a contain'",
+      "proposal": "human review, keep both until resolved"
+    },
+    {
+      "type": "contradiction",
+      "entries": [
+        236,
+        246
+      ],
+      "note": "possible contradiction: '[slice-3] Review modes as prompt policy on the reviewer persona: change/refactor \u2192 Black Hat (ho' vs '[slice-3] Risk: mandatory decomposition raises creation friction for trivial tasks. Mitigation:'",
+      "proposal": "human review, keep both until resolved"
+    }
+  ],
+  "count": 102
+}

@@ -9,6 +9,7 @@ from fastapi.testclient import TestClient
 @pytest.fixture()
 def app(tmp_path, monkeypatch):
     monkeypatch.delenv("ROUVR_LEDGER_TOKEN", raising=False)
+    monkeypatch.setenv("ROUVR_INSECURE_DEV", "1")
     from ledger.app import make_app
     return make_app(f"sqlite:///{tmp_path}/t.db")
 

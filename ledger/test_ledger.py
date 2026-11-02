@@ -6,6 +6,9 @@ _SCOPE = {"tenant": "acme", "project": "site"}
 
 
 def _client(tmp_path):
+    import os
+    os.environ["ROUVR_INSECURE_DEV"] = "1"
+    os.environ.pop("ROUVR_LEDGER_TOKEN", None)
     c = TestClient(make_app(f"sqlite:///{tmp_path}/l.db"))
     c.post("/v1/tenants", json={"tenant": "acme"})
     c.post("/v1/projects", json={"tenant": "acme", "project": "site"})

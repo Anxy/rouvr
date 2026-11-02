@@ -99,6 +99,33 @@ CREATE TABLE IF NOT EXISTS attempts (
   created_at  TEXT NOT NULL,
   UNIQUE (task_id, attempt_no)
 );
+-- Knowledge Lite (hackathon cut): append-only versioned project memory.
+-- Update inserts a new row whose supersedes_id points at the prior version.
+-- Nothing is ever updated in place except the verified flag (confirm event).
+CREATE TABLE IF NOT EXISTS knowledge_entries (
+  id            INTEGER PRIMARY KEY,
+  tenant        TEXT NOT NULL,
+  project       TEXT NOT NULL,
+  kind          TEXT NOT NULL,  -- user_profile|project_profile|note|decision|rule|snapshot
+  title         TEXT NOT NULL,
+  body          TEXT NOT NULL,
+  version       INTEGER NOT NULL DEFAULT 1,
+  supersedes_id INTEGER REFERENCES knowledge_entries(id),
+  verified      INTEGER NOT NULL DEFAULT 0,
+  author        TEXT NOT NULL,
+  visibility    TEXT NOT NULL DEFAULT 'company',  -- restricted|company|public
+  allowed_users TEXT NOT NULL DEFAULT '[]',  -- JSON list, restricted members
+  created_at    TEXT NOT NULL,
+  FOREIGN KEY (tenant, project) REFERENCES projects(tenant, project)
+);
+CREATE VIRTUAL TABLE IF NOT EXISTS knowledge_fts USING fts5(title, body);
+CREATE TABLE IF NOT EXISTS external_identities (
+  provider TEXT NOT NULL,
+  subject  TEXT NOT NULL,
+  username TEXT NOT NULL REFERENCES users(username),
+  created_at TEXT NOT NULL,
+  PRIMARY KEY (provider, subject)
+);
 CREATE TABLE IF NOT EXISTS results (
   id          INTEGER PRIMARY KEY,
   task_id     INTEGER NOT NULL REFERENCES tasks(id),

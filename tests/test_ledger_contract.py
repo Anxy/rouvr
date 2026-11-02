@@ -22,6 +22,9 @@ LIVE = os.environ.get("ROUVR_CONTRACT_LIVE") == "1"
 @pytest.fixture(params=["ledger"] + (["stage"] if LIVE else []))
 async def backend(request, tmp_path: Path):
     if request.param == "ledger":
+        import os
+        os.environ["ROUVR_INSECURE_DEV"] = "1"
+        os.environ.pop("ROUVR_LEDGER_TOKEN", None)
         from ledger.app import make_app
         app = make_app(f"sqlite:///{tmp_path}/ledger.db")
         wh = LedgerWorkHub("http://ledger", transport=httpx.ASGITransport(app=app))

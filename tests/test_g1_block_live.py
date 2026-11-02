@@ -24,10 +24,13 @@ from rouvr.workhub.ledger import LedgerWorkHub
 
 @pytest.fixture(scope="module")
 def live_ledger(tmp_path_factory):
+    import os
     import threading
 
     import uvicorn
 
+    os.environ["ROUVR_INSECURE_DEV"] = "1"
+    os.environ.pop("ROUVR_LEDGER_TOKEN", None)
     from ledger.app import make_app
 
     db = tmp_path_factory.mktemp("g1ledger") / "g1.db"

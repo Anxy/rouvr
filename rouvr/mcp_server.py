@@ -102,6 +102,120 @@ def workhub_create_project(tenant: str, project: str) -> dict:
 
 
 @mcp.tool()
+def knowledge_create(tenant: str, project: str, kind: str, title: str, body: str,
+                     visibility: str = "company", allowed_users: list[str] | None = None) -> dict:
+    """Store a Knowledge Lite entry (append-only; kinds: user_profile,
+    project_profile, note, decision, rule, snapshot). Visibility is
+    restricted|company|public (default company); the creator sets it.
+    Agent-written entries start unverified until a human confirms them."""
+    with _ledger() as c:
+        return c.post("/v1/knowledge", json={"tenant": tenant, "project": project,
+                                             "kind": kind, "title": title, "body": body,
+                                             "visibility": visibility,
+                                             "allowed_users": allowed_users or []}
+                      ).raise_for_status().json()
+
+
+@mcp.tool()
+def knowledge_search(query: str, project: str = "") -> dict:
+    """Search Knowledge Lite (latest versions only). Every hit carries its
+    citation (knowledge:<id>@v<n>) and verified flag — cite the citation
+    when you use a hit, and never treat an unverified rule as binding."""
+    params: dict = {"q": query}
+    if project:
+        params["project"] = project
+    with _ledger() as c:
+        return c.get("/v1/knowledge/search", params=params).raise_for_status().json()
+
+
+@mcp.tool()
+def knowledge_get(entry_id: int) -> dict:
+    """Fetch one Knowledge Lite entry by id."""
+    with _ledger() as c:
+        return c.get(f"/v1/knowledge/{entry_id}").raise_for_status().json()
+
+
+@mcp.tool()
+def knowledge_history(entry_id: int) -> dict:
+    """Version chain for one Knowledge entry, oldest first. Cite the
+    version you use (knowledge:<id>@v<n>)."""
+    with _ledger() as c:
+        return c.get(f"/v1/knowledge/{entry_id}/history").raise_for_status().json()
+
+
+@mcp.tool()
+def knowledge_update(entry_id: int, title: str, body: str, visibility: str | None = None,
+                     allowed_users: list[str] | None = None) -> dict:
+    """Revise a Knowledge Lite entry: appends a new version superseding
+    entry_id (history is kept; search returns the latest). Only the creator
+    or an admin changes visibility (as a new version). The new version
+    starts unverified."""
+    payload: dict = {"title": title, "body": body}
+    if visibility is not None:
+        payload["visibility"] = visibility
+    if allowed_users is not None:
+        payload["allowed_users"] = allowed_users
+    with _ledger() as c:
+        return c.post(f"/v1/knowledge/{entry_id}/versions",
+                      json=payload).raise_for_status().json()
+
+
+@mcp.tool()
+def knowledge_confirm(entry_id: int) -> dict:
+    """Mark a Knowledge Lite entry verified. Use only for content a human
+    has confirmed — verified rules are the binding ones."""
+    with _ledger() as c:
+        return c.post(f"/v1/knowledge/{entry_id}/confirm",
+                      json={}).raise_for_status().json()
+
+
+@mcp.tool()
+def knowledge_store(tenant: str, project: str, items: list[dict]) -> dict:
+    """Save the current session's decisions/findings as entries."""
+    with _ledger() as c:
+        return c.post("/v1/knowledge/store",
+                      json={"tenant": tenant, "project": project, "items": items}
+                      ).raise_for_status().json()
+
+
+@mcp.tool()
+def knowledge_compact(tenant: str, project: str, title: str = "Session compact") -> dict:
+    """Summarise a project's verified entries into one new snapshot entry
+    that cites its sources."""
+    with _ledger() as c:
+        return c.post("/v1/knowledge/compact",
+                      json={"tenant": tenant, "project": project, "title": title}
+                      ).raise_for_status().json()
+
+
+@mcp.tool()
+def knowledge_snapshot(tenant: str, project: str) -> dict:
+    """Point-in-time export of a project's latest verified entries to a file."""
+    with _ledger() as c:
+        return c.post("/v1/knowledge/snapshot",
+                      json={"tenant": tenant, "project": project}).raise_for_status().json()
+
+
+@mcp.tool()
+def knowledge_store_and_close(tenant: str, project: str, items: list[dict] | None = None,
+                              title: str = "Session close") -> dict:
+    """Store items, then compact and snapshot in one call."""
+    with _ledger() as c:
+        return c.post("/v1/knowledge/store-and-close",
+                      json={"tenant": tenant, "project": project,
+                            "items": items or [], "title": title}).raise_for_status().json()
+
+
+@mcp.tool()
+def knowledge_curate(tenant: str, project: str) -> dict:
+    """On-demand curator: flag duplicates, contradictions and stale entries,
+    propose merges and kind fixes as suggestions only. Never verifies or deletes."""
+    with _ledger() as c:
+        return c.post("/v1/knowledge/curate",
+                      json={"tenant": tenant, "project": project}).raise_for_status().json()
+
+
+@mcp.tool()
 def workhub_create_task(title: str, description: str, acceptance_criteria: list[str],
                         tenant: str, project: str) -> dict:
     """Create a WorkHub task plus its contract. Returns the task (task_number = id).
@@ -139,6 +253,16 @@ def workhub_create_task(title: str, description: str, acceptance_criteria: list[
         c.post(f"/v1/tasks/{task['id']}/evidence",
                json={"kind": "decomposition", "fence": f"{task['id']}:decompose",
                      "body": decomposition}).raise_for_status()
+        rules = _verified_rules(tenant, project)
+        kc = {"citations": [r["citation"] for r in rules],
+              "rules": [{"citation": r["citation"], "version": r["version"],
+                         "title": r["title"]} for r in rules]}
+        c.post(f"/v1/tasks/{task['id']}/evidence",
+               json={"kind": "knowledge_citations", "fence": f"{task['id']}:knowledge",
+                     "body": kc}).raise_for_status()
+        if kc["citations"]:
+            task["knowledge_citations"] = kc["citations"]
+            task["knowledge_rules"] = kc["rules"]
     root = Path(os.environ.get("HIDDEN_TESTS_ROOT", "/srv/rouvr/hidden-tests"))
     if files:
         try:
@@ -147,6 +271,26 @@ def workhub_create_task(title: str, description: str, acceptance_criteria: list[
             if "locked" not in str(e).lower():
                 raise
     return task
+
+
+def _verified_rules(tenant: str, project: str) -> list[dict]:
+    """Context bundle: latest verified rules for a project (coder/reviewer)."""
+    try:
+        with _ledger() as c:
+            items = c.get("/v1/knowledge-rules", params={"project": project}
+                          ).raise_for_status().json().get("items", [])
+    except Exception:
+        return []
+    return [e for e in items if e.get("tenant") == tenant]
+
+
+def knowledge_context_bundle(tenant: str, project: str) -> dict:
+    """Coder/reviewer bundle: verified rules with citations in force."""
+    rules = _verified_rules(tenant, project)
+    return {"tenant": tenant, "project": project,
+            "rules": [{"citation": r["citation"], "title": r["title"], "body": r["body"],
+                       "version": r["version"]} for r in rules],
+            "citations": [r["citation"] for r in rules]}
 
 
 def _decompose_brief(title: str, description: str, criteria: list[str]) -> dict:
@@ -241,6 +385,12 @@ _PROGRESS = {"credential_request": "awaiting_git_credential",
 
 
 @mcp.tool()
+def knowledge_context_bundle_tool(tenant: str, project: str) -> dict:
+    """Coder/reviewer context bundle: verified rules with citations in force."""
+    return knowledge_context_bundle(tenant, project)
+
+
+@mcp.tool()
 def workhub_show_task(task_id: int) -> dict:
     """Show one task: state, contracts, evidence, attempts, results.
     Poll this: `state` moves open -> claimed -> needs_review -> done/blocked,
@@ -268,10 +418,20 @@ def workhub_show_task(task_id: int) -> dict:
                     ).total_seconds()
     except ValueError:
         _elapsed = -1
+    kc: list = []
+    for e in task.get("evidence") or []:
+        b = e.get("body") if isinstance(e.get("body"), dict) else {}
+        if e.get("kind") == "knowledge_citations" and isinstance(b.get("citations"), list):
+            kc.extend([x for x in b["citations"] if isinstance(x, str)])
+        for key in ("knowledge_citation", "citation", "rule"):
+            v = b.get(key) if isinstance(b, dict) else None
+            if isinstance(v, str) and v.startswith("knowledge:"):
+                kc.append(v)
     task["summary"] = {"elapsed_s": int(_elapsed) if _elapsed >= 0 else None,
                        "windows": kinds.count("peer_session"),
                        "submits": kinds.count("submit_attempt"),
-                       "messages": kinds.count("agent_message")}
+                       "messages": kinds.count("agent_message"),
+                       "knowledge_citations": sorted(set(kc))}
     task["progress"] = (task.get("state") if task.get("state") in ("done", "blocked")
                         else next((_PROGRESS[k] for k in reversed(kinds) if k in _PROGRESS), "queued"))
     return _annotate(task)
@@ -529,13 +689,26 @@ async def rouvr_schedule_ops(run_key: str, instruction: str, tenant: str, projec
 
 
 def _mcp_http_auth() -> str:
-    """Token guard for the HTTP transport. Returns the token, or "" when
-    explicitly anonymous. Refuses to serve an open port otherwise."""
+    """Token guard for the HTTP transport. Returns the token, or "" only on
+    explicit ROUVR_INSECURE_DEV=1 (loud warning, refused on public bind).
+    Refuses to serve an open port otherwise."""
+    import sys as _sys
     token = os.environ.get("ROUVR_LEDGER_TOKEN", "")
-    if token or os.environ.get("ROUVR_ALLOW_ANON") == "1":
+    insecure = os.environ.get("ROUVR_INSECURE_DEV", "") == "1" or \
+        os.environ.get("ROUVR_ALLOW_ANON", "") == "1"
+    if token:
         return token
+    if insecure:
+        host = os.environ.get("ROUVR_BIND_HOST",
+                              os.environ.get("ROUVR_MCP_HOST", "127.0.0.1"))
+        if host.strip() in ("", "*", "0.0.0.0", "::") or host.strip().startswith("0."):
+            raise RuntimeError("ROUVR_INSECURE_DEV=1 refused with public bind: "
+                               "bind 127.0.0.1 for local dev")
+        print("WARNING: ROUVR_INSECURE_DEV=1 serving MCP without a token "
+              "(local dev only)", file=_sys.stderr)
+        return ""
     raise RuntimeError("ROUVR_LEDGER_TOKEN is unset: refusing an open MCP port "
-                       "(set the token, or explicit ROUVR_ALLOW_ANON=1)")
+                       "(set the token, or explicit ROUVR_INSECURE_DEV=1)")
 
 
 if __name__ == "__main__":

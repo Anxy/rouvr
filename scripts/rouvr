@@ -142,11 +142,32 @@ asyncio.run(Client.connect('127.0.0.1:7233', namespace='default'))" 2>/dev/null 
   if curl -sf http://127.0.0.1:8221/health >/dev/null 2>&1; then
     _pid_alive ledger || _adopt ledger 'ledger[.]app' || { echo "[rouvr] ERROR: port 8221 answered by a foreign process (not this checkout $ROOT); aborting up" >&2; exit 1; }
   else
-    _start ledger "$OPS/logs/ledger.log" env ROUVR_LEDGER_DATABASE_URL="sqlite:///$OPS/ledger.db" .venv/bin/python -c "
+    # Tenant-admin credentials for hyeve-auth onboarding (0600, git-ignored).
+    # Passed only to the ledger process env; workers/MCP never receive them.
+    _hyeve_admin_env=(
+      "HYEVE_AUTH_BASE_URL=${HYEVE_AUTH_BASE_URL:-https://auth.betademo.net}"
+      "HYEVE_AUTH_TENANT=${HYEVE_AUTH_TENANT:-rouvr-demo}"
+    )
+    if [ -f "$ROOT/.secrets/rouvr/hyeve-admin.env" ]; then
+      # Source shell-quoted values, then pass only these two variables to the
+      # ledger. Command substitution preserves quote characters literally and
+      # corrupts credentials containing shell punctuation.
+      # shellcheck disable=SC1091
+      source "$ROOT/.secrets/rouvr/hyeve-admin.env"
+      : "${HYEVE_ADMIN_USERNAME:?missing HYEVE_ADMIN_USERNAME}"
+      : "${HYEVE_ADMIN_PASSWORD:?missing HYEVE_ADMIN_PASSWORD}"
+      _hyeve_admin_env=(
+        "${_hyeve_admin_env[@]}"
+        "HYEVE_ADMIN_USERNAME=$HYEVE_ADMIN_USERNAME"
+        "HYEVE_ADMIN_PASSWORD=$HYEVE_ADMIN_PASSWORD"
+      )
+    fi
+    _start ledger "$OPS/logs/ledger.log" env "${_hyeve_admin_env[@]}" ROUVR_LEDGER_DATABASE_URL="sqlite:///$OPS/ledger.db" .venv/bin/python -c "
 from ledger.app import make_app
 import os, uvicorn
 uvicorn.run(make_app(os.environ['ROUVR_LEDGER_DATABASE_URL']), host='127.0.0.1', port=8221, log_level='warning')
 "
+    unset HYEVE_ADMIN_USERNAME HYEVE_ADMIN_PASSWORD
     for _ in $(seq 1 10); do curl -sf http://127.0.0.1:8221/health >/dev/null 2>&1 && break; sleep 1; done
     curl -sf http://127.0.0.1:8221/health >/dev/null 2>&1 || { echo "[rouvr] ERROR: ledger did not answer /health; aborting up (see $OPS/logs/ledger.log)" >&2; exit 1; }
   fi

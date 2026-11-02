@@ -8,7 +8,10 @@ import uvicorn
 
 
 @pytest.fixture(scope="module")
-def ledger_url(tmp_path_factory):
+def ledger_url(tmp_path_factory, monkeypatch_factory=None):
+    import os
+    os.environ["ROUVR_INSECURE_DEV"] = "1"
+    os.environ.pop("ROUVR_LEDGER_TOKEN", None)
     from ledger.app import make_app
     db = tmp_path_factory.mktemp("mcpledger") / "l.db"
     config = uvicorn.Config(make_app(f"sqlite:///{db}"), host="127.0.0.1", port=18221,
@@ -30,8 +33,13 @@ def ledger_url(tmp_path_factory):
 async def test_mcp_tools_registered():
     from rouvr.mcp_server import mcp
     names = [t.name for t in await mcp.list_tools()]
-    assert names == ["workhub_create_tenant", "workhub_create_project", "workhub_create_task",
-                     "workhub_list_tasks",
+    assert names == ["workhub_create_tenant", "workhub_create_project",
+                     "knowledge_create", "knowledge_search", "knowledge_get",
+                     "knowledge_history", "knowledge_update", "knowledge_confirm",
+                     "knowledge_store", "knowledge_compact", "knowledge_snapshot",
+                     "knowledge_store_and_close", "knowledge_curate",
+                     "workhub_create_task", "workhub_list_tasks",
+                     "knowledge_context_bundle_tool",
                      "workhub_show_task", "workhub_post_message",
                      "workhub_read_messages", "workhub_peer_sessions",
                      "workhub_message_agent", "workhub_agent_windows",
@@ -301,14 +309,16 @@ def test_waiting_lists_escalation_reason_from_json_string_body(monkeypatch, ledg
 
 
 def test_mcp_http_auth_gate(monkeypatch):
-    """F2b: no token, no serve — unless explicitly anonymous."""
+    """F2b: no token, no serve — unless explicit ROUVR_INSECURE_DEV=1."""
     import rouvr.mcp_server as ms
     monkeypatch.setenv("ROUVR_LEDGER_TOKEN", "tok")
+    monkeypatch.delenv("ROUVR_INSECURE_DEV", raising=False)
     monkeypatch.delenv("ROUVR_ALLOW_ANON", raising=False)
     assert ms._mcp_http_auth() == "tok"
     monkeypatch.delenv("ROUVR_LEDGER_TOKEN", raising=False)
-    monkeypatch.setenv("ROUVR_ALLOW_ANON", "1")
+    monkeypatch.setenv("ROUVR_INSECURE_DEV", "1")
     assert ms._mcp_http_auth() == ""
+    monkeypatch.delenv("ROUVR_INSECURE_DEV", raising=False)
     monkeypatch.delenv("ROUVR_ALLOW_ANON", raising=False)
     with pytest.raises(RuntimeError, match="ROUVR_LEDGER_TOKEN"):
         ms._mcp_http_auth()

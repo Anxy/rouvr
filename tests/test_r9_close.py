@@ -99,6 +99,46 @@ async def test_close_no_legal_hop_fails():
     assert e.value.code is Code.EVIDENCE
 
 
+class ReplayLedgerWH:
+    """Mimics the ledger transition endpoint: a seen idempotency key replays
+    without changing state; only a fresh key applies the transition."""
+
+    def __init__(self):
+        from rouvr.ids import idempotency_key as _k
+        self._k = _k
+        self.state = {"record_version": 1, "status": "claimed"}
+        self.used = set()
+
+    async def get_task(self, tid):
+        return dict(self.state)
+
+    async def transition_batch(self, items, key_parts):
+        for i, it in enumerate(items):
+            key = self._k("transition", *key_parts, i)
+            if key in self.used:
+                continue  # replay: ledger returns the old receipt, state untouched
+            self.used.add(key)
+            self.state = {"record_version": self.state["record_version"] + 1,
+                          "status": it["status"]}
+        return {}
+
+
+async def test_mark_blocked_same_reason_across_runs_converges(monkeypatch):
+    import temporalio.activity as _act
+    from rouvr.contracts import TaskWorkflowInput
+    wh = ReplayLedgerWH()
+    acts = Activities(SimpleNamespace(workhub_for=lambda p: wh))
+    wf = TaskWorkflowInput("t", "p", "task1", "3", "dev")
+    # Six same-reason blocks (the hop limit) must not poison the seventh:
+    # each workflow run keys its hops with its own run id.
+    for n in range(7):
+        monkeypatch.setattr(_act, "info",
+                            lambda n=n: SimpleNamespace(workflow_run_id=f"run-{n}"))
+        wh.state = {"record_version": n + 1, "status": "claimed"}  # supervisor reopened
+        r = await acts.mark_blocked(wf, "E_DOWNSTREAM")
+        assert r.final_state == "blocked"
+
+
 class EscalateWH:
     def __init__(self):
         self.rows = []

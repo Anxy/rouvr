@@ -433,7 +433,15 @@ class Activities:
     @activity.defn(name="mark_blocked")
     @_wrap
     async def mark_blocked(self, wf: TaskWorkflowInput, reason: str) -> CloseResult:
-        return await self._close_to(wf.task_id, "blocked", reason, ("block", wf.task_id, reason))
+        # Per-execution uniqueness: hop keys are idempotency keys, and the
+        # ledger replays seen keys without changing state. Without the run
+        # id, six same-reason blocks consume hops 0-5 and every later block
+        # with that reason replays all six and never converges (observed
+        # live: E_DOWNSTREAM blocks 7+ failed permanently). Activity retries
+        # within the run share the run id, so retry-safety is preserved.
+        run_id = activity.info().workflow_run_id
+        return await self._close_to(wf.task_id, "blocked", reason,
+                                    ("block", wf.task_id, reason, run_id))
 
     @activity.defn(name="escalate")
     @_wrap

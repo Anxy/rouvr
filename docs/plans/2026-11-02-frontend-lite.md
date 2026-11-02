@@ -115,10 +115,15 @@ demoable milestone.
   task state + transitions. Ledger vocabulary is used, not lane vocabulary:
   queued=open, running=claimed, needs review=needs_review. There is NO
   "changes required" ledger state (request_changes loops to the coder per the
-  S018 slice-entity decision) — review feedback surfaces as reviewer-note
-  cards + timeline entries, not a column. Output: board with SSE updates.
-  Pass: transition round-trips (`ledger/test_ledger.py` semantics). Deps: C1.
-  Effort: 2d.
+  S018 slice-entity decision) — instead the board derives a "changes
+  requested" badge from events: latest `review.note` with
+  verdict=request_changes and a newer attempt started (the rework loop
+  `rouvr/workflows.py:60-67` feeds reviewer feedback into the coder's next
+  prompt as `rework_notes`, `rouvr/activities.py:156`,
+  `rouvr/muse.py:401-402`, so the coder always sees what/why). Review
+  feedback also surfaces as reviewer-note cards + timeline entries, not a
+  column. Output: board with SSE updates. Pass: transition round-trips
+  (`ledger/test_ledger.py` semantics). Deps: C1. Effort: 2d.
 - **D2 Task article page** (§3): ask → pass criteria → live timeline → PR →
   tests → reviewer notes → knowledge citations → signed receipt + Verify
   button. Receipts are HMAC (`rouvr/receipts.py`, server-side key), so the
@@ -126,10 +131,16 @@ demoable milestone.
   in-browser WebCrypto verification is NOT possible without exposing the key
   (asymmetric receipt signing is LATER). Output: page. Pass: tampered receipt
   fails verification visibly. Deps: D1. Effort: 2–3d.
-- **D3 Escalations inbox** (approve / retry / grant). Wraps `/v1/grants/*` +
-  transitions. Output: inbox. Pass: approve/retry/grant each move a task
-  observably. Deps: D1. Effort: 1–2d. (LATER: anything beyond these three
-  actions.)
+- **D3 Escalations inbox** (approve / retry / grant / request changes).
+  Wraps `/v1/grants/*` + transitions. "Request changes" is the supervisor-
+  reject path: post the feedback as a review-note evidence entry, then
+  transition `needs_review → claimed` — the rework loop picks the task up
+  with the notes in the coder's next prompt (same mechanism as reviewer
+  request_changes). Note `done` is terminal in the ledger, so rejection only
+  applies pre-close. Output: inbox. Pass: approve/retry/grant each move a
+  task observably; a requested change re-appears verbatim in the coder's
+  next prompt (assert in test, not by eye). Deps: D1. Effort: 1–2d. (LATER:
+  anything beyond these four actions.)
 
 ### Slice E — Knowledge, admin, profile (can parallelize after C1)
 - **E1 Knowledge UI**: browse/search/versions/visibility/verify + curator
@@ -245,19 +256,22 @@ SSE event types (all from the outbox; UI motion binds 1:1, C3):
 
 ## 5. Owner steps (values needed, no secrets)
 
-1. **hyeve-auth-service as IdP**: register Rouvr Lite as a relying service —
-   need `HYEVE_AUTH_BASE_URL` (e.g. `https://auth.<domain>`),
-   `HYEVE_AUTH_TENANT` (e.g. `rouvr-demo`), and JWKS URL
-   `<base>/v1/auth/jwks.json` reachable from Lite. Verify:
+Demo runs on pre-provisioned identities — no registration is opened up, so
+steps 1–2 are DEFERRED until real onboarding, and step 3 is SKIPPED (nothing
+needed from the owner): person provisioning only matters if the demo should
+show hyeve person profiles, otherwise the local user/project profiles carry
+everything the UI needs.
+1. **hyeve-auth-service as IdP** (DEFERRED for demo): register Rouvr Lite as
+   a relying service — need `HYEVE_AUTH_BASE_URL` (e.g.
+   `https://auth.<domain>`), `HYEVE_AUTH_TENANT` (e.g. `rouvr-demo`), and
+   JWKS URL `<base>/v1/auth/jwks.json` reachable from Lite. Verify:
    `curl <base>/v1/auth/jwks.json` returns keys. No social/SSO setup.
-2. **Person provisioning (if wanted)**: `HYEVE_PERSON_BASE_URL` +
-   `HYEVE_PERSON_PATH` (default `/v1/persons`); service token stored
-   server-side only.
+2. **DNS/TLS for login** (DEFERRED for demo alongside step 1):
+   `auth.<domain>` and `<lite-host>` with valid certs before B1 testing.
+   Demo sign-in uses the provisioned identities against the existing stack.
 3. **Lite host env**: `ROUVR_LEDGER_DATABASE_URL=sqlite:///./ledger/ledger.db`,
    session secret (32+ bytes, server-only), `SITE_URL=https://<lite-host>`
    for callbacks. Single-machine deploy; no Redis/Postgres.
-4. **DNS/TLS**: `auth.<domain>` and `<lite-host>` with valid certs before B1
-   testing.
 
 ## 6. Risks and open questions
 

@@ -10,6 +10,7 @@
 ## 2. Roadmap status
 - DONE (committed): rev3 audit fixes; tasks 21-23, 30-34, 38-42 rounds with summaries in `demo/rehearsal/2026-11-01/liveproof/`; t2 profile 486s→29s (20s heartbeat on ops activities); scanner/leak/naming fixes + regression tests; author timeout 300s; storage migration; RUNBOOK (CI scope, timings, data location).
 - NEXT (awaiting Ankur): frontend + API brief, Knowledge Lite planning.
+- PLANNING (2026-11-01, WIP, not approved for build): roadmap slices stored in `docs/plans/` — Slice 1 Identity & Tenancy + Projects (D1–D8, sprints S024–S030), Slice 2 Knowledge Lite (D9–D20, S031–S038, R1 owner decision pending at S031 gate), Slice 3 Task Creation Methodology Lite (B1–B5, S039–S046; key finding: S021 decomposer skipped 21/21 live tasks — string-form verifiers refused, best-effort catch; benchmark corpus + revision-unit confirmation owed by owner).
 - CLOSED/FROZEN: request_changes hunt (see findings); no more proof rounds unless Ankur asks; rename/off-path drift.
 
 ## 3. Key findings

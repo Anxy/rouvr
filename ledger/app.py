@@ -9,10 +9,12 @@ both scope fields are mandatory on every create, never defaulted.
 """
 from __future__ import annotations
 
+import contextlib
 import hashlib
 import json
 import os
 import re
+import threading
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
@@ -20,7 +22,7 @@ import secrets as _secrets
 
 from fastapi import FastAPI, HTTPException, Request
 from rapidfuzz import fuzz
-from sqlalchemy import create_engine, text
+from sqlalchemy import create_engine, event, text
 
 try:
     from ledger import hyeve_auth as _ha
@@ -36,6 +38,71 @@ TRANSITIONS = {
     "failed": {"open"},
     "done": set(),
 }
+
+SQLITE_BUSY_TIMEOUT_MS = 5000
+
+# Single-writer discipline (FL-A5): one writer queue per database file,
+# shared by the API and every in-process worker. SQLite admits a single
+# writer; concurrent eng.begin() blocks serialize here instead of racing
+# into "database is locked". Keyed by resolved file so two app instances
+# over the same DB share the lock.
+_WRITE_LOCKS: dict[str, threading.RLock] = {}
+_WRITE_LOCKS_GUARD = threading.Lock()
+
+
+def _db_key(db_url: str) -> str:
+    if db_url.startswith("sqlite:///"):
+        path = db_url[len("sqlite:///"):]
+        if path not in ("", ":memory:"):
+            try:
+                return "sqlite:" + str(Path(path).resolve())
+            except OSError:
+                return db_url
+    return db_url
+
+
+def _write_lock(db_url: str) -> threading.RLock:
+    key = _db_key(db_url)
+    with _WRITE_LOCKS_GUARD:
+        lock = _WRITE_LOCKS.get(key)
+        if lock is None:
+            lock = _WRITE_LOCKS[key] = threading.RLock()
+        return lock
+
+
+def _configure_sqlite(eng) -> None:
+    """WAL + busy_timeout on every connection (FL-A5).
+
+    busy_timeout is per-connection, so it is set on connect: a one-shot
+    PRAGMA on a single pooled connection would not cover the pool.
+    """
+
+    @event.listens_for(eng, "connect")
+    def _pragmas(dbapi_conn, _record) -> None:
+        cur = dbapi_conn.cursor()
+        try:
+            cur.execute("PRAGMA journal_mode=WAL")
+            cur.execute(f"PRAGMA busy_timeout={SQLITE_BUSY_TIMEOUT_MS:d}")
+        finally:
+            cur.close()
+
+
+def _serialize_writes(eng, db_url: str) -> None:
+    """Route every eng.begin() through the per-DB writer lock (FL-A5).
+
+    All ledger mutations go through eng.begin(); reads via eng.connect()
+    stay unlocked (WAL readers never block the writer). No handler nests
+    eng.begin(), so the single lock cannot deadlock.
+    """
+    lock, real_begin = _write_lock(db_url), eng.begin
+
+    @contextlib.contextmanager
+    def _serialized_begin():
+        with lock:
+            with real_begin() as conn:
+                yield conn
+
+    eng.begin = _serialized_begin  # type: ignore[method-assign]
 
 
 def _now() -> str:
@@ -240,8 +307,10 @@ def make_app(db_url: str = DB_URL) -> FastAPI:
     if db_url.startswith("sqlite:///./"):
         Path(db_url[len("sqlite:///"):]).parent.mkdir(parents=True, exist_ok=True)
     eng = create_engine(db_url)
-    if db_url.startswith("sqlite"):  # S014: WAL — parallel workers write evidence
-        with eng.connect() as c:
+    if db_url.startswith("sqlite"):
+        _configure_sqlite(eng)  # FL-A5: WAL + busy_timeout on every connection
+        _serialize_writes(eng, db_url)  # FL-A5: single writer queue per DB
+        with eng.connect() as c:  # S014: WAL — parallel workers write evidence
             c.execute(text("PRAGMA journal_mode=WAL"))
             c.commit()
     with eng.begin() as c:
@@ -250,6 +319,7 @@ def make_app(db_url: str = DB_URL) -> FastAPI:
             if body.strip():
                 c.execute(text(body))
     app = FastAPI(title="Rouvr ledger")
+    app.state.engine = eng  # FL-A5: contention test asserts pragmas here
 
     # Add created_by to pre-S016 databases (schema.sql covers fresh ones
     # only via CREATE TABLE; existing tables need the column explicitly).

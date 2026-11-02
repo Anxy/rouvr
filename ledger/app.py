@@ -887,10 +887,17 @@ def make_app(db_url: str = DB_URL) -> FastAPI:
                     raise HTTPException(422, "each item needs kind/title/body")
                 kind, ititle = str(it.get("kind") or ""), str(it.get("title") or "").strip()
                 kbody = str(it.get("body") or "")
+                vis = str(it.get("visibility") or "company")
                 if kind not in KNOWLEDGE_KINDS or not ititle or not kbody.strip():
                     raise HTTPException(422, "bad store item")
+                if vis not in KNOWLEDGE_VIS:
+                    raise HTTPException(422, "bad visibility")
+                allowed = _allowed_list(it.get("allowed_users"))
+                if vis != "restricted" and allowed:
+                    raise HTTPException(422, "allowed_users only with visibility=restricted")
                 stored.append(_krow(_knowledge_insert(c, tenant, project, kind, ititle,
-                                                     kbody, ident)))
+                                                     kbody, ident,
+                                                     visibility=vis, allowed=allowed)))
         comp = knowledge_compact({"tenant": tenant, "project": project, "title": title},
                                  request)
         snap = knowledge_snapshot({"tenant": tenant, "project": project}, request)

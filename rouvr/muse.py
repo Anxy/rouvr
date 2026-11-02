@@ -420,7 +420,7 @@ def build_reviewer_prompt(task: dict, diff: str, tests_summary: str,
     parts += ["", f"Test runs: {tests_summary}", "", "PR diff:", diff[:12000],
               "", 'Write verdict.json in the working directory: {"verdict": "approve|request_changes|reject",',
               '"notes": "<one paragraph>"}. Approve only if every criterion is met by the diff and tests.',
-              "If project knowledge cited as knowledge:<id>@v<n> affected your verdict, name the citation ids in your notes.",
+              "Check the diff against project knowledge cited in the task as knowledge:<id>@v<n>; in your notes, name the citation ids you checked and whether the diff complies.",
               'To reply to the coder, also write message-coder.json: {"text": "<message>"}. '
               'Before writing any file, say it as a plain chat message (normal text, not JSON): Message to coder : <message>']
     return "\n".join(parts)

@@ -60,6 +60,22 @@ def test_compact_does_not_leak_restricted(tmp_path, monkeypatch):
                      headers=users["abe"]).json()["items"] == []
 
 
+def test_store_and_close_keeps_visibility(tmp_path, monkeypatch):
+    app, stack, users = _ctx(tmp_path, monkeypatch)
+    with TestClient(app) as c:
+        sc = c.post("/v1/knowledge/store-and-close",
+                    json={"tenant": "acme", "project": "p",
+                          "items": [{"kind": "note", "title": "R", "body": "secret",
+                                     "visibility": "restricted", "allowed_users": []}]},
+                    headers=users["amy"])
+        assert sc.status_code == 200, sc.text
+        got = c.get(f"/v1/knowledge/{sc.json()['stored'][0]['id']}",
+                    headers=users["amy"]).json()
+        assert got["visibility"] == "restricted"
+        assert c.get(f"/v1/knowledge/{sc.json()['stored'][0]['id']}",
+                     headers=users["abe"]).status_code == 404
+
+
 def test_confirm_only_creator_or_admin(tmp_path, monkeypatch):
     app, stack, users = _ctx(tmp_path, monkeypatch)
     with TestClient(app) as c:

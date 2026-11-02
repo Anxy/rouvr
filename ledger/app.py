@@ -20,7 +20,7 @@ import secrets as _secrets
 
 from fastapi import FastAPI, HTTPException, Request
 from rapidfuzz import fuzz
-from sqlalchemy import create_engine, text
+from sqlalchemy import create_engine, event, text
 
 try:
     from ledger import hyeve_auth as _ha
@@ -28,6 +28,7 @@ except ImportError:  # run as a bare module (python ledger/app.py)
     import hyeve_auth as _ha  # type: ignore[no-redef]
 
 DB_URL = os.environ.get("ROUVR_LEDGER_DATABASE_URL", "sqlite:///./.rouvr/ledger.db")
+SQLITE_BUSY_TIMEOUT_MS = 5000
 TRANSITIONS = {
     "open": {"claimed", "blocked"},
     "claimed": {"done", "failed", "blocked", "open", "needs_review"},
@@ -239,17 +240,28 @@ def make_app(db_url: str = DB_URL) -> FastAPI:
                          "to a sqlite:/// URL (Postgres is not supported)")
     if db_url.startswith("sqlite:///./"):
         Path(db_url[len("sqlite:///"):]).parent.mkdir(parents=True, exist_ok=True)
-    eng = create_engine(db_url)
-    if db_url.startswith("sqlite"):  # S014: WAL — parallel workers write evidence
-        with eng.connect() as c:
-            c.execute(text("PRAGMA journal_mode=WAL"))
-            c.commit()
+    if db_url.startswith("sqlite"):  # FL-A5: WAL + busy_timeout + single-writer queue
+        eng = create_engine(db_url,
+                            connect_args={"timeout": SQLITE_BUSY_TIMEOUT_MS / 1000,
+                                          "check_same_thread": False},
+                            pool_size=1,  # one connection per DB: API + workers share its queue
+                            max_overflow=0)
+
+        @event.listens_for(eng, "connect")
+        def _sqlite_pragmas(dbapi_conn, _record) -> None:  # per-connection: WAL persists, timeout does not
+            cur = dbapi_conn.cursor()
+            cur.execute("PRAGMA journal_mode=WAL")  # S014: parallel workers write evidence
+            cur.execute(f"PRAGMA busy_timeout={SQLITE_BUSY_TIMEOUT_MS}")
+            cur.close()
+    else:
+        eng = create_engine(db_url)
     with eng.begin() as c:
         for stmt in (Path(__file__).with_name("schema.sql").read_text().split(";")):
             body = "\n".join(l for l in stmt.splitlines() if not l.strip().startswith("--"))
             if body.strip():
                 c.execute(text(body))
     app = FastAPI(title="Rouvr ledger")
+    app.state.engine = eng  # FL-A5: introspectable SQLite config (pragmas, pool)
 
     # Add created_by to pre-S016 databases (schema.sql covers fresh ones
     # only via CREATE TABLE; existing tables need the column explicitly).

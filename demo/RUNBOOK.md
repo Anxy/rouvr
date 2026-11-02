@@ -178,3 +178,14 @@ Coder/reviewer turns dominate wall time. If the model is slow: run the
 ops-only path (no coder turns — compile/verify use the stub provider),
 show the kill + fake-200 faults there, and present one pre-recorded
 coding-task transcript for the review loop. Never fake a live receipt.
+
+## Rouvr managing itself (2026-11-02)
+
+Rouvr was built with file-based sprint sheets; once it could manage its own
+tasks, that history was backfilled into WorkHub (22 sheets → 66 tasks: 44
+walked to done with closeout evidence, 22 open verified live against the
+current tree and closed) and the repo knowledge (sheets, docs, runbooks,
+spikes) into Knowledge Lite (914 entries, all unverified, slug `backfill-*`).
+Everything since — including the frontend-lite slices — runs through Rouvr:
+new work is created and tracked as WorkHub tasks, never as new sheets. The
+sheet files stay in the repo as the archive; don't delete them.

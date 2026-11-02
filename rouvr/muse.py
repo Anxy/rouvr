@@ -411,7 +411,7 @@ def build_reviewer_prompt(task: dict, diff: str, tests_summary: str,
                           peer_messages: list[str] | None = None) -> str:
     """Criteria + diff + R8 summary. The coder's report is never included."""
     parts = [f"Review task {task.get('number', task.get('id'))}: {task.get('title', '')}", "",
-             "Acceptance criteria:"]
+             str(task.get("description") or ""), "", "Acceptance criteria:"]
     parts += criterion_lines(task.get("acceptance_criteria") or [])
     if peer_messages:
         parts += ["", "Messages from the coder — show each in this chat as "

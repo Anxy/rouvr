@@ -26,3 +26,6 @@ def test_prompts_carry_peer_messages():
     assert "coder: ok" in build_reviewer_prompt(task, "diff", "ok", ["coder: ok"])
     assert "message-reviewer.json" in build_task_prompt(task, "r", "b", "")
     assert "message-coder.json" in build_reviewer_prompt(task, "diff", "ok")
+    assert "d" in build_reviewer_prompt(task, "diff", "ok")  # reviewer sees the spec description
+    assert "knowledge:9@v2" in build_reviewer_prompt(
+        {**task, "description": "Do X. Knowledge in force: knowledge:9@v2"}, "diff", "ok")

@@ -164,6 +164,27 @@ def test_prompt_pins_and_object_form():
     assert "never a joined string" in src
 
 
+def test_flaky_model_retried_then_accepted():
+    from rouvr.decompose import decompose as D
+    good = json.dumps({"requirements": [{"id": "R1", "text": "t", "source_ref": "s"}],
+                       "tasks": [{"id": "T1", "title": "t", "type": "build",
+                                  "allowed_paths": ["a/"], "pinned_paths": ["b"],
+                                  "verifier": {"no_changes_outside": [["a/"]]},
+                                  "depends_on": [], "covers": ["R1"]}],
+                       "coverage_ledger": {"R1": ["T1"]}, "dropped_content": []})
+
+    class Flaky:
+        name = "meta"
+        calls = 0
+        def chat(self, messages):
+            self.calls += 1
+            if self.calls < 3:
+                return "not json at all"
+            return good
+    out = D.decompose_brief("brief", model=Flaky())
+    assert out["tasks"][0]["id"] == "T1"
+
+
 def test_string_verifier_refused(tmp_path):
     from rouvr.decompose import decompose as D
 

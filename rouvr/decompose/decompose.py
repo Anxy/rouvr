@@ -4,8 +4,9 @@ from __future__ import annotations
 import json
 
 
-def decompose_brief(brief: str, *, model=None) -> dict:
-    """One model call turns a raw brief into a single v1.3 candidate.
+def decompose_brief(brief: str, *, model=None, attempts: int = 3) -> dict:
+    """Turn a raw brief into a single v1.3 candidate (up to `attempts` model
+    calls; the first candidate whose shape and verifiers parse wins).
 
     Fail closed: stub provider, unparsable output, or a candidate whose
     shape (or any task verifier) does not parse is refused, never
@@ -18,18 +19,32 @@ def decompose_brief(brief: str, *, model=None) -> dict:
         raise RuntimeError(
             "decompose needs a real model: set ROUVR_MODEL_PROVIDER "
             "(meta|ollama|openrouter) with its key, then retry")
-    raw = provider.chat([
-        {"role": "system", "content": (
-            "Turn the brief into ONE v1.3 decomposition candidate. Reply with ONLY "
-            "a JSON object with keys: requirements (list of {id, text, source_ref}), "
-            "tasks (list of {id, title, type, allowed_paths, pinned_paths, verifier, "
-            "depends_on, covers}), coverage_ledger "
-            "(requirement id -> [task ids]), dropped_content (list of {cut, why}). "
-            "Each verifier is a single-key JSON object using only the primitives "
-            "test_passes, no_changes_outside, path_absent. Conjunctions use ONLY "
-            "the object form {\"and\": [<verifier>, ...]} — never a joined string "
-            "like \"test_passes and no_changes_outside\". One candidate only.")},
-        {"role": "user", "content": brief}])
+    system = (
+        "Turn the brief into ONE v1.3 decomposition candidate. Reply with ONLY "
+        "a JSON object with keys: requirements (list of {id, text, source_ref}), "
+        "tasks (list of {id, title, type, allowed_paths, pinned_paths, verifier, "
+        "depends_on, covers}), coverage_ledger "
+        "(requirement id -> [task ids]), dropped_content (list of {cut, why}). "
+        "Each verifier is a single-key JSON object using only the primitives "
+        "test_passes, no_changes_outside, path_absent. Conjunctions use ONLY "
+        "the object form {\"and\": [<verifier>, ...]} — never a joined string "
+        "like \"test_passes and no_changes_outside\". One candidate only.")
+    last_error: RuntimeError | None = None
+    for _ in range(max(1, attempts)):
+        raw = provider.chat([
+            {"role": "system", "content": system},
+            {"role": "user", "content": brief}])
+        try:
+            candidate = _check_candidate(raw)
+        except RuntimeError as e:
+            last_error = e
+            continue
+        return candidate
+    raise last_error  # type: ignore[misc]
+
+
+def _check_candidate(raw: str) -> dict:
+    from rouvr.decompose.validator import parse_verifier
     try:
         candidate = json.loads(raw)
     except ValueError:

@@ -121,7 +121,7 @@ CREATE TABLE IF NOT EXISTS knowledge_entries (
   created_at    TEXT NOT NULL,
   FOREIGN KEY (tenant, project) REFERENCES projects(tenant, project)
 );
-CREATE VIRTUAL TABLE IF NOT EXISTS knowledge_fts USING fts5(title, body, slug, summary, tags);
+CREATE VIRTUAL TABLE IF NOT EXISTS knowledge_fts USING fts5(title, body, slug, summary, tags, tokenize='porter unicode61');
 CREATE VIRTUAL TABLE IF NOT EXISTS knowledge_trigram USING fts5(title, slug, tags, summary, tokenize='trigram');
 CREATE TABLE IF NOT EXISTS external_identities (
   provider TEXT NOT NULL,

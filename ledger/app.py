@@ -19,6 +19,7 @@ from pathlib import Path
 import secrets as _secrets
 
 from fastapi import FastAPI, HTTPException, Request
+from rapidfuzz import fuzz
 from sqlalchemy import create_engine, text
 
 try:
@@ -71,6 +72,16 @@ def _tags_norm(raw) -> list[str]:
     return out
 
 
+def _semantic_candidates(q: str, limit: int = 50) -> list[tuple[int, float]]:
+    """D18 placeholder: sqlite-vec + fastembed semantic layer (NOT BUILT).
+
+    Honest stub: always returns []. search_knowledge calls it as an
+    optional RRF run, so a future implementation plugs in here without
+    touching the search path. Not a fallback, not a fake: when this
+    returns nothing, ranking is purely FTS + RapidFuzz."""
+    return []
+
+
 def _knowledge_search_schema(c) -> None:
     """Migrate search indexes + backfill slug/tags/summary in place.
 
@@ -79,9 +90,11 @@ def _knowledge_search_schema(c) -> None:
     new versions are minted. FTS tables are rebuilt when their shape lags.
     """
     cols = [r[1] for r in c.execute(text("PRAGMA table_info(knowledge_fts)"))]
-    if not set(("slug", "summary", "tags")).issubset(set(cols)):
+    fts_sql = c.execute(text("SELECT sql FROM sqlite_master WHERE name='knowledge_fts'")).scalar() or ""
+    if not set(("slug", "summary", "tags")).issubset(set(cols)) or "porter" not in fts_sql:
         c.execute(text("DROP TABLE IF EXISTS knowledge_fts"))
-        c.execute(text("CREATE VIRTUAL TABLE knowledge_fts USING fts5(title, body, slug, summary, tags)"))
+        c.execute(text("CREATE VIRTUAL TABLE knowledge_fts USING fts5(title, body, slug, summary, tags,"
+                       " tokenize='porter unicode61')"))
         needs_rebuild = True
     else:
         needs_rebuild = False
@@ -699,9 +712,11 @@ def make_app(db_url: str = DB_URL) -> FastAPI:
         are a 409 (the caller named it); generated ones suffix -2, -3, ..."""
         taken = _latest_slugs(c, tenant, project) - (exclude or set())
         if want:
-            slug = re.sub(r"[^a-z0-9-]+", "-", want.lower()).strip("-")[:60].rstrip("-")
+            slug = re.sub(r"[^a-z0-9-]+", "-", want.lower()).strip("-").rstrip("-")
             if not slug:
                 raise HTTPException(422, "slug must contain [a-z0-9-]")
+            if len(slug) > 60:
+                raise HTTPException(422, "slug must be <= 60 chars")
             if slug in taken:
                 raise HTTPException(409, f"slug {slug!r} already in use in {tenant}/{project}")
             return slug
@@ -820,9 +835,14 @@ def make_app(db_url: str = DB_URL) -> FastAPI:
     def search_knowledge(request: Request, q: str, project: str | None = None,
                          n: int = 15, full: bool = False):
         """Shortlist search: top N (default 15) as slug/title/kind/summary/
-        verified/citation only; full=true returns whole rows. Fuses exact
-        prefix FTS with a trigram index (typos/partials) via reciprocal rank
-        fusion. Tenant/visibility filters apply to every candidate."""
+        verified/citation only; full=true returns whole rows. Retrieval:
+        porter-stemmed prefix FTS plus an FTS5 trigram index (partials,
+        substrings, typo candidates); the pooled top ~50 are re-ranked
+        with RapidFuzz WRatio over title/slug/tags/summary, and every run
+        merges by reciprocal rank fusion. A sqlite-vec + fastembed
+        semantic run plugs in at _semantic_candidates (D18, not built:
+        honest stub, contributes nothing). Tenant/visibility filters
+        apply to every candidate."""
         ident = _identity(request)
         tokens = re.findall(r"\w+", q)
         if not tokens:
@@ -831,33 +851,24 @@ def make_app(db_url: str = DB_URL) -> FastAPI:
         match = " AND ".join(f'"{t}"*' for t in tokens)
         tri = " OR ".join(f'"{t}"' for t in tokens)
 
-        def _trigrams(word: str) -> set[str]:
+        def _split_trigrams(word: str) -> set[str]:
             w = word.lower()
             return {w[i:i + 3] for i in range(len(w) - 2)} if len(w) >= 3 else set()
 
-        # Typo expansion: OR the query's own trigrams so one wrong character
-        # only loses the trigrams spanning it; survivors still retrieve the
-        # row, and Python re-checks the overlap ratio below.
-        typo_q = [t.lower() for t in tokens if len(t) >= 4]
-        tri_terms = list(dict.fromkeys(g for t in typo_q for g in sorted(_trigrams(t)))
-                         )
+        # Candidate expansion for typos: OR the query's own trigrams so one
+        # wrong character only loses the trigrams spanning it. This only
+        # widens the candidate pool; scoring is RapidFuzz below.
+        tri_terms = list(dict.fromkeys(
+            g for t in tokens if len(t) >= 4
+            for g in sorted(_split_trigrams(t))))
         tri_typo = " OR ".join(f'"{g}"' for g in tri_terms)
 
-        def _typo_overlap(text: str) -> float:
-            words = re.findall(r"\w+", (text or "").lower())
-            doc = set()
-            for w in words:
-                doc |= _trigrams(w)
-            best, best_n = 0.0, 0
-            for t in typo_q:
-                qt = _trigrams(t)
-                if not qt:
-                    continue
-                inter = len(qt & doc)
-                r = inter / len(qt)
-                if inter > best_n or (inter == best_n and r > best):
-                    best, best_n = r, inter
-            return best if best_n >= 2 and best >= 0.5 else 0.0
+        def _fuzz_score(r: dict) -> float:
+            fields = [r.get("title") or "", r.get("slug") or "",
+                      " ".join(json.loads(r.get("tags") or "[]")),
+                      r.get("summary") or ""]
+            return max([fuzz.WRatio(q, f) for f in fields] + [0.0])
+
         with eng.begin() as c:
             if ident == "supervisor":
                 mine = None
@@ -876,7 +887,7 @@ def make_app(db_url: str = DB_URL) -> FastAPI:
                 f"SELECT k.*, f.rank AS _rank FROM knowledge_fts f"
                 f" JOIN knowledge_entries k ON k.id=f.rowid"
                 f" WHERE knowledge_fts MATCH :m AND {_LATEST}{proj}"
-                f" ORDER BY f.rank LIMIT 100"), kw).mappings()]
+                f" ORDER BY f.rank LIMIT 50"), kw).mappings()]
             kw2: dict = {"m": tri}
             if project:
                 kw2["p"] = project
@@ -884,7 +895,7 @@ def make_app(db_url: str = DB_URL) -> FastAPI:
                 f"SELECT k.*, f.rank AS _rank FROM knowledge_trigram f"
                 f" JOIN knowledge_entries k ON k.id=f.rowid"
                 f" WHERE knowledge_trigram MATCH :m AND {_LATEST}{proj}"
-                f" ORDER BY f.rank LIMIT 100"), kw2).mappings()]
+                f" ORDER BY f.rank LIMIT 50"), kw2).mappings()]
             fused: dict[int, float] = {}
             by_id: dict[int, dict] = {}
             for rank, r in enumerate(exact):
@@ -893,27 +904,27 @@ def make_app(db_url: str = DB_URL) -> FastAPI:
             for rank, r in enumerate(fuzzy):
                 fused[r["id"]] = fused.get(r["id"], 0.0) + 1.0 / (60 + rank)
                 by_id[r["id"]] = r
+            pool: dict[int, dict] = dict(by_id)
             if tri_typo:
                 kw3: dict = {"m": tri_typo}
                 if project:
                     kw3["p"] = project
-                cand = [dict(r) for r in c.execute(text(
+                for r in c.execute(text(
                     f"SELECT k.* FROM knowledge_trigram f"
                     f" JOIN knowledge_entries k ON k.id=f.rowid"
                     f" WHERE knowledge_trigram MATCH :m AND {_LATEST}{proj}"
-                    f" LIMIT 100"), kw3).mappings()]
-                scored = []
-                for r in cand:
-                    ov = _typo_overlap(" ".join([
-                        r.get("title") or "", r.get("slug") or "",
-                        " ".join(json.loads(r.get("tags") or "[]")),
-                        r.get("summary") or ""]))
-                    if ov > 0:
-                        scored.append((ov, r))
-                scored.sort(key=lambda x: -x[0])
-                for drank, (ov, r) in enumerate(scored[:50]):
-                    fused[r["id"]] = fused.get(r["id"], 0.0) + ov / (60 + drank)
-                    by_id[r["id"]] = r
+                    f" LIMIT 50"), kw3).mappings():
+                    d = dict(r)
+                    pool.setdefault(d["id"], d)
+            # RapidFuzz re-rank over the pooled candidates (top ~50), then
+            # fuse as one more RRF run.
+            ranked = sorted(pool.values(), key=_fuzz_score, reverse=True)[:50]
+            for rank, r in enumerate(ranked):
+                fused[r["id"]] = fused.get(r["id"], 0.0) + 1.0 / (60 + rank)
+                by_id[r["id"]] = r
+            for rank, (sid, _score) in enumerate(_semantic_candidates(q)):
+                if sid in by_id:
+                    fused[sid] += 1.0 / (60 + rank)
             out = []
             for eid in sorted(fused, key=lambda i: fused[i], reverse=True):
                 r = by_id[eid]

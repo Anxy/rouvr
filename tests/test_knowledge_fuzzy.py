@@ -74,6 +74,20 @@ def test_synonymish_wordform_idempotence(ctx):
     assert [h["citation"] for h in hits] == [e["citation"]]
 
 
+def test_porter_stemming_contradiction_matches_contradictions(ctx):
+    c, _stack, amy, _gus = ctx
+    e = _entry(c, amy, title="Curator flags contradictions",
+               body="The curator lists duplicates.").json()
+    hits = c.get("/v1/knowledge/search", params={"q": "contradiction"},
+                 headers=amy).json()["items"]
+    assert [h["citation"] for h in hits] == [e["citation"]]
+
+
+def test_semantic_layer_is_honest_stub():
+    from ledger.app import _semantic_candidates
+    assert _semantic_candidates("anything at all") == []
+
+
 def test_slug_lookup_and_stability(ctx):
     c, _stack, amy, _gus = ctx
     e = _entry(c, amy, slug="type-hints", title="Type hints",
@@ -131,6 +145,9 @@ def test_explicit_slug_collision_is_409_auto_suffixes(ctx):
     b = _entry(c, amy, title="Same title", body="two").json()
     assert (a["slug"], b["slug"]) == ("same-title", "same-title-2")
     assert c.get("/v1/knowledge/same-title-2", headers=amy).json()["id"] == b["id"]
+    long_slug = "x" * 61
+    assert _entry(c, amy, slug=long_slug, title="Long", body="b").status_code == 422
+    assert _entry(c, amy, slug="!!!", title=" Punct ", body="b").status_code == 422
 
 
 def test_legacy_db_migrates_in_place(tmp_path, monkeypatch):

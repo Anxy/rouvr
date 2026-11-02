@@ -59,7 +59,7 @@ def bullets(path: Path, section_prefixes: tuple[str, ...]) -> list[tuple[str, st
 
 
 def _slug(title: str, seen: set[str]) -> str:
-    base = re.sub(r"[^a-z0-9]+", "-", title.lower()).strip("-")[:60].rstrip("-") or "entry"
+    base = re.sub(r"[^a-z0-9]+", "-", title.lower()).strip("-")[:55].rstrip("-") or "entry"
     slug, i = base, 2
     while slug in seen:
         slug = f"{base}-{i}"

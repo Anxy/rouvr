@@ -1,9 +1,9 @@
 # Runbook cold-follow audit (c-runner) — demo/RUNBOOK.md @ 8ad6d87
 
 Date: 2026-11-01. Role: fresh read-only validator, no prior build notes.
-Repo: /home/anxy/dev/rouvr, branch rouvr-development, base 8ad6d87
+Repo: <checkout>, branch rouvr-development, base 8ad6d87
 (`git rev-parse HEAD` = 8ad6d87c42ddff5dc41ce2e2165bc0e6a04f21f5, tree clean).
-Cold checkout: `git clone /home/anxy/dev/rouvr /tmp/audit-runner` then
+Cold checkout: `git clone <checkout> /tmp/audit-runner` then
 `git checkout -q 8ad6d87` — HEAD matches, `demo/RUNBOOK.md` byte-identical
 (`diff -q` → IDENTICAL). No commits, no pushes, no service commands run.
 No secret values are recorded in this report (env-file names only, never values).
@@ -23,7 +23,7 @@ at 8ad6d87. OK.
 
 `make setup PY=python3.12` — ATTEMPTED, NOT COMPLETED (environmental, not a
 repo defect). `make -n setup` expands to `python3.12 -m venv .venv &&
-.venv/bin/pip install -r requirements.txt`. `/home/anxy/.local/bin/python3.12`
+.venv/bin/pip install -r requirements.txt`. `<python3.12-on-PATH>`
 exists (3.12.15) and `python3.12 -m venv /tmp/audit-runner/.venv` succeeded
 in seconds, so the runbook's Python pin is satisfiable. The `pip install -r`
 half (33 lines in requirements.txt) failed:
@@ -53,7 +53,7 @@ live stack healthy. The equivalent read-only probe (`curl /health`) was done
 instead (ok, above).
 
 Doc checks: Docker daemon reachable (`docker info` ok). `muse` CLI present
-(`/home/anxy/.local/bin/muse`, 1.4.14). Default `python3` is 3.14.4, so the
+(`muse` on PATH, 1.4.14). Default `python3` is 3.14.4, so the
 runbook's warning (3.14 breaks tiktoken, pin 3.12/3.13) is load-bearing and
 correct. `testrunner.Dockerfile` exists and the tag
 `rouvr-runner:py313-p9` matches `rouvr/config.py:54,91`. Image was NOT built

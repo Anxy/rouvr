@@ -150,3 +150,13 @@ Checks 1–19 and F1–F3 pass. Check 20 fails.
 - Curator contradiction precision (`contradictions_mode`, anchor +
   opposing-claim gating, top-10 cap) matches the checked-in behaviour
   tests in `tests/test_curator_precision.py` (all pass).
+
+## Addendum 2026-11-02 — check 20 resolved (20/20)
+
+The store-and-close finding was real and is fixed: the loop now carries
+per-item `visibility`/`allowed_users` through (`ledger/app.py`, same
+validation as `/store`), covered by
+`tests/test_audit_fixes.py::test_store_and_close_keeps_visibility`.
+Re-probed live after restarting the ledger onto the fixed head: a
+`restricted` item stored via store-and-close comes back `restricted`,
+author reads 200, same-tenant non-member reads 404. Check 20 now passes.

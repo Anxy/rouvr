@@ -1,7 +1,7 @@
-# Knowledge Lite verify list (seeded 2026-11-02, supervisor/liveproof)
+# Knowledge Lite verify list (reconciled 2026-11-02, supervisor/liveproof)
 #
 Ankur: confirm each line, then run the command at the bottom once.
-
+## Canonical D1-D20 (exactly one current entry per decision)
 - [ ] knowledge:122@v1 | [slice-1] D1: Tenant = organisation, possibly single person, umbrella with users under it. | D1: Tenant = organisation, possibly single person, umbrella with users under it.
 - [ ] knowledge:123@v1 | [slice-1] D2: User may belong to >1 tenant and switch. | D2: User may belong to >1 tenant and switch.
 - [ ] knowledge:124@v1 | [slice-1] D3: Roles per tenant: owner, admin, member, viewer. Bots get service identities, never a h | D3: Roles per tenant: owner, admin, member, viewer. Bots get service identities, never a human's.
@@ -26,6 +26,22 @@ Ankur: confirm each line, then run the command at the bottom once.
 ## Standing rules
 - [ ] knowledge:5@v1 | Rule (proposed by agent): always cite | Every answer using project knowledge must cite knowledge:<id>@v<n>.
 - D14 (knowledge:170@v1) is the rules-authority decision: profile standing rules migrate to verified rule entries once approved.
+
+## Related detail entries (NOT canonical - do not confirm as the decision)
+These cite D-numbers but are refinements from owner replies / research sections:
+- knowledge:142@v1 | [slice-1] D1/D2: A user belongs to many tenants via memberships, switches active tenant per request/ | detail, not the canonical D entry
+- knowledge:143@v1 | [slice-1] D3: Roles owner/admin/member/viewer enforced server-side per tenant from one permission ma | detail, not the canonical D entry
+- knowledge:144@v1 | [slice-1] D4: Google OIDC via a provider interface; per-user local tokens keep working unchanged as | detail, not the canonical D entry
+- knowledge:145@v1 | [slice-1] D5/D6: Project create refuses missing mandatory fields (name, slug, owner, purpose, type); | detail, not the canonical D entry
+- knowledge:146@v1 | [slice-1] D7: Profile has draft → approved versions, immutable once approved, field-level provenance | detail, not the canonical D entry
+- knowledge:147@v1 | [slice-1] D8: Every ledger row, workflow input, and on-disk record resolves to tenant/project/task; | detail, not the canonical D entry
+- knowledge:182@v1 | [slice-2] Storage layout (D17): `.data/knowledge/<tenant_id>.db` per tenant (WAL), `.data/knowle | detail, not the canonical D entry
+- knowledge:184@v1 | [slice-2] Visibility enforcement (D11/D12, S2): one `visible_to(principal)` predicate applied *i | detail, not the canonical D entry
+- knowledge:185@v1 | [slice-2] Verification & rules (D13/D14): agent-written versions start `unverified`; confirm is | detail, not the canonical D entry
+- knowledge:186@v1 | [slice-2] Search (D18): FTS5 BM25 + sqlite-vec vectors in the tenant DB, merged by reciprocal-ra | detail, not the canonical D entry
+- knowledge:187@v1 | [slice-2] Sessions (D16): `store` appends a `chat` version + checkpoint; `compact` is a model-wr | detail, not the canonical D entry
+- knowledge:188@v1 | [slice-2] Curator (D15): a tenant-scoped service identity (Slice 1) running an Ops-style Tempora | detail, not the canonical D entry
+- knowledge:189@v1 | [slice-2] WorkHub interface (D19/D20): REST mirrors `/projects/{project_id}/knowledge[/search]` | detail, not the canonical D entry
 
 ## Confirm command (run once after approval; do NOT run before)
 ```sh

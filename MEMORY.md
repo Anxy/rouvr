@@ -22,7 +22,7 @@
 
 ## 4. Quirks / gotchas
 - Shell is `sh`: use `bash -c` for process substitution; worker env via `set -a; source .data/env.sh; set +a`.
-- SDK probes: `PYTHONPATH=/home/anxy/dev/rouvr`, Temporal `127.0.0.1:7233` ns `default`; ledger + `X-Rouvr-Token: $(cat .data/api-token)`.
+- SDK probes: `PYTHONPATH=<repo>`, Temporal `127.0.0.1:7233` ns `default`; ledger + `X-Rouvr-Token: $(cat .data/api-token)`.
 - `live_coding.py` STATE (`liveproof/state.json`) is overwritten per `create` (backups `stateNN.json` kept). `GET /v1/tasks/N/evidence` is 405 (evidence embedded in task GET).
 - Temporal matching once stalled 33 min (wedged partition, fixed by `docker restart rouvr-temporal-1`; never restart `rouvr-db-1`). `DescribeTaskQueue` lies; duplicate worker sets poison runs (reap, keep one set).
 - `scripts/rouvr stop` is pidfile-scoped only (never pattern-kill). Restart workers after code/env changes (they load at startup). `status` "3/4 queues" is a naming quirk — ignore.

@@ -28,11 +28,13 @@ def _serve(app, port: int):
     threading.Thread(target=server.run, daemon=True).start()
     for _ in range(100):
         try:
-            if httpx.get(f"http://127.0.0.1:{port}/health", timeout=1).status_code == 200:
-                return server
+            resp = httpx.get(f"http://127.0.0.1:{port}/health", timeout=1)
         except httpx.TransportError:
-            pass
-        time.sleep(0.1)
+            time.sleep(0.1)
+        else:
+            if resp.status_code == 200:
+                return server
+            time.sleep(0.1)
     raise RuntimeError("ledger server did not start")
 
 
@@ -81,27 +83,28 @@ def test_evidence_contention_api_and_worker(tmp_path):
         lock = threading.Lock()
 
         def api_writer(n: int, tid: int):
-            try:
-                with httpx.Client(base_url=base, timeout=30) as c:
-                    for i in range(n):
+            with httpx.Client(base_url=base, timeout=30) as c:
+                for i in range(n):
+                    try:
                         r = c.post(f"/v1/tasks/{tid}/evidence",
                                    json={"kind": "note",
                                          "body": {"fence": f"api-{threading.get_ident()}-{i}",
                                                   "payload": {"i": i}}})
-                        if r.status_code != 200 or "database is locked" in r.text.lower():
-                            with lock:
-                                errors.append(f"api {r.status_code}: {r.text[:200]}")
-            except Exception as e:  # noqa: BLE001 — collected, asserted below
-                with lock:
-                    errors.append(f"api exc: {e!r}"[:300])
+                    except httpx.TransportError as e:
+                        with lock:
+                            errors.append(f"api exc: {e!r}"[:300])
+                        continue
+                    if r.status_code != 200 or "database is locked" in r.text.lower():
+                        with lock:
+                            errors.append(f"api {r.status_code}: {r.text[:200]}")
 
         def worker_writer(n: int):
             # sidecar worker with its own connection: contends at the file
             # level, so WAL + busy_timeout (not just the shared pool) matter.
+            conn = sqlite3.connect(db, timeout=5.0)
             try:
-                conn = sqlite3.connect(db, timeout=5.0)
-                try:
-                    for i in range(n):
+                for i in range(n):
+                    try:
                         conn.execute(
                             "INSERT INTO evidence(task_id,kind,body,sha256,created_at)"
                             " VALUES (?,?,?,?,?)",
@@ -109,11 +112,11 @@ def test_evidence_contention_api_and_worker(tmp_path):
                              f'{{"fence": "worker-{threading.get_ident()}-{i}"}}',
                              "x", "2026-11-02T00:00:00+00:00"))
                         conn.commit()
-                finally:
-                    conn.close()
-            except Exception as e:  # noqa: BLE001 — collected, asserted below
-                with lock:
-                    errors.append(f"worker exc: {e!r}"[:300])
+                    except sqlite3.OperationalError as e:
+                        with lock:
+                            errors.append(f"worker exc: {e!r}"[:300])
+            finally:
+                conn.close()
 
         threads = ([threading.Thread(target=api_writer, args=(20, api_tid)) for _ in range(4)]
                    + [threading.Thread(target=api_writer, args=(20, worker_tid)) for _ in range(2)]

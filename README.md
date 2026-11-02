@@ -148,6 +148,7 @@ Not yet proven from this repo:
 Other limitations:
 - Rouvr was formerly "AIX" on the "Hyeve" platform. Internal module names (`aix_core`, `hyeve_aix_service`, the `HYEVE_AIX_SERVICE_` env prefix) haven't been renamed, to avoid breaking imports.
 - `ledger/` is WorkHub-lite with token auth on local ports (shared stack token plus per-user tokens, S011/S016), leases, and mandatory tenant/project partitions (S022). The core backend's WorkHub client still speaks the private `/api/v1` + `/api/workhub` API, not this ledger's `/v1` API. `ledger/stub_workhub/` is kept as a generic in-memory stand-in.
+- The MCP channel is supervisor-scoped: every MCP tool calls the ledger with the shared stack token and sees all tenants. Per-user scoping (tenant partitions, restricted/company/public visibility) lives at the API layer — enforced on every ledger endpoint and reachable with per-user tokens or Hyeve JWTs, but not through MCP tool calls.
 - `lane/` contains only the generic parts of the private lane. Two of its tests need the private canary controller and are skipped.
 - This is dev software. The compose stack isn't hardened.
 

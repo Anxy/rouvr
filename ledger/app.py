@@ -643,6 +643,14 @@ def make_app(db_url: str = DB_URL) -> FastAPI:
                   {"i": rid, "t": title, "b": body})
         return row(c, "SELECT * FROM knowledge_entries WHERE id=:i", i=rid)
 
+    def _req_visibility(body: dict) -> str:
+        if body.get("visibility") is None:
+            return "company"
+        vis = str(body.get("visibility"))
+        if vis not in KNOWLEDGE_VIS:
+            raise HTTPException(422, f"visibility must be one of {sorted(KNOWLEDGE_VIS)}")
+        return vis
+
     @app.post("/v1/knowledge")
     def create_knowledge(body: dict, request: Request):
         ident = _identity(request)
@@ -650,11 +658,9 @@ def make_app(db_url: str = DB_URL) -> FastAPI:
         kind = str(body.get("kind") or "")
         title = str(body.get("title") or "").strip()
         kbody = str(body.get("body") or "")
-        vis = str(body.get("visibility") or "company")
+        vis = _req_visibility(body)
         if kind not in KNOWLEDGE_KINDS:
             raise HTTPException(422, f"kind must be one of {sorted(KNOWLEDGE_KINDS)}")
-        if vis not in KNOWLEDGE_VIS:
-            raise HTTPException(422, f"visibility must be one of {sorted(KNOWLEDGE_VIS)}")
         if not title or not kbody.strip():
             raise HTTPException(422, "title and body are required")
         allowed = _allowed_list(body.get("allowed_users"))
@@ -792,11 +798,9 @@ def make_app(db_url: str = DB_URL) -> FastAPI:
                     raise HTTPException(422, "each item needs kind/title/body")
                 kind, title = str(it.get("kind") or ""), str(it.get("title") or "").strip()
                 kbody = str(it.get("body") or "")
-                vis = str(it.get("visibility") or "company")
+                vis = _req_visibility(it)
                 if kind not in KNOWLEDGE_KINDS:
                     raise HTTPException(422, f"kind must be one of {sorted(KNOWLEDGE_KINDS)}")
-                if vis not in KNOWLEDGE_VIS:
-                    raise HTTPException(422, "bad visibility")
                 if not title or not kbody.strip():
                     raise HTTPException(422, "title and body are required")
                 allowed = _allowed_list(it.get("allowed_users"))
@@ -865,7 +869,8 @@ def make_app(db_url: str = DB_URL) -> FastAPI:
         root = Path(os.environ.get("ROUVR_DATA_DIR", ".data")) / "knowledge-snapshots"
         root.mkdir(parents=True, exist_ok=True)
         ts = _now().replace(":", "").replace("+", "")
-        path = root / f"{tenant}-{project}-{ts}.json"
+        safe = lambda s: re.sub(r"[^A-Za-z0-9_.-]+", "_", s)[:64] or "_"
+        path = root / f"{safe(tenant)}-{safe(project)}-{ts}.json"
         path.write_text(json.dumps({"tenant": tenant, "project": project,
                                     "exported_at": _now(), "items": rows}, indent=2))
         return {"path": str(path), "count": len(rows),
@@ -887,11 +892,9 @@ def make_app(db_url: str = DB_URL) -> FastAPI:
                     raise HTTPException(422, "each item needs kind/title/body")
                 kind, ititle = str(it.get("kind") or ""), str(it.get("title") or "").strip()
                 kbody = str(it.get("body") or "")
-                vis = str(it.get("visibility") or "company")
+                vis = _req_visibility(it)
                 if kind not in KNOWLEDGE_KINDS or not ititle or not kbody.strip():
                     raise HTTPException(422, "bad store item")
-                if vis not in KNOWLEDGE_VIS:
-                    raise HTTPException(422, "bad visibility")
                 allowed = _allowed_list(it.get("allowed_users"))
                 if vis != "restricted" and allowed:
                     raise HTTPException(422, "allowed_users only with visibility=restricted")

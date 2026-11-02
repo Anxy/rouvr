@@ -3,6 +3,8 @@ ledger, FTS5 search, tenant-scoped by caller token, verified flag carried
 on every read. The canary test is the point: a tenant's knowledge must
 never surface in another tenant's search results or reads."""
 import hashlib
+import os
+from pathlib import Path
 
 import pytest
 from fastapi.testclient import TestClient
@@ -102,6 +104,81 @@ def test_hostile_search_input_never_500s(ctx):
         assert r.status_code in (200, 422), (q, r.status_code)
     n = c.get("/v1/knowledge/search", params={"q": "SQLite"}, headers=amy)
     assert n.status_code == 200 and n.json()["items"]  # store intact
+
+
+def test_superseded_ids_never_in_current_results(ctx, tmp_path):
+    """FL-A6: five v1 rules superseded by five v2 (the live 165/171-174 ->
+    267-271 shape: olds carry no supersedes_id, news point at them, all v2
+    verified). Olds are confirmed too, so the latest-only filter is the only
+    thing excluding them from search/rules/snapshot/curate/compact."""
+    c, _stack, amy, _gus = ctx
+    olds, news = [], []
+    for i in range(5):
+        e = c.post("/v1/knowledge", json={
+            "tenant": "acme", "project": "site", "kind": "rule",
+            "title": f"Quorum rule {i}",
+            "body": f"Rule {i} quorum must hold alpha{i}."}, headers=amy).json()
+        olds.append(e["id"])
+        assert e["supersedes_id"] is None
+        assert c.post(f"/v1/knowledge/{e['id']}/confirm", json={},
+                      headers=amy).status_code == 200
+        v = c.post(f"/v1/knowledge/{e['id']}/versions", json={
+            "title": f"Quorum rule {i}",
+            "body": f"Rule {i} quorum revised must hold beta{i}."}, headers=amy).json()
+        assert v["supersedes_id"] == e["id"]
+        news.append(v["id"])
+        assert c.post(f"/v1/knowledge/{v['id']}/confirm", json={},
+                      headers=amy).status_code == 200
+    oldset, newset = set(olds), set(news)
+
+    def _cited(rows):
+        return {int(r["citation"].split("@")[0].split(":")[1]) for r in rows}
+
+    def _cited_strs(strs):
+        return {int(x.split("@")[0].split(":")[1]) for x in strs}
+
+    # search: a token shared by old+new bodies hits current versions only
+    hits = c.get("/v1/knowledge/search", params={"q": "quorum", "n": 100},
+                 headers=amy).json()["items"]
+    assert _cited(hits) == newset
+    # search: an old-body-only token never surfaces an old id
+    hits = c.get("/v1/knowledge/search", params={"q": "alpha0", "n": 100},
+                 headers=amy).json()["items"]
+    assert not (_cited(hits) & oldset)
+    # rules: verified current rules only
+    rules = c.get("/v1/knowledge-rules", params={"project": "site"},
+                  headers=amy).json()
+    assert _cited_strs(rules["citations"]) == newset
+    # snapshot: citations and the file on disk carry current ids only
+    snap_dir = tmp_path / "snap"
+    snap_dir.mkdir()
+    _prev = os.environ.get("ROUVR_DATA_DIR")
+    os.environ["ROUVR_DATA_DIR"] = str(snap_dir)
+    try:
+        snap = c.post("/v1/knowledge/snapshot",
+                      json={"tenant": "acme", "project": "site"}, headers=amy).json()
+    finally:
+        if _prev is None:
+            os.environ.pop("ROUVR_DATA_DIR", None)
+        else:
+            os.environ["ROUVR_DATA_DIR"] = _prev
+    assert _cited_strs(snap["citations"]) == newset
+    body = Path(snap["path"]).read_text()
+    for o in olds:
+        assert f"knowledge:{o}@" not in body
+    # compact: sources and body cite current ids only
+    comp = c.post("/v1/knowledge/compact",
+                  json={"tenant": "acme", "project": "site"}, headers=amy).json()
+    assert not (_cited_strs(comp["sources"]) & oldset)
+    assert newset <= _cited_strs(comp["sources"])
+    for o in olds:
+        assert f"knowledge:{o}@v" not in comp["snapshot"]["body"]
+    # curate: old+new share titles, so any leaked old would flag a duplicate
+    cur = c.post("/v1/knowledge/curate",
+                 json={"tenant": "acme", "project": "site"}, headers=amy).json()
+    refd = {e for s in cur["suggestions"] for e in s["entries"]}
+    assert not (refd & oldset)
+    assert not any(s["type"] == "duplicate" for s in cur["suggestions"])
 
 
 def test_scope_and_kind_validation(ctx):

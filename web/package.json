@@ -1,12 +1,14 @@
 {
-  "name": "rouvr-web",
+  "name": "web",
   "version": "0.1.0",
   "private": true,
   "scripts": {
     "dev": "next dev",
     "build": "next build --webpack",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "typecheck": "next typegen && tsc --noEmit",
+    "gen:api": "python3 ../scripts/export_openapi.py && node --import ./scripts/ts6-hook.mjs ./node_modules/.bin/openapi-typescript ./src/lib/api/openapi.json -o ./src/lib/api/schema.d.ts"
   },
   "dependencies": {
     "@hookform/resolvers": "^6.0.0",
@@ -30,6 +32,7 @@
     "@typescript/typescript6": "^6.0.2",
     "eslint": "^10",
     "eslint-config-next": "16.4.3",
+    "openapi-typescript": "^7.13.0",
     "tailwindcss": "^4",
     "typescript": "^7"
   },

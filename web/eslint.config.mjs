@@ -52,6 +52,20 @@ const eslintConfig = [
       "next-env.d.ts",
     ],
   },
+  {
+    // FL-A1: all API traffic goes through the generated client in lib/api.
+    files: ["src/**/*.{ts,tsx}"],
+    ignores: ["src/lib/api/**"],
+    rules: {
+      "no-restricted-globals": [
+        "error",
+        {
+          name: "fetch",
+          message: "Use the typed API client (@/lib/api/client) instead of raw fetch.",
+        },
+      ],
+    },
+  },
 ];
 
 export default eslintConfig;

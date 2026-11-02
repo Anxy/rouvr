@@ -953,9 +953,24 @@ def make_app(db_url: str = DB_URL) -> FastAPI:
         ident = _identity(request)
         with eng.begin() as c:
             try:
-                return _krow(_knowledge_or_404(c, int(key), ident))
+                kid = int(key)
             except ValueError:
                 pass
+            else:
+                # Superseded ids resolve forward: a current read by an old
+                # id returns the live version, never stale content (history
+                # stays available via /history). Both ends are visibility
+                # checked so forwarding cannot leak across the boundary.
+                _knowledge_or_404(c, kid, ident)
+                cur, seen = kid, {kid}
+                while True:
+                    nxt = row(c, "SELECT id FROM knowledge_entries WHERE supersedes_id=:i",
+                              i=cur)
+                    if not nxt or nxt["id"] in seen:
+                        break
+                    seen.add(nxt["id"])
+                    cur = nxt["id"]
+                return _krow(_knowledge_or_404(c, cur, ident))
             kw: dict = {"s": key}
             psql = ""
             if project:

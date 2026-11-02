@@ -63,8 +63,13 @@ class ContainerTestRunner:
 
     async def run(self, cwd: Path, command: list[str], timeout_s: int, run_key: str) -> TestRun:
         name = f"{_run_id('rouvr', run_key)}-{os.getpid()}-{uuid.uuid4().hex[:8]}"
+        # The mount is writable: `cwd` is already an ephemeral per-run clone
+        # (created and destroyed by the caller), and test side effects
+        # (.pytest_cache, module-level sqlite files, snapshot artifacts)
+        # legitimately land next to the code. Isolation that matters (no
+        # network, pinned image, ephemeral container) is unchanged.
         argv = ["docker", "run", "--rm", "--name", name, "--network", "none", "--pull", "never",
-               "-v", f"{cwd}:/src:ro", "-w", "/src", self.image, *command]
+               "-v", f"{cwd}:/src", "-w", "/src", self.image, *command]
         try:
             rc, full = await _exec(argv, cwd, timeout_s, container_name=name)
         except FileNotFoundError as e:

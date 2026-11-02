@@ -5,8 +5,8 @@ earlier same-day draft (which is kept in git history).
 Goal: browser demo of Rouvr Lite (Next.js + FastAPI + SQLite, single machine)
 where the API is the only path to state, the UI never touches SQLite, and Muse
 CLI is one more client of the same API. Staging rule: Lite-now = single
-machine, desktop-only, dark-first, Google-only, no checkout, no fine-grained
-permissions. Everything else is LATER.
+machine, desktop-only, dark-first, hyeve-auth sign-in only (no social),
+no checkout, no fine-grained permissions. Everything else is LATER.
 
 ## 1. Where the site source lives and the reuse decision
 
@@ -74,8 +74,8 @@ demoable milestone.
   never in "current" results. Deps: none. Effort: 0.5d.
 
 ### Slice B — Auth + onboarding (needs Owner steps in §5)
-- **B1 Login via hyeve-auth-service (no Auth.js/NextAuth).** Sign-in button →
-  hyeve hosted login (Google IdP) → callback → verify JWT against JWKS
+- **B1 Login via hyeve-auth-service (no Auth.js/NextAuth, no social).**
+  Sign-in form → hyeve native login → callback → verify JWT against JWKS
   (`ledger/hyeve_auth.py::verify_hyeve_jwt`, fail-closed) → local session
   cookie. Output: login/logout round-trip on staging. Pass: bad/expired/
   wrong-tenant tokens rejected; no local passwords exist. Deps: A2 + Owner
@@ -91,7 +91,7 @@ demoable milestone.
   (mandatory), goal/purpose (mandatory, → `project_purpose`), project type
   (optional select), north star / success measure (optional),
   standing rules for agents (optional, owner-typed → verified rules). Quick
-  actions: Google button, create-org vs join-by-invite toggle, Back/Continue
+  actions: hyeve sign-in, create-org vs join-by-invite toggle, Back/Continue
   per step, resumable wizard state.
 
 ### Slice C — Workspace shell + chat (the core demo surface)
@@ -140,7 +140,7 @@ demoable milestone.
   never reshown), usage per project. Ledger today has only users + disable —
   members/invites/roles/usage need small new tables; ship coarse + stubs per
   the brief. Pass: viewer cannot mutate; key shown once. Effort: 2–3d.
-  (LATER: fine-grained permissions, checkout/SSO-beyond-Google.)
+  (LATER: fine-grained permissions, checkout, social login.)
 - **E3 Profile + CLI token**: name/avatar/notifications + personal API token
   (create/revoke; CLI uses it as a Bearer — CLI becomes one more API
   client). Pass: CLI end-to-end against Lite API with token. Effort: 1d.
@@ -245,32 +245,25 @@ SSE event types (all from the outbox; UI motion binds 1:1, C3):
 
 ## 5. Owner steps (values needed, no secrets)
 
-1. **Google OAuth client** (Google Cloud Console → APIs & Services →
-   Credentials → Create OAuth client ID, type Web application): need
-   `GOOGLE_CLIENT_ID` + authorized redirect URIs:
-   `https://<hyeve-auth-host>/v1/auth/google/callback` and (if direct)
-   `https://<lite-host>/auth/callback`. Owner pastes only the client ID into
-   hyeve config; the secret stays in hyeve's store.
-2. **hyeve-auth-service as IdP**: register Rouvr Lite as a relying service —
+1. **hyeve-auth-service as IdP**: register Rouvr Lite as a relying service —
    need `HYEVE_AUTH_BASE_URL` (e.g. `https://auth.<domain>`),
-   `HYEVE_AUTH_TENANT` (e.g. `rouvr-demo`), JWKS URL
-   `<base>/v1/auth/jwks.json` reachable from Lite, and the Google client
-   attached to that tenant in hyeve config. Verify:
-   `curl <base>/v1/auth/jwks.json` returns keys.
-3. **Person provisioning (if wanted)**: `HYEVE_PERSON_BASE_URL` +
+   `HYEVE_AUTH_TENANT` (e.g. `rouvr-demo`), and JWKS URL
+   `<base>/v1/auth/jwks.json` reachable from Lite. Verify:
+   `curl <base>/v1/auth/jwks.json` returns keys. No social/SSO setup.
+2. **Person provisioning (if wanted)**: `HYEVE_PERSON_BASE_URL` +
    `HYEVE_PERSON_PATH` (default `/v1/persons`); service token stored
    server-side only.
-4. **Lite host env**: `ROUVR_LEDGER_DATABASE_URL=sqlite:///./ledger/ledger.db`,
+3. **Lite host env**: `ROUVR_LEDGER_DATABASE_URL=sqlite:///./ledger/ledger.db`,
    session secret (32+ bytes, server-only), `SITE_URL=https://<lite-host>`
    for callbacks. Single-machine deploy; no Redis/Postgres.
-5. **DNS/TLS**: `auth.<domain>` and `<lite-host>` with valid certs before B1
+4. **DNS/TLS**: `auth.<domain>` and `<lite-host>` with valid certs before B1
    testing.
 
 ## 6. Risks and open questions
 
-1. **hyeve Google-IdP shape is assumed, not confirmed** — if hyeve-auth has no
-   Google-IdP path, B1 becomes custom OAuth + local JWT minting (fallback:
-   keep hyeve for identity, add Google at Lite with the same session
+1. **hyeve native-login shape is assumed, not confirmed** — B1 needs the
+   direct sign-in path plus reachable JWKS (fallback: local
+   username/password via the onboard endpoints with the same session
    contract). Confirm before Slice B.
 2. **Outbox/SSE fan-out on SQLite** — single-machine SSE is fine, but long-lived
    connections + WAL checkpointing need a soak test; cap: one SSE stream per

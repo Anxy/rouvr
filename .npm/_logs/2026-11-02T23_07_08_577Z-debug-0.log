@@ -1,0 +1,32 @@
+0 verbose cli /home/anxy/.local/opt/node-v22.23.4-linux-x64/bin/node /home/anxy/.local/bin/npm
+1 info using npm@11.21.1
+2 info using node@v22.23.4
+3 silly config load:file:/home/anxy/.local/lib/node_modules/npm/npmrc
+4 silly config load:file:/tmp/apigen/.npmrc
+5 silly config load:file:/home/anxy/dev/rouvr/.data/workspaces/rouvr__118__a11/.npmrc
+6 silly config load:file:/etc/npmrc
+7 verbose title npm i openapi-typescript@7.13.0 typescript@5.9.3
+8 verbose argv "i" "--no-audit" "--no-fund" "openapi-typescript@7.13.0" "typescript@5.9.3"
+9 verbose logfile logs-max:10 dir:/home/anxy/dev/rouvr/.data/workspaces/rouvr__118__a11/.npm/_logs/2026-11-02T23_07_08_577Z-
+10 verbose logfile /home/anxy/dev/rouvr/.data/workspaces/rouvr__118__a11/.npm/_logs/2026-11-02T23_07_08_577Z-debug-0.log
+11 warn Unknown builtin config "globalignorefile". This will stop working in the next major version of npm. See `npm help npmrc` for supported config options.
+12 silly logfile done cleaning log files
+13 silly packumentCache heap:4345298944 maxSize:1086324736 maxEntrySize:543162368
+14 silly idealTree buildDeps
+15 silly fetch manifest openapi-typescript@7.13.0
+16 silly packumentCache full:https://registry.npmjs.org/openapi-typescript cache-miss
+17 http fetch GET 200 https://registry.npmjs.org/openapi-typescript 343ms (cache miss)
+18 silly packumentCache full:https://registry.npmjs.org/openapi-typescript set size:undefined disposed:false
+19 silly fetch manifest typescript@5.9.3
+20 silly packumentCache full:https://registry.npmjs.org/typescript cache-miss
+21 http fetch GET 200 https://registry.npmjs.org/typescript 480ms (cache miss)
+22 silly packumentCache full:https://registry.npmjs.org/typescript set size:undefined disposed:false
+23 silly placeDep ROOT openapi-typescript@7.13.0 REPLACE for: apigen@1.0.0 want: 7.13.0
+24 silly placeDep ROOT typescript@5.9.3 REPLACE for: apigen@1.0.0 want: 5.9.3
+25 silly reify moves {}
+26 verbose cwd /tmp/apigen
+27 verbose os Linux 7.0.0-42-generic
+28 verbose node v22.23.4
+29 verbose npm  v11.21.1
+30 verbose exit 0
+31 info ok

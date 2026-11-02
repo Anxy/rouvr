@@ -1,0 +1,34 @@
+0 verbose cli /home/anxy/.local/opt/node-v22.23.4-linux-x64/bin/node /home/anxy/.local/bin/npm
+1 info using npm@11.21.1
+2 info using node@v22.23.4
+3 silly config load:file:/home/anxy/.local/lib/node_modules/npm/npmrc
+4 silly config load:file:/tmp/apigen/.npmrc
+5 silly config load:file:/home/anxy/dev/rouvr/.data/workspaces/rouvr__118__a11/.npmrc
+6 silly config load:file:/etc/npmrc
+7 verbose title npm init
+8 verbose argv "init" "--yes"
+9 verbose logfile logs-max:10 dir:/home/anxy/dev/rouvr/.data/workspaces/rouvr__118__a11/.npm/_logs/2026-11-02T23_07_08_362Z-
+10 verbose logfile /home/anxy/dev/rouvr/.data/workspaces/rouvr__118__a11/.npm/_logs/2026-11-02T23_07_08_362Z-debug-0.log
+11 warn Unknown builtin config "globalignorefile". This will stop working in the next major version of npm. See `npm help npmrc` for supported config options.
+12 silly logfile done cleaning log files
+13 silly package data {
+13 silly package data   name: 'apigen',
+13 silly package data   version: '1.0.0',
+13 silly package data   description: '',
+13 silly package data   main: 'index.js',
+13 silly package data   scripts: { test: 'echo "Error: no test specified" && exit 1' },
+13 silly package data   keywords: [],
+13 silly package data   author: '',
+13 silly package data   license: 'ISC',
+13 silly package data   type: 'commonjs',
+13 silly package data   dependencies: { 'openapi-typescript': '^7.13.0', typescript: '^5.9.3' },
+13 silly package data   devDependencies: {},
+13 silly package data   [Symbol(newline)]: '\n',
+13 silly package data   [Symbol(indent)]: '  '
+13 silly package data }
+14 verbose cwd /tmp/apigen
+15 verbose os Linux 7.0.0-42-generic
+16 verbose node v22.23.4
+17 verbose npm  v11.21.1
+18 verbose exit 0
+19 info ok

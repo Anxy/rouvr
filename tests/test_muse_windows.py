@@ -195,3 +195,14 @@ def test_existing_loose_registry_root_is_tightened(tmp_path):
     root.chmod(0o755)  # simulates an ACL-inherited loose dir
     ensure_muse_registry_root(ws)
     assert stat.S_IMODE(root.stat().st_mode) == 0o700
+
+
+def test_registry_sessions_subdir_is_0700(tmp_path):
+    import stat
+    from rouvr.muse import ensure_muse_registry_root, muse_registry_root
+    ws = tmp_path / "ws"
+    ws.mkdir()
+    root = ensure_muse_registry_root(ws)
+    sessions = root / "sessions"
+    assert sessions.is_dir()
+    assert stat.S_IMODE(sessions.stat().st_mode) == 0o700

@@ -47,14 +47,17 @@ def muse_registry_root(cwd: Path) -> Path:
 
 
 def ensure_muse_registry_root(cwd: Path) -> Path:
-    """Pre-create the registry root with explicit 0700.
+    """Pre-create the registry root (and its sessions dir) with explicit 0700.
 
     mkdir honors umask but not parent default ACLs: on a checkout whose
-    tree carries a group-writable default ACL the fresh dir would fail
-    muse's same-user 0700 check, so chmod explicitly after mkdir."""
+    tree carries a group-writable default ACL the fresh dirs would fail
+    muse's same-user 0700 checks, so chmod explicitly after mkdir. muse
+    checks both the registry root and its sessions subdir (observed live),
+    and creates neither itself before checking."""
     root = muse_registry_root(cwd)
-    root.mkdir(parents=True, exist_ok=True)
-    os.chmod(root, 0o700)
+    for d in (root, root / "sessions"):
+        d.mkdir(parents=True, exist_ok=True)
+        os.chmod(d, 0o700)
     return root
 
 

@@ -206,3 +206,37 @@ def test_registry_sessions_subdir_is_0700(tmp_path):
     sessions = root / "sessions"
     assert sessions.is_dir()
     assert stat.S_IMODE(sessions.stat().st_mode) == 0o700
+
+
+async def test_kill_tolerates_already_exited_process():
+    import asyncio
+    from rouvr.muse import MuseLauncher
+    proc = await asyncio.create_subprocess_exec("/bin/sh", "-c", "exit 0")
+    await proc.wait()
+    await MuseLauncher("muse")._kill(proc)  # must not raise
+
+
+async def test_kill_sigkill_race_does_not_raise(monkeypatch):
+    import asyncio
+    import os
+    import signal
+    from rouvr.muse import MuseLauncher
+    real_killpg = os.killpg
+    proc = await asyncio.create_subprocess_exec("/bin/sh", "-c", "trap '' TERM; sleep 30")
+    await asyncio.sleep(0.2)  # let the trap install so SIGTERM is ignored
+
+    def flaky(pid, sig):
+        if sig == signal.SIGKILL:
+            real_killpg(pid, sig)  # process really dies here ...
+            raise ProcessLookupError(3, "No such process")  # ... but the kernel reports it gone
+        return real_killpg(pid, sig)
+
+    monkeypatch.setattr(os, "killpg", flaky)
+    try:
+        await MuseLauncher("muse", kill_grace_s=0.1)._kill(proc)  # must not raise
+    finally:
+        try:
+            proc.kill()
+        except ProcessLookupError:
+            pass
+        await proc.wait()

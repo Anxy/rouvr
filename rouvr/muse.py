@@ -389,11 +389,17 @@ class MuseLauncher:
             subprocess.run(["docker", "kill", container], capture_output=True, timeout=30)
         if proc.returncode is not None:
             return
-        os.killpg(proc.pid, signal.SIGTERM)
+        try:
+            os.killpg(proc.pid, signal.SIGTERM)
+        except ProcessLookupError:
+            return  # reaped between the returncode check and the kill
         try:
             await asyncio.wait_for(proc.wait(), self.grace)
         except asyncio.TimeoutError:
-            os.killpg(proc.pid, signal.SIGKILL)
+            try:
+                os.killpg(proc.pid, signal.SIGKILL)
+            except ProcessLookupError:
+                pass  # exited while escalating to SIGKILL
             await proc.wait()
 
 

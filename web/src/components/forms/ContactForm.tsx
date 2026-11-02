@@ -9,6 +9,7 @@ import { Mascot } from "@/components/brand/Mascot";
 import { Button } from "@/components/ui/Button";
 import { contactSchema, type ContactInput } from "@/lib/validations";
 import { cn } from "@/lib/utils";
+import { submitContact } from "@/lib/api/client";
 import { FieldError, fieldClass } from "./FieldError";
 
 export function ContactForm() {
@@ -27,13 +28,7 @@ export function ContactForm() {
   const onSubmit = async (values: ContactInput) => {
     setServerError(null);
     try {
-      const res = await fetch("/api/contact", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(values),
-      });
-      const data = (await res.json()) as { ok: boolean; error?: string };
-      if (!res.ok || !data.ok) throw new Error(data.error ?? "Something went wrong.");
+      await submitContact(values);
       setStatus("success");
     } catch (err) {
       setStatus("error");

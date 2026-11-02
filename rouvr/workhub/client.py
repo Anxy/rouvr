@@ -76,7 +76,7 @@ def canonical_task(t: dict) -> dict:
                 else {"id": f"c{i + 1}", "text": str(c)} for i, c in enumerate(raw)]
     return {**t, "id": str(t.get("id") or t.get("task_id")), "record_version": int(t.get("record_version") or 0),
             "contract_rev": str(t.get("contract_rev") or t.get("record_version") or contract_sha or ""),
-            "description": str(t.get("description") or t.get("intent") or contract_body.get("description") or ""),
+            "description": str(contract_body.get("description") or t.get("description") or t.get("intent") or ""),
             "project_id": str(t.get("project_id") or contract_body.get("project_id") or ""),
             "acceptance_criteria": criteria}
 

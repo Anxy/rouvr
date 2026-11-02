@@ -30,6 +30,16 @@ def test_canonical_task_ledger_contract_rev_falls_back_to_contract_sha():
     assert t["contract_rev"] == "abc123"
 
 
+def test_canonical_task_prefers_contract_description_over_intent():
+    # Ledger rows carry intent="supervisor" and no top-level description; the
+    # done-contract description (with Knowledge in force citations) must win
+    # or worker prompts never show the citations.
+    t = canonical_task({"id": 8, "intent": "supervisor", "contracts": [
+        {"sha256": "s", "body": '{"description": "Do X. Knowledge in force: knowledge:1@v1",'
+                                ' "acceptance_criteria": ["x"]}'}]})
+    assert "knowledge:1@v1" in t["description"]
+
+
 def test_canonical_task_uses_last_contract():
     t = canonical_task({"id": 7, "contracts": [
         {"sha256": "old", "body": '{"description": "old", "project_id": "oldp", "acceptance_criteria": ["old"]}'},

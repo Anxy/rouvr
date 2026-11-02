@@ -144,9 +144,17 @@ asyncio.run(Client.connect('127.0.0.1:7233', namespace='default'))" 2>/dev/null 
   else
     # Tenant-admin credentials for hyeve-auth onboarding (0600, git-ignored).
     # Passed only to the ledger process env; workers/MCP never receive them.
+    # Endpoint defaults live in the git-ignored .secrets/rouvr/hyeve-endpoint.env
+    # (or the environment); the script carries no host/tenant literals.
+    if [ -f "$ROOT/.secrets/rouvr/hyeve-endpoint.env" ]; then
+      # shellcheck disable=SC1091
+      source "$ROOT/.secrets/rouvr/hyeve-endpoint.env"
+    fi
+    : "${HYEVE_AUTH_BASE_URL:?set HYEVE_AUTH_BASE_URL via env or .secrets/rouvr/hyeve-endpoint.env}"
+    : "${HYEVE_AUTH_TENANT:?set HYEVE_AUTH_TENANT via env or .secrets/rouvr/hyeve-endpoint.env}"
     _hyeve_admin_env=(
-      "HYEVE_AUTH_BASE_URL=${HYEVE_AUTH_BASE_URL:-https://auth.betademo.net}"
-      "HYEVE_AUTH_TENANT=${HYEVE_AUTH_TENANT:-rouvr-demo}"
+      "HYEVE_AUTH_BASE_URL=$HYEVE_AUTH_BASE_URL"
+      "HYEVE_AUTH_TENANT=$HYEVE_AUTH_TENANT"
     )
     if [ -f "$ROOT/.secrets/rouvr/hyeve-admin.env" ]; then
       # Source shell-quoted values, then pass only these two variables to the

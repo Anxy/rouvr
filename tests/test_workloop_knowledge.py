@@ -56,6 +56,9 @@ def test_rule_changes_outcome_with_citation(live, tmp_path, monkeypatch):
     task = ms.workhub_create_task("Add helper", "Add a helper with types",
                                   ["helper has type hints"], "acme", "site")
     assert cite in (task.get("knowledge_citations") or [])
+    import json as _json
+    spec = _json.loads(task["contracts"][0]["body"])
+    assert cite in spec["description"] and "Knowledge in force" in spec["description"]
     # coder/reviewer bundle carries the rule in force
     bundle = ms.knowledge_context_bundle("acme", "site")
     assert cite in bundle["citations"]

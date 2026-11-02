@@ -405,7 +405,24 @@ class Activities:
     @activity.defn(name="close_task")
     @_wrap
     async def close_task(self, wf: TaskWorkflowInput, b: Binding, attempt_id: str) -> CloseResult:
-        return await self._close_to(wf.task_id, "done", f"approved on {attempt_id}", ("close", wf.task_id, attempt_id))
+        notes = [f"approved on {attempt_id}"]
+        try:  # closing receipt lists the knowledge citations in force
+            wh = self.h.workhub_for(None)
+            cites: list[str] = []
+            for e in await wh.list_evidence(wf.task_id):
+                body = e.get("body")
+                if isinstance(body, str):
+                    try:
+                        body = json.loads(body)
+                    except ValueError:
+                        body = None
+                if isinstance(body, dict) and e.get("kind") == "knowledge_citations":
+                    cites.extend(x for x in body.get("citations", []) if isinstance(x, str))
+            if cites:
+                notes.append("knowledge: " + ", ".join(sorted(set(cites))))
+        except Exception:
+            pass  # citation listing is best-effort; the close must not fail on it
+        return await self._close_to(wf.task_id, "done", "; ".join(notes), ("close", wf.task_id, attempt_id))
 
     @activity.defn(name="mark_blocked")
     @_wrap

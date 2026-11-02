@@ -458,7 +458,7 @@ def make_app(db_url: str = DB_URL) -> FastAPI:
                 person = {"person_type": str(body.get("person_type") or "Customer"),
                           "given_name": given, "family_name": family,
                           "display_name": display}
-        # Admin-driven identity (betademo/rouvr-demo): the tenant admin owns
+        # Admin-driven identity: the configured tenant admin owns
         # RBAC bootstrap and the trusted create call; new users get the
         # rouvr-user role immediately.
         admin = _upstream(_ha.admin_token)
@@ -951,17 +951,61 @@ def make_app(db_url: str = DB_URL) -> FastAPI:
                                     "proposal": f"merge into knowledge:{seen_title[key]}"})
             else:
                 seen_title[key] = r["id"]
+        # Contradictions: only when two entries share a subject/scope anchor
+        # (quoted phrase, backticked term, or D-numbered decision) and make
+        # opposing claims about it (same predicate affirmed in one window,
+        # negated in the other). Each flag carries confidence + reason.
+        _ANCHOR_RE = re.compile(r'"([^"]{4,})"|`([^`]{4,})`|\b(D\d{1,3})\b')
+        _PREDICATES = ("must", "always", "required", "should", "is", "are",
+                       "allow", "enable", "use", "store", "delete", "deleted",
+                       "keep", "support")
+        _NEG_RE = re.compile(r"(?<!\w)(not|never|nothing|cannot|forbid|deny|reject|"
+                               r"opposite|without|no)(?!\w)|n't")
+
+        def _anchors(text: str) -> set:
+            out = set()
+            for m in _ANCHOR_RE.finditer(text):
+                out.add(next(g for g in m.groups() if g).lower())
+            return out
+
+        def _window(text: str, anchor: str) -> str:
+            i = text.lower().find(anchor)
+            return text[max(0, i - 100):i + 100 + len(anchor)].lower()
+
+        def _negated(window: str) -> bool:
+            return bool(_NEG_RE.search(window))
+
+        contradictions: list = []
         for i, a in enumerate(latest):
+            fa = a["title"] + " " + a["body"]
             for b in latest[i + 1:]:
-                ta, tb = (a["title"] + " " + a["body"]).lower(), (b["title"] + " " + b["body"]).lower()
-                if ("always" in ta and "never" in tb) or ("never" in ta and "always" in tb) \
-                        or ("must" in ta and "must not" in tb) or ("must not" in ta and "must" in tb):
-                    words = set(re.findall(r"\w+", ta)) & set(re.findall(r"\w+", tb))
-                    if len([w for w in words if len(w) > 4]) >= 2:
-                        suggestions.append({"type": "contradiction",
-                                            "entries": [a["id"], b["id"]],
-                                            "note": f"possible contradiction: {a['title']!r} vs {b['title']!r}",
-                                            "proposal": "human review, keep both until resolved"})
+                fb = b["title"] + " " + b["body"]
+                for anchor in _anchors(fa) & _anchors(fb):
+                    wa, wb = _window(fa, anchor), _window(fb, anchor)
+                    preds = [p for p in _PREDICATES if p in wa and p in wb]
+                    if not preds or _negated(wa) == _negated(wb):
+                        continue
+                    conf = "high" if re.fullmatch(r"d\d{1,3}", anchor) else "medium"
+                    contradictions.append({
+                        "type": "contradiction",
+                        "entries": [a["id"], b["id"]],
+                        "confidence": conf,
+                        "reason": f"shared anchor {anchor!r}: {preds[0]!r} affirmed on one side, "
+                                  f"negated on the other",
+                        "note": f"possible contradiction: {a['title']!r} vs {b['title']!r}",
+                        "proposal": "human review, keep both until resolved"})
+                    break
+        contradictions.sort(key=lambda s: 0 if s["confidence"] == "high" else 1)
+        # Medium-confidence matches are review hints, not flags: a shared
+        # quoted phrase with asymmetric negation is usually complementary
+        # context (hand-check 2026-11-02: 0/5 real), not an opposing claim.
+        # Only all-high lists in small counts are presented as flags.
+        contra_mode = "flags"
+        if len(contradictions) > 15:
+            contradictions, contra_mode = contradictions[:10], "review_hints"
+        elif any(s["confidence"] != "high" for s in contradictions):
+            contra_mode = "review_hints"
+        suggestions.extend(contradictions)
         for r in latest:
             try:
                 age = (datetime.now(timezone.utc)
@@ -982,7 +1026,8 @@ def make_app(db_url: str = DB_URL) -> FastAPI:
                 suggestions.append({"type": "kind_fix", "entries": [r["id"]],
                                     "note": "looks like a standing rule",
                                     "proposal": "change kind to rule as a new version"})
-        return {"suggestions": suggestions, "count": len(suggestions)}
+        return {"suggestions": suggestions, "count": len(suggestions),
+                "contradictions_mode": contra_mode}
 
     @app.post("/v1/tasks")
     def create_task(body: dict, request: Request):

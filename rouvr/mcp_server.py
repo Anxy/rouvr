@@ -241,11 +241,20 @@ def workhub_create_task(title: str, description: str, acceptance_criteria: list[
         decomposition: dict = {"status": "enriched", "candidate": candidate}
     except Exception as e:  # enrichment is best-effort; the suite stays fail-closed
         decomposition = {"status": "skipped", "reason": f"{type(e).__name__}: {e}"[:200]}
+    rules = _verified_rules(tenant, project)
+    kc = {"citations": [r["citation"] for r in rules],
+          "rules": [{"citation": r["citation"], "version": r["version"],
+                     "title": r["title"]} for r in rules]}
+    spec_description = description
+    if kc["citations"]:
+        cited = ", ".join(f"{r['citation']} ({r['title']})" for r in kc["rules"])
+        spec_description = (description.rstrip() +
+                            "\n\nKnowledge in force — cite by id: " + cited)
     with _ledger() as c:
         task = c.post("/v1/tasks_with_contract", json={
             "title": title, "intent": "supervisor", "tenant": tenant, "project": project,
             "contract": {
-                "project_id": project, "description": description,
+                "project_id": project, "description": spec_description,
                 "acceptance_criteria": acceptance_criteria}}).raise_for_status().json()
         task = c.get(f"/v1/tasks/{task['id']}").raise_for_status().json()
         if (w := _prose_warnings(description, acceptance_criteria)):
@@ -253,10 +262,6 @@ def workhub_create_task(title: str, description: str, acceptance_criteria: list[
         c.post(f"/v1/tasks/{task['id']}/evidence",
                json={"kind": "decomposition", "fence": f"{task['id']}:decompose",
                      "body": decomposition}).raise_for_status()
-        rules = _verified_rules(tenant, project)
-        kc = {"citations": [r["citation"] for r in rules],
-              "rules": [{"citation": r["citation"], "version": r["version"],
-                         "title": r["title"]} for r in rules]}
         c.post(f"/v1/tasks/{task['id']}/evidence",
                json={"kind": "knowledge_citations", "fence": f"{task['id']}:knowledge",
                      "body": kc}).raise_for_status()

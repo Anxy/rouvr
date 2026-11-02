@@ -381,7 +381,9 @@ def criterion_lines(criteria: list) -> list[str]:
 def build_task_prompt(task: dict, spec_repo: str, branch: str, rework_notes: str,
                       peer_messages: list[str] | None = None) -> str:
     parts = [f"Task {task.get('number', task.get('id'))}: {task.get('title', '')}", "",
-             str(task.get("description") or ""), "", "Acceptance criteria:"]
+             str(task.get("description") or ""), "",
+             "Project knowledge cited above as knowledge:<id>@v<n> is authoritative where marked verified: follow it.",
+             "", "Acceptance criteria:"]
     parts += criterion_lines(task.get("acceptance_criteria") or [])
     parts += ["", f"Repository {spec_repo}, work on branch {branch}. Commit locally; do NOT push and "
               "do not use any git credential — the supervisor grants one and the system pushes; do not merge.",
@@ -418,6 +420,7 @@ def build_reviewer_prompt(task: dict, diff: str, tests_summary: str,
     parts += ["", f"Test runs: {tests_summary}", "", "PR diff:", diff[:12000],
               "", 'Write verdict.json in the working directory: {"verdict": "approve|request_changes|reject",',
               '"notes": "<one paragraph>"}. Approve only if every criterion is met by the diff and tests.',
+              "If project knowledge cited as knowledge:<id>@v<n> affected your verdict, name the citation ids in your notes.",
               'To reply to the coder, also write message-coder.json: {"text": "<message>"}. '
               'Before writing any file, say it as a plain chat message (normal text, not JSON): Message to coder : <message>']
     return "\n".join(parts)

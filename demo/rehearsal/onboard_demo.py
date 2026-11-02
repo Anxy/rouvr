@@ -101,7 +101,15 @@ def main() -> int:
     results.append(leg("complete onboarding + profiles in Knowledge", complete))
     results.append(leg("knowledge store/cite on demo scope", knowledge_demo_scope))
     print("LEGS:", " ".join(results))
-    return 1 if "FAIL" in results else 0
+    # Exit codes are explicit: 0 all PASS, 1 any FAIL, 2 BLOCKED on the live
+    # hyeve-auth/person-service dependency (out of scope without live creds).
+    # BLOCKED is reported loudly here, never a silent pass.
+    if "FAIL" in results:
+        return 1
+    if "BLOCKED" in results:
+        print("BLOCKED: live hyeve-auth/person-service dependency unavailable")
+        return 2
+    return 0
 
 
 if __name__ == "__main__":

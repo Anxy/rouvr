@@ -65,6 +65,11 @@ def write_hidden_suite(root: Path, *, task_id: str, files: dict[str, str], creat
         raise RouvrError(Code.CONTRACT, f"hidden suite for {task_id} is locked")
     if not files:
         raise RouvrError(Code.CONTRACT, "hidden suite needs at least one file")
+    for name, content in files.items():
+        try:
+            compile(content, name, "exec")
+        except (SyntaxError, ValueError) as e:
+            raise RouvrError(Code.CONTRACT, f"hidden test {name} does not parse: {e}") from e
     task_dir.mkdir(parents=True, exist_ok=True)
     for name, content in files.items():
         if "/" in name or name in {".", ".."} or not name.endswith(".py"):

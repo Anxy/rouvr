@@ -29,6 +29,13 @@ def test_write_rejects_empty_and_bad_names(tmp_path):
         write_hidden_suite(tmp_path, task_id="t", files={"notes.txt": "x"}, created_by="x")
 
 
+def test_write_rejects_unparsable_suite(tmp_path):
+    with pytest.raises(RouvrError) as e:
+        write_hidden_suite(tmp_path, task_id="t", files={"test_x.py": "def broken(:\n"}, created_by="x")
+    assert e.value.code is Code.CONTRACT
+    assert not (tmp_path / "t").exists()  # refused before any write
+
+
 def test_fetch_detects_tamper_and_missing(tmp_path):
     write_hidden_suite(tmp_path, task_id="t1", files=HIDDEN, created_by="test_author")
     (tmp_path / "t1" / "test_hidden.py").write_text("def test_c1_x():\n    assert True\n")

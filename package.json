@@ -1,0 +1,9 @@
+{
+  "name": "rouvr",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "gen:api": "python3 scripts/export-openapi.py && pnpm --filter web gen:api"
+  },
+  "devDependencies": {}
+}

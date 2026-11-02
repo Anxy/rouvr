@@ -9,10 +9,13 @@ both scope fields are mandatory on every create, never defaulted.
 """
 from __future__ import annotations
 
+import contextlib
 import hashlib
 import json
 import os
 import re
+import sqlite3
+import threading
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
@@ -20,7 +23,7 @@ import secrets as _secrets
 
 from fastapi import FastAPI, HTTPException, Request
 from rapidfuzz import fuzz
-from sqlalchemy import create_engine, text
+from sqlalchemy import create_engine, event, text
 
 try:
     from ledger import hyeve_auth as _ha
@@ -36,6 +39,49 @@ TRANSITIONS = {
     "failed": {"open"},
     "done": set(),
 }
+
+SQLITE_BUSY_TIMEOUT_MS = 5000
+
+_WRITER_LOCKS: dict[str, threading.Lock] = {}
+_WRITER_LOCKS_GUARD = threading.Lock()
+
+
+def _writer_lock_key(db_url: str) -> str:
+    if db_url.startswith("sqlite:///"):
+        name = db_url[len("sqlite:///"):]
+        if name != ":memory:":
+            return "sqlite:" + str(Path(name).resolve())
+    return db_url
+
+
+def _writer_lock_for(db_url: str) -> threading.Lock:
+    """The single-writer lock for one DB file, shared process-wide so the API
+    and every in-process worker serialize through the same queue."""
+    key = _writer_lock_key(db_url)
+    with _WRITER_LOCKS_GUARD:
+        lock = _WRITER_LOCKS.get(key)
+        if lock is None:
+            lock = threading.Lock()
+            _WRITER_LOCKS[key] = lock
+        return lock
+
+
+def sqlite_connect(db_file) -> sqlite3.Connection:
+    """Open a hardened SQLite connection for out-of-app writers.
+
+    Same settings the API applies to every pooled connection (WAL plus a 5s
+    busy wait), so worker writes queue behind the API instead of failing."""
+    conn = sqlite3.connect(str(db_file), timeout=SQLITE_BUSY_TIMEOUT_MS / 1000)
+    conn.execute("PRAGMA journal_mode=WAL")
+    conn.execute(f"PRAGMA busy_timeout={SQLITE_BUSY_TIMEOUT_MS}")
+    return conn
+
+
+def _set_sqlite_pragmas(dbapi_connection, _connection_record) -> None:
+    cursor = dbapi_connection.cursor()
+    cursor.execute("PRAGMA journal_mode=WAL")
+    cursor.execute(f"PRAGMA busy_timeout={SQLITE_BUSY_TIMEOUT_MS}")
+    cursor.close()
 
 
 def _now() -> str:
@@ -239,17 +285,37 @@ def make_app(db_url: str = DB_URL) -> FastAPI:
                          "to a sqlite:/// URL (Postgres is not supported)")
     if db_url.startswith("sqlite:///./"):
         Path(db_url[len("sqlite:///"):]).parent.mkdir(parents=True, exist_ok=True)
-    eng = create_engine(db_url)
-    if db_url.startswith("sqlite"):  # S014: WAL — parallel workers write evidence
+    if db_url.startswith("sqlite"):  # A5: WAL + busy wait on every pooled connection
+        eng = create_engine(db_url, connect_args={"timeout": SQLITE_BUSY_TIMEOUT_MS / 1000,
+                                                  "check_same_thread": False})
+        event.listen(eng, "connect", _set_sqlite_pragmas)
+    else:
+        eng = create_engine(db_url)
+    if db_url.startswith("sqlite"):  # S014/A5: WAL file mode from the first connection
         with eng.connect() as c:
             c.execute(text("PRAGMA journal_mode=WAL"))
             c.commit()
+    _wlock = _writer_lock_for(db_url)
+    _unserialized_begin = eng.begin
+
+    @contextlib.contextmanager
+    def _single_writer_begin():
+        # A5 single-writer discipline: one writer queue per DB file, shared by
+        # the API and every in-process worker. Writers in other processes queue
+        # via WAL + busy_timeout (a lock cannot span processes).
+        with _wlock:
+            with _unserialized_begin() as conn:
+                yield conn
+
+    eng.begin = _single_writer_begin  # type: ignore[method-assign]
     with eng.begin() as c:
         for stmt in (Path(__file__).with_name("schema.sql").read_text().split(";")):
             body = "\n".join(l for l in stmt.splitlines() if not l.strip().startswith("--"))
             if body.strip():
                 c.execute(text(body))
     app = FastAPI(title="Rouvr ledger")
+    app.state.engine = eng  # A5: pooled connections carry WAL + busy_timeout
+    app.state.writer_lock = _wlock  # A5: the per-DB single-writer queue
 
     # Add created_by to pre-S016 databases (schema.sql covers fresh ones
     # only via CREATE TABLE; existing tables need the column explicitly).

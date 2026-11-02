@@ -754,6 +754,20 @@ def make_app(db_url: str = DB_URL) -> FastAPI:
             return identity in _allowed_list(k.get("allowed_users"))
         return False
 
+    def _knowledge_latest_id(c, kid):
+        """Follow supersedes links forward to the head of the chain.
+
+        Direct id lookup is a current-result path (A6): a superseded id
+        resolves forward to its latest version instead of surfacing the
+        old row. Full history stays available via /history. Cycle-guarded."""
+        cur, seen = kid, {kid}
+        while True:
+            nxt = row(c, "SELECT id FROM knowledge_entries WHERE supersedes_id=:i", i=cur)
+            if not nxt or nxt["id"] in seen:
+                return cur
+            seen.add(nxt["id"])
+            cur = nxt["id"]
+
     def _knowledge_or_404(c, kid, identity):
         k = row(c, "SELECT * FROM knowledge_entries WHERE id=:i", i=kid)
         if not k:
@@ -953,9 +967,12 @@ def make_app(db_url: str = DB_URL) -> FastAPI:
         ident = _identity(request)
         with eng.begin() as c:
             try:
-                return _krow(_knowledge_or_404(c, int(key), ident))
+                kid = int(key)
             except ValueError:
                 pass
+            else:
+                kid = _knowledge_latest_id(c, kid)
+                return _krow(_knowledge_or_404(c, kid, ident))
             kw: dict = {"s": key}
             psql = ""
             if project:

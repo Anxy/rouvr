@@ -13,6 +13,8 @@ import hashlib
 import json
 import os
 import re
+import threading
+from contextlib import contextmanager
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
@@ -20,7 +22,7 @@ import secrets as _secrets
 
 from fastapi import FastAPI, HTTPException, Request
 from rapidfuzz import fuzz
-from sqlalchemy import create_engine, text
+from sqlalchemy import create_engine, event, text
 
 try:
     from ledger import hyeve_auth as _ha
@@ -36,6 +38,29 @@ TRANSITIONS = {
     "failed": {"open"},
     "done": set(),
 }
+
+BUSY_TIMEOUT_MS = 5000
+
+_WRITE_LOCKS: dict[str, threading.Lock] = {}
+_WRITE_LOCKS_GUARD = threading.Lock()
+
+
+def _db_key(db_url: str) -> str:
+    """Lock key shared by every engine on the same SQLite file."""
+    prefix = "sqlite:///"
+    if db_url.startswith(prefix) and not db_url.endswith(":memory:"):
+        return str(Path(db_url[len(prefix):]).resolve())
+    return db_url
+
+
+def _write_lock(db_url: str) -> threading.Lock:
+    key = _db_key(db_url)
+    with _WRITE_LOCKS_GUARD:
+        lock = _WRITE_LOCKS.get(key)
+        if lock is None:
+            lock = threading.Lock()
+            _WRITE_LOCKS[key] = lock
+        return lock
 
 
 def _now() -> str:
@@ -239,28 +264,48 @@ def make_app(db_url: str = DB_URL) -> FastAPI:
                          "to a sqlite:/// URL (Postgres is not supported)")
     if db_url.startswith("sqlite:///./"):
         Path(db_url[len("sqlite:///"):]).parent.mkdir(parents=True, exist_ok=True)
-    eng = create_engine(db_url)
-    if db_url.startswith("sqlite"):  # S014: WAL — parallel workers write evidence
-        with eng.connect() as c:
-            c.execute(text("PRAGMA journal_mode=WAL"))
-            c.commit()
-    with eng.begin() as c:
+    if db_url.startswith("sqlite"):
+        eng = create_engine(db_url, connect_args={"check_same_thread": False, "timeout": 5.0})
+
+        @event.listens_for(eng, "connect")
+        def _sqlite_pragmas(dbapi_conn, _record):
+            # FL-A5: WAL (S014) + busy_timeout on EVERY connection —
+            # busy_timeout is per-connection, so a one-shot PRAGMA is not enough.
+            cur = dbapi_conn.cursor()
+            cur.execute("PRAGMA journal_mode=WAL")
+            cur.execute(f"PRAGMA busy_timeout={BUSY_TIMEOUT_MS}")
+            cur.close()
+    else:
+        eng = create_engine(db_url)
+    # FL-A5 single-writer discipline: one in-process writer at a time per DB
+    # file (API + worker threads share the lock via _db_key). Writers in
+    # other processes serialize via busy_timeout instead.
+    _lock = _write_lock(db_url)
+
+    @contextmanager
+    def _begin():
+        with _lock:
+            with eng.begin() as conn:
+                yield conn
+
+    with _begin() as c:
         for stmt in (Path(__file__).with_name("schema.sql").read_text().split(";")):
             body = "\n".join(l for l in stmt.splitlines() if not l.strip().startswith("--"))
             if body.strip():
                 c.execute(text(body))
     app = FastAPI(title="Rouvr ledger")
+    app.state.engine = eng
 
     # Add created_by to pre-S016 databases (schema.sql covers fresh ones
     # only via CREATE TABLE; existing tables need the column explicitly).
-    with eng.begin() as c:
+    with _begin() as c:
         cols = [r[1] for r in c.execute(text("PRAGMA table_info(tasks)"))]
         if cols and "created_by" not in cols:
             c.execute(text("ALTER TABLE tasks ADD COLUMN created_by TEXT NOT NULL DEFAULT 'supervisor'"))
     # S022 partitions on pre-S022 databases: new tables plus scope columns.
     # No silent backfill — unscoped rows refuse startup with an explicit
     # assignment message instead of a default.
-    with eng.begin() as c:
+    with _begin() as c:
         c.execute(text("CREATE TABLE IF NOT EXISTS tenants(tenant TEXT PRIMARY KEY,"
                        " created_at TEXT NOT NULL)"))
         c.execute(text("CREATE TABLE IF NOT EXISTS projects(tenant TEXT NOT NULL REFERENCES tenants(tenant),"
@@ -300,7 +345,7 @@ def make_app(db_url: str = DB_URL) -> FastAPI:
                        "provider TEXT NOT NULL, subject TEXT NOT NULL,"
                        "username TEXT NOT NULL REFERENCES users(username),"
                        "created_at TEXT NOT NULL, PRIMARY KEY (provider, subject))"))
-    with eng.begin() as c:  # begin: the receipts migration below must commit
+    with _begin() as c:  # begin: the receipts migration below must commit
         n = c.execute(text("SELECT COUNT(*) FROM tasks WHERE tenant IS NULL OR tenant=''"
                            " OR project IS NULL OR project=''")).scalar()
         if n:
@@ -459,7 +504,7 @@ def make_app(db_url: str = DB_URL) -> FastAPI:
             raise HTTPException(422, "username and token_hash are required")
         if not isinstance(tenant, str) or not tenant.strip():
             raise HTTPException(422, "tenant is required")  # S022: no default tenant
-        with eng.begin() as c:
+        with _begin() as c:
             c.execute(text("INSERT INTO users(username,display_name,token_hash,tenant,created_at)"
                            " VALUES(:u,:d,:h,:t,:n) ON CONFLICT(username) DO UPDATE SET"
                            " token_hash=:h, display_name=:d, tenant=:t, disabled=0"),
@@ -471,7 +516,7 @@ def make_app(db_url: str = DB_URL) -> FastAPI:
     @app.get("/v1/users")
     def list_users(request: Request):
         _stack_only(_identity(request))
-        with eng.begin() as c:
+        with _begin() as c:
             return {"items": [dict(r) for r in c.execute(
                 text("SELECT username, display_name, tenant, disabled, created_at"
                      " FROM users ORDER BY username")).mappings()]}
@@ -483,7 +528,7 @@ def make_app(db_url: str = DB_URL) -> FastAPI:
         name = body.get("tenant")
         if not isinstance(name, str) or not name.strip():
             raise HTTPException(422, "tenant is required")
-        with eng.begin() as c:
+        with _begin() as c:
             c.execute(text("INSERT INTO tenants(tenant,created_at) VALUES(:t,:n)"
                            " ON CONFLICT(tenant) DO NOTHING"),
                       {"t": name.strip(), "n": _now()})
@@ -494,7 +539,7 @@ def make_app(db_url: str = DB_URL) -> FastAPI:
         """Register a project under an existing tenant (S022). Idempotent."""
         _stack_only(_identity(request))
         tenant, project = _scope(body)
-        with eng.begin() as c:
+        with _begin() as c:
             if not row(c, "SELECT * FROM tenants WHERE tenant=:t", t=tenant):
                 raise HTTPException(404, f"tenant not registered: create {tenant!r} first")
             c.execute(text("INSERT INTO projects(tenant,project,created_at) VALUES(:t,:p,:n)"
@@ -507,7 +552,7 @@ def make_app(db_url: str = DB_URL) -> FastAPI:
     def list_projects(request: Request, tenant: str | None = None):
         """Projects visible to the caller: its own tenant, or all for stack."""
         ident = _identity(request)
-        with eng.begin() as c:
+        with _begin() as c:
             mine = _tenant_of(c, ident)
             want = mine if mine is not None else tenant
             q = "SELECT tenant, project FROM projects"
@@ -521,7 +566,7 @@ def make_app(db_url: str = DB_URL) -> FastAPI:
     @app.post("/v1/users/{username}/disable")
     def disable_user(username: str, request: Request):
         _stack_only(_identity(request))
-        with eng.begin() as c:
+        with _begin() as c:
             c.execute(text("UPDATE users SET disabled=1 WHERE username=:u"), {"u": username})
             return {"disabled": username}
 
@@ -606,7 +651,7 @@ def make_app(db_url: str = DB_URL) -> FastAPI:
                              or claims.get("preferred_username") or "").strip()
         if not hyeve_user:
             raise HTTPException(422, "could not resolve a username for this token")
-        with eng.begin() as c:
+        with _begin() as c:
             link = row(c, "SELECT username FROM external_identities"
                           " WHERE provider='hyeve' AND subject=:s", s=sub)
             if link:  # idempotent: same subject returns its existing scope
@@ -822,7 +867,7 @@ def make_app(db_url: str = DB_URL) -> FastAPI:
         allowed = _allowed_list(body.get("allowed_users"))
         if vis != "restricted" and allowed:
             raise HTTPException(422, "allowed_users only with visibility=restricted")
-        with eng.begin() as c:
+        with _begin() as c:
             _registered(c, tenant, project)
             if _tenant_of(c, ident) not in (None, tenant):
                 raise HTTPException(403, f"knowledge in tenant {tenant!r}")
@@ -871,7 +916,7 @@ def make_app(db_url: str = DB_URL) -> FastAPI:
                       r.get("summary") or ""]
             return max([fuzz.WRatio(q, f) for f in fields] + [0.0])
 
-        with eng.begin() as c:
+        with _begin() as c:
             if ident == "supervisor":
                 mine = None
             else:
@@ -951,7 +996,7 @@ def make_app(db_url: str = DB_URL) -> FastAPI:
     @app.get("/v1/knowledge/{key}")
     def get_knowledge(key: str, request: Request, project: str | None = None):
         ident = _identity(request)
-        with eng.begin() as c:
+        with _begin() as c:
             try:
                 return _krow(_knowledge_or_404(c, int(key), ident))
             except ValueError:
@@ -998,7 +1043,7 @@ def make_app(db_url: str = DB_URL) -> FastAPI:
         """Version chain for one entry, oldest first. Append-only history
         is the point: nothing here is ever rewritten, only superseded."""
         ident = _identity(request)
-        with eng.begin() as c:
+        with _begin() as c:
             head = _knowledge_or_404(c, kid, ident)
             chain, seen, cur = [], {head["id"]}, head
             while cur:
@@ -1022,7 +1067,7 @@ def make_app(db_url: str = DB_URL) -> FastAPI:
         kbody = str(body.get("body") or "")
         if not title or not kbody.strip():
             raise HTTPException(422, "title and body are required")
-        with eng.begin() as c:
+        with _begin() as c:
             old = _knowledge_or_404(c, kid, ident)
             if row(c, "SELECT id FROM knowledge_entries WHERE supersedes_id=:i", i=kid):
                 raise HTTPException(409, "entry already superseded: version the latest instead")
@@ -1056,7 +1101,7 @@ def make_app(db_url: str = DB_URL) -> FastAPI:
     @app.post("/v1/knowledge/{kid}/confirm")
     def confirm_knowledge(kid: int, request: Request):
         ident = _identity(request)
-        with eng.begin() as c:
+        with _begin() as c:
             k = _knowledge_or_404(c, kid, ident)
             if ident != "supervisor" and ident != k.get("author"):
                 raise HTTPException(403, "only the creator or an admin confirms")
@@ -1072,7 +1117,7 @@ def make_app(db_url: str = DB_URL) -> FastAPI:
         if not isinstance(items, list) or not items:
             raise HTTPException(422, "items is required")
         out = []
-        with eng.begin() as c:
+        with _begin() as c:
             _registered(c, tenant, project)
             if _tenant_of(c, ident) not in (None, tenant):
                 raise HTTPException(403, f"knowledge in tenant {tenant!r}")
@@ -1098,7 +1143,7 @@ def make_app(db_url: str = DB_URL) -> FastAPI:
         ident = _identity(request)
         tenant, project = _scope(body)
         title = str(body.get("title") or "Session compact").strip() or "Session compact"
-        with eng.begin() as c:
+        with _begin() as c:
             _registered(c, tenant, project)
             if _tenant_of(c, ident) not in (None, tenant):
                 raise HTTPException(403, f"knowledge in tenant {tenant!r}")
@@ -1138,7 +1183,7 @@ def make_app(db_url: str = DB_URL) -> FastAPI:
     def knowledge_snapshot(body: dict, request: Request):
         ident = _identity(request)
         tenant, project = _scope(body)
-        with eng.begin() as c:
+        with _begin() as c:
             _registered(c, tenant, project)
             if _tenant_of(c, ident) not in (None, tenant):
                 raise HTTPException(403, f"knowledge in tenant {tenant!r}")
@@ -1167,7 +1212,7 @@ def make_app(db_url: str = DB_URL) -> FastAPI:
         tenant, project = _scope(body)
         items = body.get("items") or []
         title = str(body.get("title") or "Session close").strip() or "Session close"
-        with eng.begin() as c:
+        with _begin() as c:
             _registered(c, tenant, project)
             if _tenant_of(c, ident) not in (None, tenant):
                 raise HTTPException(403, f"knowledge in tenant {tenant!r}")
@@ -1195,7 +1240,7 @@ def make_app(db_url: str = DB_URL) -> FastAPI:
     @app.get("/v1/knowledge-rules")
     def knowledge_verified_rules(request: Request, project: str | None = None):
         ident = _identity(request)
-        with eng.begin() as c:
+        with _begin() as c:
             if ident == "supervisor":
                 mine = None
             else:
@@ -1225,7 +1270,7 @@ def make_app(db_url: str = DB_URL) -> FastAPI:
         """On-demand curator (light): suggestions only, never verifies/deletes."""
         ident = _identity(request)
         tenant, project = _scope(body)
-        with eng.begin() as c:
+        with _begin() as c:
             _registered(c, tenant, project)
             if _tenant_of(c, ident) not in (None, tenant):
                 raise HTTPException(403, f"knowledge in tenant {tenant!r}")
@@ -1328,7 +1373,7 @@ def make_app(db_url: str = DB_URL) -> FastAPI:
     def create_task(body: dict, request: Request):
         ident = _identity(request)
         tenant, project = _scope(body)  # S022: mandatory, never defaulted
-        with eng.begin() as c:
+        with _begin() as c:
             _registered(c, tenant, project)
             if _tenant_of(c, ident) not in (None, tenant):
                 raise HTTPException(403, f"task in tenant {tenant!r}")
@@ -1364,7 +1409,7 @@ def make_app(db_url: str = DB_URL) -> FastAPI:
             raise HTTPException(422, "contract with acceptance_criteria is required")
         ident = _identity(request)
         tenant, project = _scope(body)  # S022: mandatory, never defaulted
-        with eng.begin() as c:
+        with _begin() as c:
             _registered(c, tenant, project)
             if _tenant_of(c, ident) not in (None, tenant):
                 raise HTTPException(403, f"task in tenant {tenant!r}")
@@ -1385,7 +1430,7 @@ def make_app(db_url: str = DB_URL) -> FastAPI:
     @app.get("/v1/tasks")
     def list_tasks(request: Request, state: str | None = None, tenant: str | None = None):
         ident = _identity(request)
-        with eng.begin() as c:
+        with _begin() as c:
             mine = _tenant_of(c, ident)
             want = mine if mine is not None else tenant  # S022: users see their own tenant
             q, kw = "SELECT * FROM tasks", {}
@@ -1400,7 +1445,7 @@ def make_app(db_url: str = DB_URL) -> FastAPI:
 
     @app.get("/v1/tasks/{tid}")
     def get_task(tid: int, request: Request):
-        with eng.begin() as c:
+        with _begin() as c:
             t = _own_or_stack(c, tid, _identity(request))
             t["contracts"] = [dict(r) for r in c.execute(text("SELECT * FROM contracts WHERE task_id=:i ORDER BY id"), {"i": tid}).mappings()]
             t["evidence"] = [dict(r) for r in c.execute(text("SELECT * FROM evidence WHERE task_id=:i ORDER BY id"), {"i": tid}).mappings()]
@@ -1410,7 +1455,7 @@ def make_app(db_url: str = DB_URL) -> FastAPI:
     @app.post("/v1/tasks/{tid}/contracts")
     def add_contract(tid: int, body: dict, request: Request):
         s, h = _canon(body)
-        with eng.begin() as c:
+        with _begin() as c:
             _own_or_stack(c, tid, _identity(request))
             existing = row(c, "SELECT * FROM contracts WHERE task_id=:i AND sha256=:h", i=tid, h=h)
             if existing:
@@ -1428,7 +1473,7 @@ def make_app(db_url: str = DB_URL) -> FastAPI:
         approved_by = str(body.get("approved_by") or "").strip()
         if not scope or not expires_at or not approved_by:
             raise HTTPException(422, "scope, expires_at and approved_by are required")
-        with eng.begin() as c:
+        with _begin() as c:
             rid = c.execute(text("INSERT INTO grants(scope,contract_rev,expires_at,approved_by,created_at)"
                                  " VALUES(:s,:r,:e,:a,:n)"),
                             {"s": scope, "r": str(body.get("contract_rev") or ""),
@@ -1438,7 +1483,7 @@ def make_app(db_url: str = DB_URL) -> FastAPI:
     @app.get("/v1/grants/active")
     def active_grant(scope: str, contract_rev: str | None = None):
         """Newest unexpired grant for scope (and contract_rev, when given)."""
-        with eng.begin() as c:
+        with _begin() as c:
             rows = [dict(r) for r in c.execute(
                 text("SELECT * FROM grants WHERE scope=:s AND expires_at>:n ORDER BY id DESC"),
                 {"s": scope, "n": _now()}).mappings()]
@@ -1450,7 +1495,7 @@ def make_app(db_url: str = DB_URL) -> FastAPI:
     def lookup_evidence(tid: int, kind: str, fence: str, request: Request):
         _stack_only(_identity(request))
         """S014: single-row fence lookup (replaces client list-and-scan)."""
-        with eng.begin() as c:
+        with _begin() as c:
             task_or_404(c, tid)
             for r in c.execute(text("SELECT * FROM evidence WHERE task_id=:i AND kind=:k ORDER BY id"),
                                {"i": tid, "k": kind}).mappings():
@@ -1465,7 +1510,7 @@ def make_app(db_url: str = DB_URL) -> FastAPI:
     @app.post("/v1/tasks/{tid}/evidence")
     def add_evidence(tid: int, body: dict, request: Request):
         s, h = _canon(body.get("body", {}))
-        with eng.begin() as c:
+        with _begin() as c:
             _own_or_stack(c, tid, _identity(request))
             rid = c.execute(text("INSERT INTO evidence(task_id,kind,body,sha256,created_at) VALUES(:i,:k,:b,:h,:n)"),
                             {"i": tid, "k": body.get("kind", "note"), "b": s, "h": h, "n": _now()}).lastrowid
@@ -1480,7 +1525,7 @@ def make_app(db_url: str = DB_URL) -> FastAPI:
         to = body.get("to")
         if not key or not to:
             raise HTTPException(422, "idempotency_key and to are required")
-        with eng.begin() as c:
+        with _begin() as c:
             prior = row(c, "SELECT * FROM receipts WHERE task_id=:i AND idempotency_key=:k", i=tid, k=key)
             if prior:
                 if prior.get("action") != f"transition:{to}":
@@ -1551,7 +1596,7 @@ def make_app(db_url: str = DB_URL) -> FastAPI:
     @app.get("/v1/tasks/{tid}/binding")
     def get_binding(tid: int, request: Request):
         _stack_only(_identity(request))
-        with eng.begin() as c:
+        with _begin() as c:
             task_or_404(c, tid)
             a = row(c, "SELECT * FROM assignments WHERE task_id=:i AND status='active' ORDER BY id DESC LIMIT 1", i=tid)
             if not a:
@@ -1565,7 +1610,7 @@ def make_app(db_url: str = DB_URL) -> FastAPI:
         attempt_no, ttl_s = _int_field(body, "attempt_no", 1), _ttl_field(body)
         if not key or not principal:
             raise HTTPException(422, "key and principal are required")
-        with eng.begin() as c:
+        with _begin() as c:
             task_or_404(c, tid)
             stale_key = False
             if (hit := _receipted_latest(c, tid, key)):
@@ -1626,7 +1671,7 @@ def make_app(db_url: str = DB_URL) -> FastAPI:
         expected, ttl_s = _int_field(body, "expected_lease_epoch"), _ttl_field(body)
         if not key or not holder or expected is None:
             raise HTTPException(422, "key, holder and expected_lease_epoch are required")
-        with eng.begin() as c:
+        with _begin() as c:
             task_or_404(c, tid)
             stale_key = False
             if (hit := _receipted_latest(c, tid, key)):
@@ -1661,7 +1706,7 @@ def make_app(db_url: str = DB_URL) -> FastAPI:
         key = body.get("key")
         if not key:
             raise HTTPException(422, "key is required")
-        with eng.begin() as c:
+        with _begin() as c:
             task_or_404(c, tid)
             stale_key = False
             if (hit := _receipted(c, tid, key)):
@@ -1691,7 +1736,7 @@ def make_app(db_url: str = DB_URL) -> FastAPI:
         key, attempt_no, epoch = body.get("key"), _int_field(body, "attempt_no"), _int_field(body, "lease_epoch")
         if not key or attempt_no is None or epoch is None:
             raise HTTPException(422, "key, attempt_no and lease_epoch are required")
-        with eng.begin() as c:
+        with _begin() as c:
             task_or_404(c, tid)
 
             def _reuse(att):
@@ -1734,7 +1779,7 @@ def make_app(db_url: str = DB_URL) -> FastAPI:
         if not key or attempt_id is None or epoch is None or not verdict:
             raise HTTPException(422, "key, attempt_id, lease_epoch and verdict are required")
         core, _ = _canon({"attempt_id": attempt_id, "lease_epoch": epoch, "verdict": verdict, "result": result})
-        with eng.begin() as c:
+        with _begin() as c:
             task_or_404(c, tid)
             if (hit := _receipted(c, tid, key)):
                 return {"replayed": True, "result": hit["row"]}

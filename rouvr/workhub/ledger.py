@@ -64,17 +64,25 @@ class LedgerWorkHub:
         return {"assignment_id": str(b["assignment"]["id"]), "lease_epoch": int(b["lease"]["lease_epoch"]),
                 "holder": b["lease"]["holder"]}
 
-    async def claim(self, task_id: str, principal: str, attempt_no: int, ttl_s: int) -> dict:
+    async def claim(self, task_id: str, principal: str, attempt_no: int, ttl_s: int,
+                    run_id: str = "") -> dict:
+        # Per-execution uniqueness (same lesson as mark_blocked hop keys):
+        # the ledger replays seen keys without changing state, so a reopened
+        # task starting a new run at attempt 1 would otherwise replay the
+        # previous run's dead lease and every write 409s (E_MOVED).
+        # Activity retries within the run share the run id, so retry-safety
+        # is preserved.
         r = await self._call("POST", f"/v1/tasks/{task_id}/assignments/claim",
                              {"principal": principal, "attempt_no": attempt_no, "ttl_s": ttl_s,
-                              "key": idempotency_key("claim", task_id, attempt_no, principal)})
+                              "key": idempotency_key("claim", task_id, attempt_no, principal, run_id)})
         return {"assignment_id": str(r["assignment"]["id"]), "lease_epoch": int(r["lease_epoch"]),
                 "expires_at": str(r["lease"]["expires_at"])}
 
-    async def open_attempt(self, task_id: str, attempt_no: int, epoch: int, assignment_id: str = "") -> dict:
+    async def open_attempt(self, task_id: str, attempt_no: int, epoch: int, assignment_id: str = "",
+                           run_id: str = "") -> dict:
         r = await self._call("POST", f"/v1/tasks/{task_id}/attempts",
                              {"attempt_no": attempt_no, "lease_epoch": epoch, "assignment_id": assignment_id,
-                              "key": idempotency_key("attempt", task_id, attempt_no)})
+                              "key": idempotency_key("attempt", task_id, attempt_no, run_id)})
         return {"attempt_id": str(r["attempt"]["id"]), "attempt_no": int(r["attempt"]["attempt_no"]),
                 "lease_epoch": int(r["attempt"]["lease_epoch"])}
 

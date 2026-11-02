@@ -29,7 +29,7 @@ from rouvr.hiddentests import (assert_coder_clean, criteria_literals, fetch_hidd
                                hidden_literals, parse_criterion_outcomes)
 from rouvr.host import Host
 from rouvr.ids import handoff_fence
-from rouvr.lease import (LeaseKeeper, claim_assignment_and_lease, open_or_reuse_attempt, resume_or_claim,
+from rouvr.lease import (LeaseKeeper, attempt_base, fresh_claim, open_or_reuse_attempt, resume_or_claim,
                          run_fenced)
 from rouvr.messages import MESSAGE_TYPE, messages_for, read_message_file
 from rouvr.muse import build_task_prompt, build_reviewer_prompt, read_verdict
@@ -100,21 +100,36 @@ class Activities:
         s, wf = self.h.settings, inp.wf
         wh = self.h.workhub_for(None)
         principal = self.h.personas.get(wf.tenant_id, inp.binding.coder_persona, "coder").principal
-        if activity.info().attempt > 1:  # retry after worker death: renew if live, else reclaim + claim (R5)
-            task = await wh.get_task(wf.task_id)
+        # Scope claim/attempt keys per workflow run: a reopened task restarts
+        # at attempt 1, and unscoped keys replay the previous run's dead lease.
+        # Number past previous runs' attempts too: the ledger enforces one
+        # active assignment and one result per (task, attempt_no), so reusing
+        # attempt 1 would 409 on the claim or replay a stale result row.
+        # The next free number is max(receipted attempt_nos) + 1; heartbeat
+        # details memo it so an activity retry reuses the same number.
+        # fresh_claim releases any leftover assignment first: without it the
+        # ledger's per-attempt single-active-assignment rule 409s the claim.
+        run_id = activity.info().workflow_run_id
+        details = activity.info().heartbeat_details
+        memo = details[0].get("attempt_no") if details else None
+        task = await wh.get_task(wf.task_id)
+        if activity.info().attempt > 1 and memo is not None:  # retry: same numbers as the dead attempt
             number = task.get("task_number") or wf.task_id  # ledger rows: the id is the number
             lease, assignment_id = await resume_or_claim(wh, wf.task_id, int(number), principal,
-                                                         inp.attempt_no, s.lease_ttl_s)
+                                                         int(memo), s.lease_ttl_s, run_id=run_id)
         else:
-            lease, assignment_id = await claim_assignment_and_lease(wh, wf.task_id, principal,
-                                                                    inp.attempt_no, s.lease_ttl_s)
-        lease = await open_or_reuse_attempt(wh, lease)
+            n = attempt_base(task) + 1
+            lease, assignment_id = await fresh_claim(wh, wf.task_id, principal,
+                                                     n, s.lease_ttl_s,
+                                                     run_id=run_id)
+        lease = await open_or_reuse_attempt(wh, lease, run_id=run_id)
         fence = handoff_fence(inp.attempt_no, lease.lease_epoch)
         info = activity.info()
         await wh.attach_evidence_exact(wf.task_id, "temporal_handoff", fence,
                                        {"workflow_id": info.workflow_id, "run_id": info.workflow_run_id,
                                         "attempt_id": lease.attempt_id})
-        state = {"session_id": "", "beat": 0, "attempt_id": lease.attempt_id}
+        state = {"session_id": "", "beat": 0, "attempt_id": lease.attempt_id,
+                 "attempt_no": lease.attempt_no}
 
         def beat(n: int) -> None:
             state["beat"] = n
@@ -135,7 +150,7 @@ class Activities:
         spec = await self.h.exec_specs.get(wf.tenant_id, task)
         ev = [await wh.attach_evidence_exact(wf.task_id, "execution_spec", fence,
                                              {"digest": spec.digest, "repo": spec.repo})]
-        branch = branch_for(wf.task_id, inp.attempt_no)
+        branch = branch_for(wf.task_id, lease.attempt_no)
         # Resume: heartbeat details carry the session id from a previous activity attempt (R2: RESUME).
         details = activity.info().heartbeat_details
         resume = inp.resume_session_id or (details[0].get("session_id") if details else None)
@@ -179,7 +194,7 @@ class Activities:
                                                  {"url": pr_url, "head_sha": head, "branch": branch}))
         if inp.attempt_no > 1:  # S013: close the superseded attempt's PR
             from rouvr.gitops import close_superseded_pr
-            prev = branch_for(wf.task_id, inp.attempt_no - 1)
+            prev = branch_for(wf.task_id, lease.attempt_no - 1)
             try:
                 closed = await close_superseded_pr(spec.repo, prev, pr_url, {"GH_TOKEN": grant})
                 note = {"closed_pr": closed, "superseded_by": pr_url} if closed \

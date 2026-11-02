@@ -147,10 +147,11 @@ class WorkHubClient:
         return await self._call("GET", R.R9_CAPABILITIES)
 
     # ---- mutations (bodies verified against stage Oct 2026; holder identity is auth-bound server-side)
-    async def claim(self, task_id: str, principal: str, attempt_no: int, ttl_s: int) -> dict:
+    async def claim(self, task_id: str, principal: str, attempt_no: int, ttl_s: int,
+                    run_id: str = "") -> dict:
         a = await self._call("POST", R.R10_CLAIM.format(project=self.project_id),
                              json={"task_id": task_id, "persona": "coder", "plan_step": "build"},
-                             idem=idempotency_key("claim", task_id, attempt_no))
+                             idem=idempotency_key("claim", task_id, attempt_no, run_id))
         lease = await self._call("POST", R.R10_LEASE_CLAIM.format(project=self.project_id),
                                  json={"task_id": task_id, "ttl_seconds": ttl_s},
                                  idem=idempotency_key("lease-claim", task_id, attempt_no))
@@ -163,10 +164,11 @@ class WorkHubClient:
                              idem=idempotency_key("renew", task_id, assignment_id, epoch, beat))
         return {"lease_epoch": int(r["epoch"]), "expires_at": str(r["expires_at"])}
 
-    async def open_attempt(self, task_id: str, attempt_no: int, epoch: int, assignment_id: str = "") -> dict:
+    async def open_attempt(self, task_id: str, attempt_no: int, epoch: int, assignment_id: str = "",
+                           run_id: str = "") -> dict:
         r = await self._call("POST", R.R10_ATTEMPT.format(project=self.project_id),
                              json={"task_id": task_id, "assignment_id": assignment_id},
-                             idem=idempotency_key("attempt", task_id, attempt_no))
+                             idem=idempotency_key("attempt", task_id, attempt_no, run_id))
         return {"attempt_id": str(r.get("id") or r.get("attempt_id")), "attempt_no": attempt_no,
                 "lease_epoch": epoch}
 

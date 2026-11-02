@@ -3,6 +3,7 @@ after claim passes it, and WorkHub rejects stale epochs with 409 (=> E_MOVED, no
 from __future__ import annotations
 
 import asyncio
+import json
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 
@@ -11,9 +12,37 @@ from rouvr.errors import Code, RouvrError
 from rouvr.workhub.port import WorkHubPort
 
 
+def attempt_base(task: dict) -> int:
+    """Highest attempt_no already receipted on this task (0 when none).
+
+    A reopened task starts its new run at base + workflow-attempt so the
+    ledger's per-(task, attempt_no) uniqueness (assignments, attempts) and
+    per-attempt results never collide with previous runs' rows — which
+    otherwise replay stale leases (E_MOVED) or 409 as REPLAY_CONFLICT.
+    Receipt bodies may be JSON strings or dicts; anything else is skipped.
+    """
+    top = 0
+    for r in task.get("receipts") or []:
+        if not isinstance(r, dict) or r.get("action") != "attempt":
+            continue
+        body = r.get("body") or {}
+        if isinstance(body, str):
+            try:
+                body = json.loads(body)
+            except ValueError:
+                continue
+        if not isinstance(body, dict):
+            continue
+        try:
+            top = max(top, int(body.get("attempt_no") or 0))
+        except (TypeError, ValueError):
+            continue
+    return top
+
+
 async def claim_assignment_and_lease(wh: WorkHubPort, task_id: str, principal: str,
-                                     attempt_no: int, ttl_s: int) -> tuple[Lease, str]:
-    body = await wh.claim(task_id, principal, attempt_no, ttl_s)
+                                     attempt_no: int, ttl_s: int, run_id: str = "") -> tuple[Lease, str]:
+    body = await wh.claim(task_id, principal, attempt_no, ttl_s, run_id=run_id)
     if body.get("holder") not in (None, principal):
         raise RouvrError(Code.MOVED, f"lease held by {body.get('holder')}")
     lease = Lease(task_id=task_id, holder=principal, lease_epoch=int(body["lease_epoch"]),
@@ -22,15 +51,24 @@ async def claim_assignment_and_lease(wh: WorkHubPort, task_id: str, principal: s
     return lease, lease.assignment_id
 
 
-async def open_or_reuse_attempt(wh: WorkHubPort, lease: Lease) -> Lease:
+async def open_or_reuse_attempt(wh: WorkHubPort, lease: Lease, run_id: str = "") -> Lease:
     body = await wh.open_attempt(lease.task_id, lease.attempt_no, lease.lease_epoch,  # idempotent by key
-                                 lease.assignment_id)
+                                 lease.assignment_id, run_id=run_id)
     lease.attempt_id = str(body["attempt_id"])
     return lease
 
 
+async def fresh_claim(wh: WorkHubPort, task_id: str, principal: str,
+                      attempt_no: int, ttl_s: int, run_id: str = "") -> tuple[Lease, str]:
+    """First claim of an attempt: release any leftover assignment from a
+    previous run, then claim. A live lease refuses (E_MOVED): never steal
+    another run's work."""
+    await wh.reclaim_dead(task_id, attempt_no, principal)
+    return await claim_assignment_and_lease(wh, task_id, principal, attempt_no, ttl_s, run_id=run_id)
+
+
 async def resume_or_claim(wh: WorkHubPort, task_id: str, task_number: int, principal: str,
-                          attempt_no: int, ttl_s: int) -> tuple[Lease, str]:
+                          attempt_no: int, ttl_s: int, run_id: str = "") -> tuple[Lease, str]:
     """Activity-retry entry (R5/R10): the holder renews its live lease (fast path,
     same epoch); otherwise reclaim the dead lease and claim fresh on the same attempt."""
     b = await wh.get_binding_by_number(task_number)
@@ -45,7 +83,7 @@ async def resume_or_claim(wh: WorkHubPort, task_id: str, task_number: int, princ
             if e.code is not Code.MOVED:
                 raise
     await wh.reclaim_dead(task_id, attempt_no, principal)
-    return await claim_assignment_and_lease(wh, task_id, principal, attempt_no, ttl_s)
+    return await claim_assignment_and_lease(wh, task_id, principal, attempt_no, ttl_s, run_id=run_id)
 
 
 @dataclass

@@ -44,7 +44,7 @@ class FakePort:
         self.calls.append("reclaim")
         return {"reclaimed": True}
 
-    async def claim(self, task_id, principal, attempt_no, ttl_s):
+    async def claim(self, task_id, principal, attempt_no, ttl_s, run_id=""):
         self.calls.append("claim")
         return {"assignment_id": "a2", "lease_epoch": 2, "expires_at": "e", "holder": principal}
 

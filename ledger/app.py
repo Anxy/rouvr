@@ -249,7 +249,11 @@ def make_app(db_url: str = DB_URL) -> FastAPI:
             body = "\n".join(l for l in stmt.splitlines() if not l.strip().startswith("--"))
             if body.strip():
                 c.execute(text(body))
-    app = FastAPI(title="Rouvr ledger")
+    app = FastAPI(
+        title="Rouvr ledger",
+        version="1.0.0",
+        description="Rouvr ledger API (tasks, contracts, evidence, knowledge, grants).",
+    )
 
     # Add created_by to pre-S016 databases (schema.sql covers fresh ones
     # only via CREATE TABLE; existing tables need the column explicitly).

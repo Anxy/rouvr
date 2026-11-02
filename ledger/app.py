@@ -20,12 +20,18 @@ import secrets as _secrets
 
 from fastapi import FastAPI, HTTPException, Request
 from rapidfuzz import fuzz
-from sqlalchemy import create_engine, text
+from sqlalchemy import text
+from sqlalchemy.exc import IntegrityError
 
 try:
     from ledger import hyeve_auth as _ha
 except ImportError:  # run as a bare module (python ledger/app.py)
     import hyeve_auth as _ha  # type: ignore[no-redef]
+
+try:
+    from ledger import sqlite_hardening as _sh
+except ImportError:  # run as a bare module (python ledger/app.py)
+    import sqlite_hardening as _sh  # type: ignore[no-redef]
 
 DB_URL = os.environ.get("ROUVR_LEDGER_DATABASE_URL", "sqlite:///./.rouvr/ledger.db")
 TRANSITIONS = {
@@ -239,11 +245,9 @@ def make_app(db_url: str = DB_URL) -> FastAPI:
                          "to a sqlite:/// URL (Postgres is not supported)")
     if db_url.startswith("sqlite:///./"):
         Path(db_url[len("sqlite:///"):]).parent.mkdir(parents=True, exist_ok=True)
-    eng = create_engine(db_url)
-    if db_url.startswith("sqlite"):  # S014: WAL — parallel workers write evidence
-        with eng.connect() as c:
-            c.execute(text("PRAGMA journal_mode=WAL"))
-            c.commit()
+    # FL-A5: hardened SQLite — WAL + busy_timeout on every connection, and a
+    # single-writer queue shared per DB file by API + workers.
+    eng = _sh.single_writer(_sh.create_hardened_engine(db_url), db_url)
     with eng.begin() as c:
         for stmt in (Path(__file__).with_name("schema.sql").read_text().split(";")):
             body = "\n".join(l for l in stmt.splitlines() if not l.strip().startswith("--"))
@@ -1601,7 +1605,7 @@ def make_app(db_url: str = DB_URL) -> FastAPI:
                 try:
                     c.execute(text("INSERT INTO assignments(task_id,principal,attempt_no,created_at) VALUES(:i,:p,:n,:t)"),
                               {"i": tid, "p": principal, "n": attempt_no, "t": _now()})
-                except Exception as exc:
+                except IntegrityError as exc:
                     raise HTTPException(409, f"attempt_no {attempt_no} already claimed") from exc
             c.execute(text("INSERT INTO leases(task_id,holder,lease_epoch,expires_at,updated_at) VALUES(:i,:h,:e,:x,:t) "
                             "ON CONFLICT(task_id) DO UPDATE SET holder=:h, lease_epoch=:e, expires_at=:x, updated_at=:t"),

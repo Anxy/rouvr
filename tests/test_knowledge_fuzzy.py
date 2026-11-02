@@ -88,6 +88,19 @@ def test_semantic_layer_is_honest_stub():
     assert _semantic_candidates("anything at all") == []
 
 
+def test_verified_outranks_unverified_near_tie(ctx):
+    c, _stack, amy, _gus = ctx
+    a = _entry(c, amy, title="Common probe entry",
+               body="Shared wording for the ranking probe.").json()
+    b = _entry(c, amy, title="Common probe entry",
+               body="Shared wording for the ranking probe.").json()
+    assert c.post(f"/v1/knowledge/{a['id']}/confirm", json={},
+                  headers=amy).status_code == 200
+    hits = c.get("/v1/knowledge/search", params={"q": "common probe"},
+                 headers=amy).json()["items"]
+    assert [h["citation"] for h in hits] == [a["citation"], b["citation"]]
+
+
 def test_slug_lookup_and_stability(ctx):
     c, _stack, amy, _gus = ctx
     e = _entry(c, amy, slug="type-hints", title="Type hints",

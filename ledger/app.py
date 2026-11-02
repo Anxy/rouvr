@@ -841,7 +841,9 @@ def make_app(db_url: str = DB_URL) -> FastAPI:
         with RapidFuzz WRatio over title/slug/tags/summary, and every run
         merges by reciprocal rank fusion. A sqlite-vec + fastembed
         semantic run plugs in at _semantic_candidates (D18, not built:
-        honest stub, contributes nothing). Tenant/visibility filters
+        honest stub, contributes nothing). Verified entries get one extra
+        rank-1 RRF vote, so human-confirmed knowledge surfaces above
+        unverified near-ties. Tenant/visibility filters
         apply to every candidate."""
         ident = _identity(request)
         tokens = re.findall(r"\w+", q)
@@ -926,7 +928,9 @@ def make_app(db_url: str = DB_URL) -> FastAPI:
                 if sid in by_id:
                     fused[sid] += 1.0 / (60 + rank)
             out = []
-            for eid in sorted(fused, key=lambda i: fused[i], reverse=True):
+            boosted = {i: s + (1.0 / 61 if by_id[i].get("verified") else 0.0)
+                       for i, s in fused.items()}
+            for eid in sorted(boosted, key=lambda i: boosted[i], reverse=True):
                 r = by_id[eid]
                 if ident == "supervisor":
                     pass

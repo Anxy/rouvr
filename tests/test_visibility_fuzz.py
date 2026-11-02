@@ -44,23 +44,32 @@ def test_visibility_fuzz_no_leaks(tmp_path, monkeypatch):
                 ids[(t, u, vis)] = (r.json()["id"], canary)
         # every user: search/get/history only see allowed entries
         for (ct, cu), hdr in users.items():
+            allowed_ids = {i for (t, u, v), (i, _) in ids.items()
+                           if v == "public" or (t == ct and (
+                               v == "company" or u == cu or (u == "a" and cu == "b")))}
+            allowed_cites = {f"knowledge:{i}@v1" for i in allowed_ids}
             for (et, eu, evis), (eid, canary) in ids.items():
                 hits = c.get("/v1/knowledge/search", params={"q": canary},
                              headers=hdr).json()["items"]
+                assert {x["citation"] for x in hits} <= allowed_cites, (ct, cu, et, eu, evis)
                 e = c.get(f"/v1/knowledge/{eid}", headers=hdr)
                 h = c.get(f"/v1/knowledge/{eid}/history", headers=hdr)
                 if evis == "public":
-                    assert [x["id"] for x in hits] == [eid], (ct, cu, et, eu, evis)
+                    # fuzzy search may return near-duplicate canaries too;
+                    # the contract is presence + no cross-boundary rows.
+                    assert f"knowledge:{eid}@v1" in [x["citation"] for x in hits], (ct, cu, et, eu, evis)
                     assert e.status_code == 200 and h.status_code == 200
                 elif et == ct and evis == "company":
-                    assert [x["id"] for x in hits] == [eid], (ct, cu, et, eu, evis)
+                    assert f"knowledge:{eid}@v1" in [x["citation"] for x in hits], (ct, cu, et, eu, evis)
                     assert e.status_code == 200 and h.status_code == 200
                 elif evis == "restricted" and et == ct and (
                         eu == cu or (eu == "a" and cu == "b")):
-                    assert [x["id"] for x in hits] == [eid], (ct, cu, et, eu, evis)
+                    assert f"knowledge:{eid}@v1" in [x["citation"] for x in hits], (ct, cu, et, eu, evis)
                     assert e.status_code == 200 and h.status_code == 200
                 else:
-                    assert hits == [], (ct, cu, et, eu, evis, hits)
+                    # fuzzy search may return the caller's own near-duplicates;
+                    # the subset check above already proves nothing forbidden
+                    # is among them. Direct reads stay 404.
                     assert e.status_code == 404, (ct, cu, et, eu, evis, e.status_code)
                     assert h.status_code == 404
         # anonymous never sees anything (fail-closed)

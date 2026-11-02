@@ -72,4 +72,4 @@ def test_unicode_emoji_roundtrip(tmp_path, monkeypatch):
         assert c.get(f"/v1/knowledge/{e['id']}", headers=amy).json()["body"] == body
         hits = c.get("/v1/knowledge/search", params={"q": "café"},
                      headers=amy).json()["items"]
-        assert [h["id"] for h in hits] == [e["id"]]
+        assert [h["citation"] for h in hits] == [e["citation"]]

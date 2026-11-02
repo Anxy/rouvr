@@ -75,9 +75,10 @@ def test_register_then_complete_onboards(ctx):
 def test_jwt_scopes_knowledge_to_onboarded_tenant(ctx):
     c, _ha, _holder = ctx
     c.post("/v1/onboard/complete", json=FORM, headers=AMY_JWT)
-    hits = c.get("/v1/knowledge/search", params={"q": "clause"}, headers=AMY_JWT).json()["items"]
+    hits = c.get("/v1/knowledge/search", params={"q": "clause", "full": "true"},
+                 headers=AMY_JWT).json()["items"]
     assert hits and hits[0]["tenant"] == "acme-legal"
-    prof = c.get("/v1/knowledge/search", params={"q": "turnaround"},
+    prof = c.get("/v1/knowledge/search", params={"q": "turnaround", "full": "true"},
                  headers=AMY_JWT).json()["items"]
     assert prof and prof[0]["kind"] == "project_profile" and prof[0]["verified"] == 1
 
@@ -88,7 +89,7 @@ def test_complete_is_idempotent(ctx):
     second = c.post("/v1/onboard/complete", json=FORM, headers=AMY_JWT).json()
     assert (second["tenant"], second["project"]) == (first["tenant"], first["project"])
     assert not second.get("rouvr_token")  # token shown once
-    profiles = c.get("/v1/knowledge/search", params={"q": "profile"},
+    profiles = c.get("/v1/knowledge/search", params={"q": "profile", "full": "true"},
                      headers={"X-Rouvr-Token": "stack-secret"}).json()["items"]
     kinds = sorted(p["kind"] for p in profiles if "profile" in p["kind"])
     assert kinds == ["project_profile", "user_profile"]  # no duplicates

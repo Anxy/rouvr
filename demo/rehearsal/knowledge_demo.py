@@ -33,7 +33,8 @@ def post(path: str, body: dict) -> dict:
 
 
 def search(q: str) -> list[dict]:
-    r = httpx.get(f"{LEDGER}/v1/knowledge/search", params={"q": q}, headers=H, timeout=15)
+    r = httpx.get(f"{LEDGER}/v1/knowledge/search", params={"q": q, "full": "true"},
+                  headers=H, timeout=15)
     r.raise_for_status()
     return [e for e in r.json()["items"] if e["tenant"] == SCOPE["tenant"]]
 

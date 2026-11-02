@@ -58,8 +58,19 @@ def bullets(path: Path, section_prefixes: tuple[str, ...]) -> list[tuple[str, st
     return out
 
 
+def _slug(title: str, seen: set[str]) -> str:
+    base = re.sub(r"[^a-z0-9]+", "-", title.lower()).strip("-")[:60].rstrip("-") or "entry"
+    slug, i = base, 2
+    while slug in seen:
+        slug = f"{base}-{i}"
+        i += 1
+    seen.add(slug)
+    return slug
+
+
 def corpus() -> list[dict]:
     items: list[dict] = []
+    seen: set[str] = set()
     plans = ROOT / "docs/plans"
     for name in ("2026-11-01-slice-1-identity-tenancy-projects.md",
                  "2026-11-01-slice-2-knowledge-lite.md",
@@ -73,17 +84,26 @@ def corpus() -> list[dict]:
             title = re.sub(r"\*\*", "", text[:90]).strip()
             items.append({"kind": kind_for_section(section),
                           "title": f"[{name[11:18]}] {title}",
-                          "body": f"{text}\n\n(source: docs/plans/{name}, section: {section}; {CANARY})"})
+                          "body": f"{text}\n\n(source: docs/plans/{name}, section: {section}; {CANARY})",
+                          "slug": _slug(f"{name[11:18]}-{title}", seen),
+                          "tags": [kind_for_section(section),
+                                   re.sub(r"[^a-z0-9]+", "-", section.lower()).strip("-")[:40] or "general"],
+                          "summary": re.sub(r"\s+", " ", text).strip()[:160]})
     mem = ROOT / "MEMORY.md"
     for section, text in bullets(mem, ("key findings", "quirks")):
         items.append({"kind": kind_for_section(section),
                       "title": f"[memory] {text[:90]}",
-                      "body": f"{text}\n\n(source: MEMORY.md, section: {section}; {CANARY})"})
+                      "body": f"{text}\n\n(source: MEMORY.md, section: {section}; {CANARY})",
+                      "slug": _slug(f"memory-{text[:60]}", seen),
+                      "tags": [kind_for_section(section),
+                               re.sub(r"[^a-z0-9]+", "-", section.lower()).strip("-")[:40] or "general"],
+                      "summary": re.sub(r"\s+", " ", text).strip()[:160]})
     return items
 
 
 def search(q: str) -> list[dict]:
-    r = httpx.get(f"{LEDGER}/v1/knowledge/search", params={"q": q}, headers=H, timeout=20)
+    r = httpx.get(f"{LEDGER}/v1/knowledge/search",
+                  params={"q": q, "full": "true", "n": 100}, headers=H, timeout=20)
     r.raise_for_status()
     return r.json()["items"]
 

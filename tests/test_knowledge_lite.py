@@ -40,7 +40,7 @@ def test_create_search_get_cite(ctx):
     assert (e["version"], e["verified"], e["author"]) == (1, 0, "amy")
     assert e["citation"] == f"knowledge:{e['id']}@v1"
     hits = c.get("/v1/knowledge/search", params={"q": "SQLite"}, headers=amy).json()["items"]
-    assert [h["id"] for h in hits] == [e["id"]]
+    assert [h["citation"] for h in hits] == [e["citation"]]
     got = c.get(f"/v1/knowledge/{e['id']}", headers=amy)
     assert got.status_code == 200 and got.json()["body"].startswith("We chose")
 
@@ -56,7 +56,7 @@ def test_update_is_new_version_old_kept(ctx):
     old = c.get(f"/v1/knowledge/{e1['id']}", headers=amy).json()
     assert old["body"] == "We chose SQLite for the demo store."  # append-only: history intact
     latest = c.get("/v1/knowledge/search", params={"q": "FTS5"}, headers=amy).json()["items"]
-    assert [h["id"] for h in latest] == [e2["id"]]  # search returns latest version only
+    assert [h["citation"] for h in latest] == [e2["citation"]]  # search returns latest version only
 
 
 def test_history_replays_chain(ctx):
@@ -85,7 +85,7 @@ def test_cross_tenant_canary_never_leaks(ctx):
     hits = c.get("/v1/knowledge/search", params={"q": "CANARY"}, headers=gus).json()["items"]
     assert hits == []
     eid = c.get("/v1/knowledge/search", params={"q": "xyzzy"},
-                headers=amy).json()["items"][0]["id"]
+                headers=amy).json()["items"][0]["citation"].split("@")[0].split(":")[1]
     assert c.get(f"/v1/knowledge/{eid}", headers=gus).status_code in (403, 404)
     assert c.post(f"/v1/knowledge/{eid}/confirm", json={}, headers=gus).status_code in (403, 404)
     # writing into another tenant is refused even with an explicit scope body

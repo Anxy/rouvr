@@ -76,7 +76,7 @@ def main() -> int:
         out = r.json()
         print(f"       tenant={out['tenant']} project={out['project']}"
               f" profiles={out.get('user_profile')},{out.get('project_profile')}")
-        hits = httpx.get(f"{LEDGER}/v1/knowledge/search", params={"q": "profile"},
+        hits = httpx.get(f"{LEDGER}/v1/knowledge/search", params={"q": "profile", "full": "true"},
                          headers={"Authorization": f"Bearer {state['jwt']}"},
                          timeout=10).json()["items"]
         assert hits and all(h["tenant"] == out["tenant"] for h in hits), hits
@@ -90,7 +90,7 @@ def main() -> int:
         r = httpx.post(f"{LEDGER}/v1/knowledge", json=body, headers=STACK, timeout=10)
         assert r.status_code == 200, f"{r.status_code} {r.text[:200]}"
         entry = r.json()
-        hits = httpx.get(f"{LEDGER}/v1/knowledge/search", params={"q": canary},
+        hits = httpx.get(f"{LEDGER}/v1/knowledge/search", params={"q": canary, "full": "true"},
                          headers=STACK, timeout=10).json()["items"]
         assert [h["id"] for h in hits] == [entry["id"]], hits
         print(f"       stored + cited as {entry['citation']} (verified={entry['verified']})")

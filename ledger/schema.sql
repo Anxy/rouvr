@@ -115,10 +115,14 @@ CREATE TABLE IF NOT EXISTS knowledge_entries (
   author        TEXT NOT NULL,
   visibility    TEXT NOT NULL DEFAULT 'company',  -- restricted|company|public
   allowed_users TEXT NOT NULL DEFAULT '[]',  -- JSON list, restricted members
+  slug          TEXT NOT NULL DEFAULT '',  -- kebab-case, unique per tenant+project, stable across versions
+  tags          TEXT NOT NULL DEFAULT '[]',  -- JSON list
+  summary       TEXT NOT NULL DEFAULT '',  -- one line, <=160 chars
   created_at    TEXT NOT NULL,
   FOREIGN KEY (tenant, project) REFERENCES projects(tenant, project)
 );
-CREATE VIRTUAL TABLE IF NOT EXISTS knowledge_fts USING fts5(title, body);
+CREATE VIRTUAL TABLE IF NOT EXISTS knowledge_fts USING fts5(title, body, slug, summary, tags);
+CREATE VIRTUAL TABLE IF NOT EXISTS knowledge_trigram USING fts5(title, slug, tags, summary, tokenize='trigram');
 CREATE TABLE IF NOT EXISTS external_identities (
   provider TEXT NOT NULL,
   subject  TEXT NOT NULL,

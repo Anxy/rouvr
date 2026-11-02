@@ -41,6 +41,97 @@ def _now() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
+def _slugify(title: str) -> str:
+    """Deterministic kebab-case slug from a title. Stable: same title in the
+    same scope always yields the same base; collisions get -2/-3 suffixes."""
+    slug = re.sub(r"[^a-z0-9]+", "-", (title or "").lower()).strip("-")
+    return (slug[:60].rstrip("-")) or "entry"
+
+
+def _summarize_text(body: str) -> str:
+    """One line, <=160 chars: first non-empty line, whitespace collapsed."""
+    for ln in (body or "").splitlines():
+        s = re.sub(r"\s+", " ", ln).strip()
+        if s:
+            return s[:160]
+    return ""
+
+
+def _tags_norm(raw) -> list[str]:
+    if raw is None:
+        return []
+    items = raw if isinstance(raw, list) else [raw]
+    out = []
+    for t in items:
+        s = re.sub(r"[^a-z0-9-]+", "-", str(t).lower()).strip("-")[:40]
+        if s and s not in out:
+            out.append(s)
+        if len(out) >= 10:
+            break
+    return out
+
+
+def _knowledge_search_schema(c) -> None:
+    """Migrate search indexes + backfill slug/tags/summary in place.
+
+    New metadata columns are derived, not authored history: rows keep their
+    ids, versions and verified flags (like confirm's in-place flag), so no
+    new versions are minted. FTS tables are rebuilt when their shape lags.
+    """
+    cols = [r[1] for r in c.execute(text("PRAGMA table_info(knowledge_fts)"))]
+    if not set(("slug", "summary", "tags")).issubset(set(cols)):
+        c.execute(text("DROP TABLE IF EXISTS knowledge_fts"))
+        c.execute(text("CREATE VIRTUAL TABLE knowledge_fts USING fts5(title, body, slug, summary, tags)"))
+        needs_rebuild = True
+    else:
+        needs_rebuild = False
+    c.execute(text("CREATE VIRTUAL TABLE IF NOT EXISTS knowledge_trigram"
+                   " USING fts5(title, slug, tags, summary, tokenize='trigram')"))
+    n_entries = c.execute(text("SELECT COUNT(*) FROM knowledge_entries")).scalar()
+    n_fts = c.execute(text("SELECT COUNT(*) FROM knowledge_fts")).scalar()
+    n_tri = c.execute(text("SELECT COUNT(*) FROM knowledge_trigram")).scalar()
+    # Backfill derived metadata for pre-schema rows, oldest first so the
+    # first title in a scope keeps the bare slug and later ones suffix.
+    rows = c.execute(text("SELECT id, tenant, project, kind, title, body, slug FROM knowledge_entries"
+                          " WHERE slug='' OR slug IS NULL ORDER BY id")).mappings().all()
+    taken: dict[tuple[str, str], set[str]] = {}
+    if rows:
+        have = c.execute(text("SELECT tenant, project, slug FROM knowledge_entries"
+                              " WHERE slug<>''")).mappings().all()
+        for h in have:
+            taken.setdefault((h["tenant"], h["project"]), set()).add(h["slug"])
+    for r in rows:
+        base = _slugify(r["title"])
+        scope = (r["tenant"], r["project"])
+        seen = taken.setdefault(scope, set())
+        slug, i = base, 2
+        while slug in seen:
+            slug = f"{base}-{i}"
+            i += 1
+        seen.add(slug)
+        c.execute(text("UPDATE knowledge_entries SET slug=:s, tags=:t, summary=:u WHERE id=:i"),
+                  {"s": slug, "t": json.dumps(_tags_norm([r["kind"]])),
+                   "u": _summarize_text(r["body"]), "i": r["id"]})
+    if needs_rebuild or n_fts != n_entries or (rows and True):
+        c.execute(text("DELETE FROM knowledge_fts"))
+        for e in c.execute(text("SELECT id, title, body, slug, summary, tags"
+                                " FROM knowledge_entries")).mappings():
+            c.execute(text("INSERT INTO knowledge_fts(rowid,title,body,slug,summary,tags)"
+                           " VALUES(:i,:t,:b,:s,:u,:g)"),
+                      {"i": e["id"], "t": e["title"], "b": e["body"],
+                       "s": e["slug"] or "", "u": e["summary"] or "",
+                       "g": " ".join(json.loads(e["tags"] or "[]"))})
+    if n_tri != n_entries:
+        c.execute(text("DELETE FROM knowledge_trigram"))
+        for e in c.execute(text("SELECT id, title, slug, tags, summary"
+                                " FROM knowledge_entries")).mappings():
+            c.execute(text("INSERT INTO knowledge_trigram(rowid,title,slug,tags,summary)"
+                           " VALUES(:i,:t,:s,:g,:u)"),
+                      {"i": e["id"], "t": e["title"], "s": e["slug"] or "",
+                       "g": " ".join(json.loads(e["tags"] or "[]")),
+                       "u": e["summary"] or ""})
+
+
 _ONBOARD_HTML = """<!doctype html>
 <html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -185,7 +276,13 @@ def make_app(db_url: str = DB_URL) -> FastAPI:
             c.execute(text("ALTER TABLE knowledge_entries ADD COLUMN visibility TEXT NOT NULL DEFAULT 'company'"))
         if kcols and "allowed_users" not in kcols:
             c.execute(text("ALTER TABLE knowledge_entries ADD COLUMN allowed_users TEXT NOT NULL DEFAULT '[]'"))
+        for col, ddl in (("slug", "TEXT NOT NULL DEFAULT ''"),
+                         ("tags", "TEXT NOT NULL DEFAULT '[]'"),
+                         ("summary", "TEXT NOT NULL DEFAULT ''")):
+            if kcols and col not in kcols:
+                c.execute(text(f"ALTER TABLE knowledge_entries ADD COLUMN {col} {ddl}"))
         c.execute(text("CREATE VIRTUAL TABLE IF NOT EXISTS knowledge_fts USING fts5(title, body)"))
+        _knowledge_search_schema(c)
         c.execute(text("CREATE TABLE IF NOT EXISTS external_identities ("
                        "provider TEXT NOT NULL, subject TEXT NOT NULL,"
                        "username TEXT NOT NULL REFERENCES users(username),"
@@ -576,11 +673,44 @@ def make_app(db_url: str = DB_URL) -> FastAPI:
     def _krow(r):
         d = dict(r)
         d["citation"] = f"knowledge:{d['id']}@v{d['version']}"
-        try:
-            d["allowed_users"] = json.loads(d.get("allowed_users") or "[]")
-        except ValueError:
-            d["allowed_users"] = []
+        for col in ("allowed_users", "tags"):
+            try:
+                d[col] = json.loads(d.get(col) or "[]")
+            except ValueError:
+                d[col] = []
         return d
+
+    def _shortlist(r):
+        return {"slug": r.get("slug") or "", "title": r["title"], "kind": r["kind"],
+                "summary": r.get("summary") or "", "verified": r["verified"],
+                "citation": f"knowledge:{r['id']}@v{r['version']}"}
+
+    _LATEST_SELF = ("id NOT IN (SELECT supersedes_id FROM knowledge_entries"
+                    " WHERE supersedes_id IS NOT NULL)")
+
+
+    def _latest_slugs(c, tenant, project) -> set:
+        return {r["slug"] for r in c.execute(text(
+            "SELECT slug FROM knowledge_entries WHERE tenant=:t AND project=:p"
+            f" AND {_LATEST_SELF} AND slug<>''"), {"t": tenant, "p": project}).mappings()}
+
+    def _assign_slug(c, tenant, project, title, want, exclude: set | None = None) -> str:
+        """Unique slug in scope among latest versions. Explicit collisions
+        are a 409 (the caller named it); generated ones suffix -2, -3, ..."""
+        taken = _latest_slugs(c, tenant, project) - (exclude or set())
+        if want:
+            slug = re.sub(r"[^a-z0-9-]+", "-", want.lower()).strip("-")[:60].rstrip("-")
+            if not slug:
+                raise HTTPException(422, "slug must contain [a-z0-9-]")
+            if slug in taken:
+                raise HTTPException(409, f"slug {slug!r} already in use in {tenant}/{project}")
+            return slug
+        base = _slugify(title)
+        slug, i = base, 2
+        while slug in taken:
+            slug = f"{base}-{i}"
+            i += 1
+        return slug
 
     def _allowed_list(raw) -> list:
         if raw is None:
@@ -629,18 +759,29 @@ def make_app(db_url: str = DB_URL) -> FastAPI:
         return k
 
     def _knowledge_insert(c, tenant, project, kind, title, body, author, version=1,
-                          supersedes=None, visibility="company", allowed=None):
+                          supersedes=None, visibility="company", allowed=None,
+                          slug=None, tags=None, summary=None, slug_chain=()):
         vis = visibility if visibility in KNOWLEDGE_VIS else "company"
         allow = json.dumps([str(x) for x in (allowed or [])])
+        slug = _assign_slug(c, tenant, project, title, slug, set(slug_chain))
+        tags = _tags_norm(tags) or [kind]
+        summary = _summarize_text(summary) if summary else _summarize_text(body)
         rid = c.execute(text(
             "INSERT INTO knowledge_entries(tenant,project,kind,title,body,version,"
-            "supersedes_id,verified,author,visibility,allowed_users,created_at)"
-            " VALUES(:tn,:p,:k,:t,:b,:v,:s,0,:a,:vis,:al,:n)"),
+            "supersedes_id,verified,author,visibility,allowed_users,slug,tags,summary,created_at)"
+            " VALUES(:tn,:p,:k,:t,:b,:v,:s,0,:a,:vis,:al,:sl,:tg,:su,:n)"),
             {"tn": tenant, "p": project, "k": kind, "t": title, "b": body,
              "v": version, "s": supersedes, "a": author, "vis": vis,
-             "al": allow, "n": _now()}).lastrowid
-        c.execute(text("INSERT INTO knowledge_fts(rowid,title,body) VALUES(:i,:t,:b)"),
-                  {"i": rid, "t": title, "b": body})
+             "al": allow, "sl": slug, "tg": json.dumps(tags), "su": summary,
+             "n": _now()}).lastrowid
+        c.execute(text("INSERT INTO knowledge_fts(rowid,title,body,slug,summary,tags)"
+                       " VALUES(:i,:t,:b,:s,:u,:g)"),
+                  {"i": rid, "t": title, "b": body, "s": slug,
+                   "u": summary, "g": " ".join(tags)})
+        c.execute(text("INSERT INTO knowledge_trigram(rowid,title,slug,tags,summary)"
+                       " VALUES(:i,:t,:s,:g,:u)"),
+                  {"i": rid, "t": title, "s": slug,
+                   "g": " ".join(tags), "u": summary})
         return row(c, "SELECT * FROM knowledge_entries WHERE id=:i", i=rid)
 
     def _req_visibility(body: dict) -> str:
@@ -671,15 +812,52 @@ def make_app(db_url: str = DB_URL) -> FastAPI:
             if _tenant_of(c, ident) not in (None, tenant):
                 raise HTTPException(403, f"knowledge in tenant {tenant!r}")
             return _krow(_knowledge_insert(c, tenant, project, kind, title, kbody, ident,
-                                           visibility=vis, allowed=allowed))
+                                           visibility=vis, allowed=allowed,
+                                           slug=body.get("slug"), tags=body.get("tags"),
+                                           summary=body.get("summary")))
 
     @app.get("/v1/knowledge/search")
-    def search_knowledge(request: Request, q: str, project: str | None = None):
+    def search_knowledge(request: Request, q: str, project: str | None = None,
+                         n: int = 15, full: bool = False):
+        """Shortlist search: top N (default 15) as slug/title/kind/summary/
+        verified/citation only; full=true returns whole rows. Fuses exact
+        prefix FTS with a trigram index (typos/partials) via reciprocal rank
+        fusion. Tenant/visibility filters apply to every candidate."""
         ident = _identity(request)
         tokens = re.findall(r"\w+", q)
         if not tokens:
             raise HTTPException(422, "q must contain a searchable word")
+        n = max(1, min(n, 100))
         match = " AND ".join(f'"{t}"*' for t in tokens)
+        tri = " OR ".join(f'"{t}"' for t in tokens)
+
+        def _trigrams(word: str) -> set[str]:
+            w = word.lower()
+            return {w[i:i + 3] for i in range(len(w) - 2)} if len(w) >= 3 else set()
+
+        # Typo expansion: OR the query's own trigrams so one wrong character
+        # only loses the trigrams spanning it; survivors still retrieve the
+        # row, and Python re-checks the overlap ratio below.
+        typo_q = [t.lower() for t in tokens if len(t) >= 4]
+        tri_terms = list(dict.fromkeys(g for t in typo_q for g in sorted(_trigrams(t)))
+                         )
+        tri_typo = " OR ".join(f'"{g}"' for g in tri_terms)
+
+        def _typo_overlap(text: str) -> float:
+            words = re.findall(r"\w+", (text or "").lower())
+            doc = set()
+            for w in words:
+                doc |= _trigrams(w)
+            best, best_n = 0.0, 0
+            for t in typo_q:
+                qt = _trigrams(t)
+                if not qt:
+                    continue
+                inter = len(qt & doc)
+                r = inter / len(qt)
+                if inter > best_n or (inter == best_n and r > best):
+                    best, best_n = r, inter
+            return best if best_n >= 2 and best >= 0.5 else 0.0
         with eng.begin() as c:
             if ident == "supervisor":
                 mine = None
@@ -690,30 +868,115 @@ def make_app(db_url: str = DB_URL) -> FastAPI:
                     # A valid upstream identity is not a Rouvr principal until
                     # onboarding binds it to a local user and tenant.
                     raise HTTPException(403, "complete Rouvr onboarding first")
-            sql = (f"SELECT k.* FROM knowledge_fts f JOIN knowledge_entries k ON k.id=f.rowid"
-                   f" WHERE knowledge_fts MATCH :m AND {_LATEST}")
+            proj = " AND k.project=:p" if project else ""
             kw: dict = {"m": match}
             if project:
-                sql += " AND k.project=:p"
                 kw["p"] = project
-            rows = [dict(r) for r in c.execute(text(sql + " ORDER BY f.rank LIMIT 50"), kw).mappings()]
+            exact = [dict(r) for r in c.execute(text(
+                f"SELECT k.*, f.rank AS _rank FROM knowledge_fts f"
+                f" JOIN knowledge_entries k ON k.id=f.rowid"
+                f" WHERE knowledge_fts MATCH :m AND {_LATEST}{proj}"
+                f" ORDER BY f.rank LIMIT 100"), kw).mappings()]
+            kw2: dict = {"m": tri}
+            if project:
+                kw2["p"] = project
+            fuzzy = [dict(r) for r in c.execute(text(
+                f"SELECT k.*, f.rank AS _rank FROM knowledge_trigram f"
+                f" JOIN knowledge_entries k ON k.id=f.rowid"
+                f" WHERE knowledge_trigram MATCH :m AND {_LATEST}{proj}"
+                f" ORDER BY f.rank LIMIT 100"), kw2).mappings()]
+            fused: dict[int, float] = {}
+            by_id: dict[int, dict] = {}
+            for rank, r in enumerate(exact):
+                fused[r["id"]] = fused.get(r["id"], 0.0) + 1.0 / (60 + rank)
+                by_id[r["id"]] = r
+            for rank, r in enumerate(fuzzy):
+                fused[r["id"]] = fused.get(r["id"], 0.0) + 1.0 / (60 + rank)
+                by_id[r["id"]] = r
+            if tri_typo:
+                kw3: dict = {"m": tri_typo}
+                if project:
+                    kw3["p"] = project
+                cand = [dict(r) for r in c.execute(text(
+                    f"SELECT k.* FROM knowledge_trigram f"
+                    f" JOIN knowledge_entries k ON k.id=f.rowid"
+                    f" WHERE knowledge_trigram MATCH :m AND {_LATEST}{proj}"
+                    f" LIMIT 100"), kw3).mappings()]
+                scored = []
+                for r in cand:
+                    ov = _typo_overlap(" ".join([
+                        r.get("title") or "", r.get("slug") or "",
+                        " ".join(json.loads(r.get("tags") or "[]")),
+                        r.get("summary") or ""]))
+                    if ov > 0:
+                        scored.append((ov, r))
+                scored.sort(key=lambda x: -x[0])
+                for drank, (ov, r) in enumerate(scored[:50]):
+                    fused[r["id"]] = fused.get(r["id"], 0.0) + ov / (60 + drank)
+                    by_id[r["id"]] = r
             out = []
-            for r in rows:
+            for eid in sorted(fused, key=lambda i: fused[i], reverse=True):
+                r = by_id[eid]
                 if ident == "supervisor":
-                    out.append(_krow(r))
+                    pass
                 elif (r.get("visibility") or "company") == "public":
-                    out.append(_krow(r))
+                    pass
                 elif mine is not None and r["tenant"] == mine and (r.get("visibility") or "company") == "company":
-                    out.append(_krow(r))
+                    pass
                 elif (r.get("visibility") or "company") == "restricted" and (
                         r.get("author") == ident or ident in _allowed_list(r.get("allowed_users"))):
-                    out.append(_krow(r))
+                    pass
+                else:
+                    continue  # never leak titles/snippets across the boundary
+                out.append(_krow(r) if full else _shortlist(r))
+                if len(out) >= n:
+                    break
             return {"items": out}
 
-    @app.get("/v1/knowledge/{kid}")
-    def get_knowledge(kid: int, request: Request):
+    @app.get("/v1/knowledge/{key}")
+    def get_knowledge(key: str, request: Request, project: str | None = None):
+        ident = _identity(request)
         with eng.begin() as c:
-            return _krow(_knowledge_or_404(c, kid, _identity(request)))
+            try:
+                return _krow(_knowledge_or_404(c, int(key), ident))
+            except ValueError:
+                pass
+            kw: dict = {"s": key}
+            psql = ""
+            if project:
+                psql = " AND project=:p"
+                kw["p"] = project
+            rows = [dict(r) for r in c.execute(text(
+                "SELECT * FROM knowledge_entries WHERE slug=:s"
+                f" AND {_LATEST_SELF}{psql}"), kw).mappings()]
+            if ident == "supervisor":
+                visible = rows
+            else:
+                try:
+                    mine = _tenant_of(c, ident)
+                except HTTPException:
+                    mine = None
+                visible = []
+                for r in rows:
+                    if (r.get("visibility") or "company") == "public":
+                        visible.append(r)
+                    elif mine is not None and r["tenant"] == mine and _can_see(r, ident, mine):
+                        visible.append(r)
+            if not visible:
+                raise HTTPException(404, "knowledge entry not found")  # no existence oracle
+            if ident == "supervisor":
+                own = visible
+            else:
+                own = [r for r in visible if r["tenant"] == mine]
+            if len(own) == 1:
+                pick = own[0]
+            elif not own and len(visible) == 1:
+                pick = visible[0]  # someone else's public entry
+            elif not visible:
+                raise HTTPException(404, "knowledge entry not found")
+            else:
+                raise HTTPException(409, f"slug {key!r} is ambiguous across tenants")
+            return _krow(_knowledge_or_404(c, pick["id"], ident))
 
     @app.get("/v1/knowledge/{kid}/history")
     def knowledge_history(kid: int, request: Request):
@@ -765,10 +1028,15 @@ def make_app(db_url: str = DB_URL) -> FastAPI:
                     raise HTTPException(403, "only the creator or an admin changes visibility")
             if vis != "restricted" and allowed:
                 raise HTTPException(422, "allowed_users only with visibility=restricted")
+            tags = body.get("tags", json.loads(old.get("tags") or "[]"))
+            # summary follows the newest body unless the caller pins one
+            summary = body.get("summary") if "summary" in body else None
             return _krow(_knowledge_insert(
                 c, old["tenant"], old["project"], old["kind"], title, kbody, ident,
                 version=old["version"] + 1, supersedes=kid,
-                visibility=vis, allowed=allowed))
+                visibility=vis, allowed=allowed,
+                slug=old.get("slug") or None, tags=tags, summary=summary,
+                slug_chain=[old.get("slug") or ""]))
 
     @app.post("/v1/knowledge/{kid}/confirm")
     def confirm_knowledge(kid: int, request: Request):
@@ -805,7 +1073,9 @@ def make_app(db_url: str = DB_URL) -> FastAPI:
                     raise HTTPException(422, "title and body are required")
                 allowed = _allowed_list(it.get("allowed_users"))
                 out.append(_krow(_knowledge_insert(c, tenant, project, kind, title,
-                                                  kbody, ident, visibility=vis, allowed=allowed)))
+                                                  kbody, ident, visibility=vis, allowed=allowed,
+                                                  slug=it.get("slug"), tags=it.get("tags"),
+                                                  summary=it.get("summary"))))
         return {"items": out}
 
     @app.post("/v1/knowledge/compact")

@@ -1,0 +1,13 @@
+{
+  "task_id": 51,
+  "description": "Implement parse_duration(s) in durations.py so it parses duration strings like '1h30m' into integer seconds.\n\nKnowledge in force \u2014 cite by id: knowledge:258@v1 (All functions need type hints)",
+  "criteria": [
+    "parse_duration('1h30m') returns 5400 (compound values sum)",
+    "units s, m, h, d, w are supported case-insensitively ('2H' == 7200)",
+    "unknown units raise ValueError whose message names the offending unit",
+    "empty or blank input raises ValueError"
+  ],
+  "knowledge_citations": [
+    "knowledge:258@v1"
+  ]
+}

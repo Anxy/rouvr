@@ -174,3 +174,24 @@ def test_clone_env_uses_only_stack_token(monkeypatch):
     env = clone_env()
     assert env["GH_TOKEN"] == "x" and "ROUVR_LEDGER_TOKEN" not in env
     assert env["GIT_TERMINAL_PROMPT"] == "0"
+
+
+def test_fresh_workspace_registry_root_is_0700(tmp_path):
+    import stat
+    from rouvr.muse import ensure_muse_registry_root, muse_registry_root
+    ws = tmp_path / "ws"
+    ws.mkdir()
+    root = ensure_muse_registry_root(ws)  # mkdir alone yields 0755 under umask 022
+    assert root == muse_registry_root(ws) and root.is_dir()
+    assert stat.S_IMODE(root.stat().st_mode) == 0o700
+
+
+def test_existing_loose_registry_root_is_tightened(tmp_path):
+    import stat
+    from rouvr.muse import ensure_muse_registry_root, muse_registry_root
+    ws = tmp_path / "ws"
+    root = muse_registry_root(ws)
+    root.mkdir(parents=True)
+    root.chmod(0o755)  # simulates an ACL-inherited loose dir
+    ensure_muse_registry_root(ws)
+    assert stat.S_IMODE(root.stat().st_mode) == 0o700

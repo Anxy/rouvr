@@ -38,6 +38,26 @@ def sessions_root() -> Path:
     return Path(xdg) / "muse" / "sessions"
 
 
+def muse_registry_root(cwd: Path) -> Path:
+    """Registry dir muse requires at same-user mode 0700.
+
+    Headless turns run with HOME=cwd, so the registry lives inside the
+    workspace (container turns instead use HOME=/tmp and are unaffected)."""
+    return cwd / ".local" / "share" / "muse" / "runtime" / "muse"
+
+
+def ensure_muse_registry_root(cwd: Path) -> Path:
+    """Pre-create the registry root with explicit 0700.
+
+    mkdir honors umask but not parent default ACLs: on a checkout whose
+    tree carries a group-writable default ACL the fresh dir would fail
+    muse's same-user 0700 check, so chmod explicitly after mkdir."""
+    root = muse_registry_root(cwd)
+    root.mkdir(parents=True, exist_ok=True)
+    os.chmod(root, 0o700)
+    return root
+
+
 def discover_session_id(cwd: Path, root: Path | None = None) -> str:
     """Newest muse session whose log names cwd as workspace_root, else ''.
 
@@ -210,6 +230,7 @@ class MuseLauncher:
                          env: dict[str, str], timeout_s: int, resume: str | None,
                          on_event: Callable[[dict], None], cancel: asyncio.Event | None,
                          sid: str) -> MuseTurn:
+        ensure_muse_registry_root(cwd)
         if self.launch_windows:
             chat = chat_command(f"Rouvr muse {sid[:8]}", cwd, prompt_file, model, self.bin,
                                 role=persona_role(prompt))

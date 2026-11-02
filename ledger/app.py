@@ -754,6 +754,21 @@ def make_app(db_url: str = DB_URL) -> FastAPI:
             return identity in _allowed_list(k.get("allowed_users"))
         return False
 
+    def _current_knowledge_id(c, kid):
+        """Forward-resolve a possibly superseded id to its current version.
+
+        Old citations stay readable but never surface stale rows: they
+        return the latest entry, matching slug lookup ("slug tracks
+        latest"). Unknown ids pass through so the caller still 404s."""
+        seen, cur = {kid}, kid
+        while True:
+            nxt = row(c, "SELECT id FROM knowledge_entries WHERE supersedes_id=:i"
+                         " ORDER BY id DESC", i=cur)
+            if not nxt or nxt["id"] in seen:
+                return cur
+            seen.add(nxt["id"])
+            cur = nxt["id"]
+
     def _knowledge_or_404(c, kid, identity):
         k = row(c, "SELECT * FROM knowledge_entries WHERE id=:i", i=kid)
         if not k:
@@ -953,9 +968,12 @@ def make_app(db_url: str = DB_URL) -> FastAPI:
         ident = _identity(request)
         with eng.begin() as c:
             try:
-                return _krow(_knowledge_or_404(c, int(key), ident))
+                requested = int(key)
             except ValueError:
                 pass
+            else:
+                current = _current_knowledge_id(c, requested)
+                return _krow(_knowledge_or_404(c, current, ident))
             kw: dict = {"s": key}
             psql = ""
             if project:

@@ -208,6 +208,33 @@ def test_registry_sessions_subdir_is_0700(tmp_path):
     assert stat.S_IMODE(sessions.stat().st_mode) == 0o700
 
 
+def test_xdg_data_home_is_stable_0700_outside_tree(tmp_path):
+    import stat
+    from rouvr.muse import muse_xdg_data_home
+    ws = tmp_path / "ws"
+    ws.mkdir()
+    first, second = muse_xdg_data_home(ws), muse_xdg_data_home(ws)
+    assert first == second and str(first).startswith("/tmp/rouvr-muse-xdg-")
+    assert stat.S_IMODE(first.stat().st_mode) == 0o700
+    other = muse_xdg_data_home(tmp_path / "other")
+    other.mkdir(parents=True, exist_ok=True)
+    assert muse_xdg_data_home(tmp_path / "other") != first
+
+
+async def test_headless_turn_exports_xdg_data_home(tmp_path):
+    script = tmp_path / "fake-muse"
+    script.write_text("#!/bin/sh\n"
+                      "echo \"$XDG_DATA_HOME\" > ./xdg-marker\n"
+                      "printf '%s\\n' '{\"payload_type\": \"run.terminal.completed\", \"payload\": {\"text\": \"done\"}}'\n")
+    script.chmod(0o755)
+    ws = tmp_path / "ws"
+    ws.mkdir()
+    from rouvr.muse import MuseLauncher
+    await MuseLauncher(str(script)).run(prompt="hi", model="", cwd=ws, env={}, timeout_s=30)
+    marker = (ws / "xdg-marker").read_text().strip()
+    assert marker.startswith("/tmp/rouvr-muse-xdg-")
+
+
 async def test_kill_tolerates_already_exited_process():
     import asyncio
     from rouvr.muse import MuseLauncher

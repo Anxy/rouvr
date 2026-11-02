@@ -61,6 +61,23 @@ def ensure_muse_registry_root(cwd: Path) -> Path:
     return root
 
 
+def muse_xdg_data_home(cwd: Path) -> Path:
+    """Ephemeral per-workspace XDG data dir (mode 0700) for a headless turn.
+
+    muse permission-checks every registry path it touches (root, sessions
+    subdir, lock files, index db...), so no in-workspace location passes on
+    a checkout with a group-writable default ACL. Point XDG at an
+    explicit-0700 dir outside the tree instead. Per-workspace (not
+    per-turn) so --session-id resume finds prior turn state; /tmp is
+    OS-scrubbed and never ledger state."""
+    import hashlib
+    digest = hashlib.sha256(str(cwd).encode()).hexdigest()[:16]
+    d = Path("/tmp") / f"rouvr-muse-xdg-{digest}"
+    d.mkdir(parents=True, exist_ok=True)
+    os.chmod(d, 0o700)
+    return d
+
+
 def discover_session_id(cwd: Path, root: Path | None = None) -> str:
     """Newest muse session whose log names cwd as workspace_root, else ''.
 
@@ -258,9 +275,13 @@ class MuseLauncher:
                 env={"PATH": os.environ.get("PATH", ""), "HOME": os.environ.get("HOME", "")},
                 stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE, start_new_session=True)
         else:
+            # Registry traffic (sessions, locks, index) goes to the
+            # per-workspace XDG dir, never the ACL-inherited workspace tree.
+            xdg = muse_xdg_data_home(cwd)
             proc = await asyncio.create_subprocess_exec(
                 *self.argv(prompt_file, model, cwd, sid), cwd=str(cwd),
-                env={"PATH": os.environ.get("PATH", ""), "HOME": str(cwd), **env},
+                env={"PATH": os.environ.get("PATH", ""), "HOME": str(cwd),
+                     "XDG_DATA_HOME": str(xdg), **env},
                 stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE, start_new_session=True)
         session_id, events, last = sid, 0, ""
         stderr_tail = bytearray()  # capped: only a sanitized tail is ever used

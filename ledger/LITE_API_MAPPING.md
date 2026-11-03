@@ -20,6 +20,7 @@ API).
 | Lite endpoint | Method | Ledger handler (`ledger/app.py`) | Notes |
 |---|---|---|---|
 | `/api/v1/health` | GET | `GET /health` (`health`) | auth-open alias, unchanged shape |
+| `/api/v1/version` | GET | `GET /v1/version` (`version`) | version alias, unchanged shape |
 | `/api/v1/users` | POST | `POST /v1/users` (`create_user`) | stack-only |
 | `/api/v1/users` | GET | `GET /v1/users` (`list_users`) | stack-only |
 | `/api/v1/tenants` | POST | `POST /v1/tenants` (`create_tenant`) | idempotent register |

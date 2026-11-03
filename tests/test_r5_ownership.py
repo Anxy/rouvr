@@ -11,7 +11,10 @@ from rouvr.lease import (LeaseKeeper, claim_assignment_and_lease, open_or_reuse_
 from rouvr.workhub.ledger import LedgerWorkHub
 
 
-async def test_claim_attempt_fenced_flow(tmp_path):
+async def test_claim_attempt_fenced_flow(tmp_path, monkeypatch):
+    # Explicit insecure bypass (was ambient leakage from other modules).
+    monkeypatch.setenv("ROUVR_INSECURE_DEV", "1")
+    monkeypatch.delenv("ROUVR_LEDGER_TOKEN", raising=False)
     app = make_app(f"sqlite:///{tmp_path}/ledger.db")
     wh = LedgerWorkHub("http://ledger", transport=httpx.ASGITransport(app=app))
     await wh._http.post("/v1/tenants", json={"tenant": "acme"})

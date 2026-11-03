@@ -13,9 +13,7 @@ import os
 import httpx
 import pytest
 
-os.environ["ROUVR_INSECURE_DEV"] = "1"
-os.environ.pop("ROUVR_LEDGER_TOKEN", None)
-
+from env_scope import scoped_env
 from fastapi.testclient import TestClient
 
 from ledger.app import make_app
@@ -24,6 +22,14 @@ from rouvr.lease import attempt_base, fresh_claim
 from rouvr.workhub.ledger import LedgerWorkHub
 
 pytestmark = pytest.mark.asyncio
+
+
+@pytest.fixture(scope="module", autouse=True)
+def _insecure_bypass():
+    """These tests exercise the API without credentials; scope the
+    insecure bypass to this module instead of leaking it process-wide."""
+    with scoped_env(ROUVR_INSECURE_DEV="1", ROUVR_LEDGER_TOKEN=None):
+        yield
 
 
 def _client(tmp_path):

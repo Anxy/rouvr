@@ -22,17 +22,19 @@ LIVE = os.environ.get("ROUVR_CONTRACT_LIVE") == "1"
 @pytest.fixture(params=["ledger"] + (["stage"] if LIVE else []))
 async def backend(request, tmp_path: Path):
     if request.param == "ledger":
-        import os
-        os.environ["ROUVR_INSECURE_DEV"] = "1"
-        os.environ.pop("ROUVR_LEDGER_TOKEN", None)
-        from ledger.app import make_app
-        app = make_app(f"sqlite:///{tmp_path}/ledger.db")
-        wh = LedgerWorkHub("http://ledger", transport=httpx.ASGITransport(app=app))
-        await wh._call("POST", "/v1/tenants", {"tenant": "acme"})
-        await wh._call("POST", "/v1/projects", {"tenant": "acme", "project": "site"})
-        task = await wh.create_task("contract", "suite task", "acme", "site")
-        yield wh, str(task["id"]), task["id"]
-        await wh.aclose()
+        from env_scope import scoped_env
+
+        with scoped_env(ROUVR_INSECURE_DEV="1", ROUVR_LEDGER_TOKEN=None):
+            from ledger.app import make_app
+            app = make_app(f"sqlite:///{tmp_path}/ledger.db")
+            wh = LedgerWorkHub("http://ledger", transport=httpx.ASGITransport(app=app))
+            await wh._call("POST", "/v1/tenants", {"tenant": "acme"})
+            await wh._call("POST", "/v1/projects", {"tenant": "acme", "project": "site"})
+            task = await wh.create_task("contract", "suite task", "acme", "site")
+            try:
+                yield wh, str(task["id"]), task["id"]
+            finally:
+                await wh.aclose()
     else:
         wh = WorkHubClient(os.environ["WORKHUB_URL"], os.environ.get("TENANT", "t"),
                            os.environ.get("PROJECT", "p"), os.environ["WORKHUB_JWT"])

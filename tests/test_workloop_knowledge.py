@@ -8,27 +8,27 @@ import uvicorn
 
 @pytest.fixture(scope="module")
 def live(tmp_path_factory):
-    import os
-    os.environ["ROUVR_LEDGER_TOKEN"] = "stack-secret"
-    os.environ.pop("ROUVR_INSECURE_DEV", None)
-    from ledger.app import make_app
-    db = tmp_path_factory.mktemp("workloop") / "w.db"
-    config = uvicorn.Config(make_app(f"sqlite:///{db}"), host="127.0.0.1",
-                            port=18233, log_level="error")
-    server = uvicorn.Server(config)
-    th = threading.Thread(target=server.run, daemon=True)
-    th.start()
-    url = "http://127.0.0.1:18233"
-    for _ in range(100):
-        try:
-            if httpx.get(url + "/health", timeout=1).status_code == 200:
-                break
-        except httpx.TransportError:
-            pass
-        import time
-        time.sleep(0.1)
-    yield url
-    server.should_exit = True
+    from env_scope import scoped_env
+
+    with scoped_env(ROUVR_LEDGER_TOKEN="stack-secret", ROUVR_INSECURE_DEV=None):
+        from ledger.app import make_app
+        db = tmp_path_factory.mktemp("workloop") / "w.db"
+        config = uvicorn.Config(make_app(f"sqlite:///{db}"), host="127.0.0.1",
+                                port=18233, log_level="error")
+        server = uvicorn.Server(config)
+        th = threading.Thread(target=server.run, daemon=True)
+        th.start()
+        url = "http://127.0.0.1:18233"
+        for _ in range(100):
+            try:
+                if httpx.get(url + "/health", timeout=1).status_code == 200:
+                    break
+            except httpx.TransportError:
+                pass
+            import time
+            time.sleep(0.1)
+        yield url
+        server.should_exit = True
 
 
 def test_rule_changes_outcome_with_citation(live, tmp_path, monkeypatch):

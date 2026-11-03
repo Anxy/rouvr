@@ -5,7 +5,10 @@ import httpx
 import uvicorn
 
 
-def test_fence_lookup_with_many_rows(tmp_path):
+def test_fence_lookup_with_many_rows(tmp_path, monkeypatch):
+    # Explicit insecure bypass (was ambient leakage from other modules).
+    monkeypatch.setenv("ROUVR_INSECURE_DEV", "1")
+    monkeypatch.delenv("ROUVR_LEDGER_TOKEN", raising=False)
     from ledger.app import make_app
     db = tmp_path / "p.db"
     config = uvicorn.Config(make_app(f"sqlite:///{db}"), host="127.0.0.1", port=18241,

@@ -24,30 +24,30 @@ from rouvr.workhub.ledger import LedgerWorkHub
 
 @pytest.fixture(scope="module")
 def live_ledger(tmp_path_factory):
-    import os
     import threading
 
     import uvicorn
 
-    os.environ["ROUVR_INSECURE_DEV"] = "1"
-    os.environ.pop("ROUVR_LEDGER_TOKEN", None)
-    from ledger.app import make_app
+    from env_scope import scoped_env
 
-    db = tmp_path_factory.mktemp("g1ledger") / "g1.db"
-    config = uvicorn.Config(make_app(f"sqlite:///{db}"), host="127.0.0.1",
-                            port=18223, log_level="error")
-    server = uvicorn.Server(config)
-    thread = threading.Thread(target=server.run, daemon=True)
-    thread.start()
-    for _ in range(100):
-        try:
-            if httpx.get("http://127.0.0.1:18223/health", timeout=1).status_code == 200:
-                break
-        except httpx.TransportError:
-            pass
-        import time; time.sleep(0.1)
-    yield "http://127.0.0.1:18223"
-    server.should_exit = True
+    with scoped_env(ROUVR_INSECURE_DEV="1", ROUVR_LEDGER_TOKEN=None):
+        from ledger.app import make_app
+
+        db = tmp_path_factory.mktemp("g1ledger") / "g1.db"
+        config = uvicorn.Config(make_app(f"sqlite:///{db}"), host="127.0.0.1",
+                                port=18223, log_level="error")
+        server = uvicorn.Server(config)
+        thread = threading.Thread(target=server.run, daemon=True)
+        thread.start()
+        for _ in range(100):
+            try:
+                if httpx.get("http://127.0.0.1:18223/health", timeout=1).status_code == 200:
+                    break
+            except httpx.TransportError:
+                pass
+            import time; time.sleep(0.1)
+        yield "http://127.0.0.1:18223"
+        server.should_exit = True
 
 
 @activity.defn(name="verify_binding")

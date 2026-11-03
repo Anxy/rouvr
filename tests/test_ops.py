@@ -18,6 +18,10 @@ INSTRUCTION = "Compile yesterday's lane report and publish it."
 
 @pytest.fixture
 def ops_env(tmp_path, monkeypatch):
+    # Explicit insecure bypass: these tests drive the API without
+    # credentials (was ambient leakage from other modules).
+    monkeypatch.setenv("ROUVR_INSECURE_DEV", "1")
+    monkeypatch.delenv("ROUVR_LEDGER_TOKEN", raising=False)
     monkeypatch.setenv("ROUVR_DEMO_OUTBOX", str(tmp_path / "outbox"))
     monkeypatch.setenv("ROUVR_LEDGER_DATABASE_URL", f"sqlite:///{tmp_path}/ops.db")
     monkeypatch.setenv("ROUVR_MODEL_PROVIDER", "stub")
@@ -222,22 +226,26 @@ def ledger_url(tmp_path_factory):
     import threading
     import httpx
     import uvicorn
-    from ledger.app import make_app
-    db = tmp_path_factory.mktemp("opsledger") / "l.db"
-    config = uvicorn.Config(make_app(f"sqlite:///{db}"), host="127.0.0.1", port=18222,
-                            log_level="error")
-    server = uvicorn.Server(config)
-    thread = threading.Thread(target=server.run, daemon=True)
-    thread.start()
-    for _ in range(100):
-        try:
-            if httpx.get("http://127.0.0.1:18222/health", timeout=1).status_code == 200:
-                break
-        except httpx.TransportError:
-            pass
-        import time; time.sleep(0.1)
-    yield "http://127.0.0.1:18222"
-    server.should_exit = True
+    from env_scope import scoped_env
+
+    with scoped_env(ROUVR_INSECURE_DEV="1", ROUVR_LEDGER_TOKEN=None):
+        from ledger.app import make_app  # noqa: E402
+
+        db = tmp_path_factory.mktemp("opsledger") / "l.db"
+        config = uvicorn.Config(make_app(f"sqlite:///{db}"), host="127.0.0.1", port=18222,
+                                log_level="error")
+        server = uvicorn.Server(config)
+        thread = threading.Thread(target=server.run, daemon=True)
+        thread.start()
+        for _ in range(100):
+            try:
+                if httpx.get("http://127.0.0.1:18222/health", timeout=1).status_code == 200:
+                    break
+            except httpx.TransportError:
+                pass
+            import time; time.sleep(0.1)
+        yield "http://127.0.0.1:18222"
+        server.should_exit = True
 
 
 def _grant(c, scope, expiry="2999-01-01T00:00:00+00:00", rev=""):

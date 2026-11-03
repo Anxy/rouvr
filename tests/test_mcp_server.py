@@ -9,25 +9,25 @@ import uvicorn
 
 @pytest.fixture(scope="module")
 def ledger_url(tmp_path_factory, monkeypatch_factory=None):
-    import os
-    os.environ["ROUVR_INSECURE_DEV"] = "1"
-    os.environ.pop("ROUVR_LEDGER_TOKEN", None)
-    from ledger.app import make_app
-    db = tmp_path_factory.mktemp("mcpledger") / "l.db"
-    config = uvicorn.Config(make_app(f"sqlite:///{db}"), host="127.0.0.1", port=18221,
-                            log_level="error")
-    server = uvicorn.Server(config)
-    thread = threading.Thread(target=server.run, daemon=True)
-    thread.start()
-    for _ in range(100):
-        try:
-            if httpx.get("http://127.0.0.1:18221/health", timeout=1).status_code == 200:
-                break
-        except httpx.TransportError:
-            pass
-        import time; time.sleep(0.1)
-    yield "http://127.0.0.1:18221"
-    server.should_exit = True
+    from env_scope import scoped_env
+
+    with scoped_env(ROUVR_INSECURE_DEV="1", ROUVR_LEDGER_TOKEN=None):
+        from ledger.app import make_app
+        db = tmp_path_factory.mktemp("mcpledger") / "l.db"
+        config = uvicorn.Config(make_app(f"sqlite:///{db}"), host="127.0.0.1", port=18221,
+                                log_level="error")
+        server = uvicorn.Server(config)
+        thread = threading.Thread(target=server.run, daemon=True)
+        thread.start()
+        for _ in range(100):
+            try:
+                if httpx.get("http://127.0.0.1:18221/health", timeout=1).status_code == 200:
+                    break
+            except httpx.TransportError:
+                pass
+            import time; time.sleep(0.1)
+        yield "http://127.0.0.1:18221"
+        server.should_exit = True
 
 
 async def test_mcp_tools_registered():

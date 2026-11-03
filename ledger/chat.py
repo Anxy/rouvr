@@ -27,23 +27,20 @@ import os
 import urllib.request
 
 MODEL_DEFAULT = "muse-spark-1.3"
-MAX_TOKENS = 1024
+# Reasoning models spend most of the budget thinking; 1024 truncates the
+# visible turn (see e2e/diag_empty.py). 2048 keeps turns complete.
+MAX_TOKENS = 2048
 MESSAGE_LIMIT = 4000
 MAX_TASKS = 8
 PROVIDER_TIMEOUT = 60.0
 MAX_RETRIES = 2  # streaming attempts beyond the first when a turn comes back empty
 RETRY_BACKOFF_S = (0.5, 1.0)  # short pauses between retries
 
-SYSTEM_PROMPT = """You are the Rouvr supervisor. Either ask exactly one \
-clarifying question or propose a work slice. Reply with STRICT JSON only, no \
-prose outside the JSON, matching this schema:
+SYSTEM_PROMPT = """Rouvr supervisor. Reply STRICT JSON only, no prose:
 {"question": str|null, "slice": {"title": str, "intent": str,
 "acceptance_criteria": [str]}|null, "tasks": [{"title": str, "intent": str}]}
-Rules: if anything is ambiguous, set "question" to the single most important \
-question and leave "slice" null and "tasks" empty. Otherwise set "question" \
-to null, describe the slice (title under 80 chars, concrete acceptance \
-criteria), and list at most 8 small tasks with concrete titles and intents. \
-Never emit a question together with a slice or tasks."""
+Ambiguous: set only "question" (one question), null slice, empty tasks.
+Clear: "question" null, slice title <80 chars with criteria, <=8 tasks."""
 
 _PROVIDER_PRESETS = {
     "meta": ("META_MODEL_API_BASE_URL", "", "META_API_KEY", "META_MODEL_NAME", MODEL_DEFAULT),

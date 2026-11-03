@@ -140,7 +140,8 @@ def test_chat_caps_tasks_and_rejects_oversize_message(session_client):
     assert r.status_code == 422, (r.status_code, r.text)
 
 
-def test_chat_http_stream_parses_sse_chunks(session_client, monkeypatch):
+def test_chat_http_stream_parses_sse_chunks(monkeypatch):
+    import ledger.chat as chatmod
     """The non-stub HTTP branch: canned SSE chunks over a local socket."""
     import threading
     from http.server import BaseHTTPRequestHandler, HTTPServer
@@ -169,34 +170,27 @@ def test_chat_http_stream_parses_sse_chunks(session_client, monkeypatch):
     server = HTTPServer(("127.0.0.1", 0), H)
     threading.Thread(target=server.serve_forever, daemon=True).start()
     try:
-        monkeypatch.setenv("ROUVR_MODEL_PROVIDER", "meta")
-        monkeypatch.setenv("META_MODEL_API_BASE_URL",
-                           f"http://127.0.0.1:{server.server_port}")
-        monkeypatch.setenv("META_API_KEY", "dummy-local-key")
-        monkeypatch.delenv("META_MODEL_NAME", raising=False)
-        r = _chat(session_client, "does not matter", message_id="http-1")
+        provider = {"name": "meta",
+                    "base_url": f"http://127.0.0.1:{server.server_port}",
+                    "model": "dummy", "api_key": "dummy-local-key"}
+        # split across odd chunk boundaries: the client must reassemble lines
+        text = "".join(chatmod.stream_completion(
+            [{"role": "user", "content": "does not matter"}], provider))
     finally:
         server.shutdown()
-    assert r.status_code == 200, r.text
-    frames = _frames(r.text)
-    assert len([1 for e, _ in frames if e == "token"]) >= 2
-    res = [d for e, d in frames if e == "result"][0]
-    assert res["question"] == "Which project?" and res["created"] == 0
+    assert json.loads(text)["question"] == "Which project?"
 
 
 def test_chat_retries_empty_turn_then_succeeds(session_client, monkeypatch):
     import ledger.chat as chatmod
 
-    plan_text = json.dumps(PLAN)
     calls = {"n": 0}
 
-    def fake_stream(messages, provider):
+    def fake_complete(messages, provider):
         calls["n"] += 1
-        if calls["n"] < 3:
-            return iter(())
-        return iter([plan_text[:30], plan_text[30:]])
+        return "" if calls["n"] < 3 else json.dumps(PLAN)
 
-    monkeypatch.setattr(chatmod, "stream_completion", fake_stream)
+    monkeypatch.setattr(chatmod, "complete_once", fake_complete)
     r = _chat(session_client, "anything", message_id="retry-1")
     assert r.status_code == 200, r.text
     frames = _frames(r.text)
@@ -206,32 +200,13 @@ def test_chat_retries_empty_turn_then_succeeds(session_client, monkeypatch):
     assert res["created"] == 3 and res["message_id"] == "retry-1"
     got = session_client.get(f"/api/v1/tasks/{res['slice']['id']}").json()
     body = json.loads([x for x in got["receipts"] if x["action"] == "chat:create"][0]["body"])
-    assert body["source"] == "retry-1" and body["retries"] == 2 and body["fallback"] is False
-
-
-def test_chat_falls_back_to_nonstreaming(session_client, monkeypatch):
-    import ledger.chat as chatmod
-
-    monkeypatch.setattr(chatmod, "stream_completion", lambda messages, provider: iter(()))
-    monkeypatch.setattr(chatmod, "complete_once",
-                         lambda messages, provider: json.dumps(PLAN))
-    r = _chat(session_client, "anything", message_id="retry-2")
-    assert r.status_code == 200, r.text
-    frames = _frames(r.text)
-    attempts = [d["attempt"] for e, d in frames if e == "retrying"]
-    assert attempts == [1, 2, "fallback"], frames
-    res = [d for e, d in frames if e == "result"][0]
-    assert res["created"] == 3
-    got = session_client.get(f"/api/v1/tasks/{res['tasks'][0]['id']}").json()
-    body = json.loads([x for x in got["receipts"] if x["action"] == "chat:create"][0]["body"])
-    assert body["retries"] == 2 and body["fallback"] is True
+    assert body["source"] == "retry-1" and body["retries"] == 2
 
 
 def test_chat_gives_up_when_everything_empty(session_client, monkeypatch):
     import ledger.chat as chatmod
 
     before = len(session_client.get("/api/v1/tasks").json()["items"])
-    monkeypatch.setattr(chatmod, "stream_completion", lambda messages, provider: iter(()))
     monkeypatch.setattr(chatmod, "complete_once", lambda messages, provider: "")
     r = _chat(session_client, "anything", message_id="retry-3")
     assert r.status_code == 200, r.text

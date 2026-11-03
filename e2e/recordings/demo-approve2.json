@@ -1,0 +1,17 @@
+{
+ "seconds": 3.9,
+ "receipts": {
+  "6": {
+   "state": "needs_review",
+   "approve": []
+  },
+  "7": {
+   "state": "needs_review",
+   "approve": []
+  },
+  "8": {
+   "state": "needs_review",
+   "approve": []
+  }
+ }
+}

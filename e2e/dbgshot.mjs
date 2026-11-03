@@ -1,0 +1,16 @@
+import { chromium } from "playwright";
+const browser = await chromium.launch();
+const page = await (await browser.newContext({ viewport: { width: 1280, height: 720 } })).newPage();
+await page.goto("http://localhost:13002/workspace/login");
+await page.getByPlaceholder("admin").fill("admin");
+await page.getByPlaceholder("••••••••••••").fill("e2e-admin-12345");
+await page.getByRole("button", { name: "Sign in" }).click();
+await page.waitForURL("**/workspace", { timeout: 15000 });
+await page.goto("http://localhost:13002/workspace/chat");
+await page.locator("textarea").fill(JSON.stringify({question: null, slice: {title: "S", intent: "i", acceptance_criteria: ["a"]}, tasks: [{title: "T", intent: "i"}]}));
+await page.screenshot({ path: "recordings/dbg-before.png" });
+await page.getByRole("button", { name: "Send" }).click();
+await page.waitForTimeout(8000);
+await page.screenshot({ path: "recordings/dbg-after.png" });
+console.log("BODY:", (await page.locator("main, body").last().innerText()).slice(-600));
+await browser.close();

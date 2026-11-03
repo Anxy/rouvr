@@ -140,3 +140,53 @@ def test_logout_clears_cookie(user_client):
     r = c.post("/auth/logout", headers={"Origin": "http://testserver"})
     assert r.status_code == 200
     assert "rouvr_session=" in r.headers.get("set-cookie", "")
+
+
+def _session_task(c, title, project="demo"):
+    r = c.post("/api/v1/tasks", json={"title": title, "intent": "web approval",
+                                      "tenant": "demo", "project": project},
+               headers={"Origin": "http://testserver"})
+    assert r.status_code == 200, (r.status_code, r.text)
+    return r.json()
+
+
+def _transition(c, tid, to, key):
+    return c.post(f"/api/v1/tasks/{tid}/transition", json={"to": to, "idempotency_key": key},
+                  headers={"Origin": "http://testserver"})
+
+
+def test_session_owner_can_approve_and_retry(user_client):
+    c = TestClient(user_client.app, cookies=_login(user_client).cookies)
+    t = _session_task(c, "approve me")
+    tid = t["id"]
+    assert _transition(c, tid, "claimed", "k-claim").status_code == 200
+    assert _transition(c, tid, "needs_review", "k-review").status_code == 200
+    # done needs a contract and evidence: add both as the session owner
+    assert c.post(f"/api/v1/tasks/{tid}/contracts",
+                  json={"acceptance_criteria": ["owner approved"]},
+                  headers={"Origin": "http://testserver"}).status_code == 200
+    assert c.post(f"/api/v1/tasks/{tid}/evidence", json={"kind": "note", "body": {}},
+                  headers={"Origin": "http://testserver"}).status_code == 200
+    r = _transition(c, tid, "done", "k-done")
+    assert r.status_code == 200, (r.status_code, r.text)
+    assert c.get(f"/api/v1/tasks/{tid}").json()["state"] == "done"
+    # retry path: claimed -> failed -> open
+    t2 = _session_task(c, "retry me")
+    assert _transition(c, t2["id"], "claimed", "k2-claim").status_code == 200
+    assert _transition(c, t2["id"], "failed", "k2-fail").status_code == 200
+    assert _transition(c, t2["id"], "open", "k2-retry").status_code == 200
+    assert c.get(f"/api/v1/tasks/{t2['id']}").json()["state"] == "open"
+
+
+def test_session_owner_cannot_touch_foreign_tenant(app):
+    stack = TestClient(app)
+    headers = {"x-rouvr-token": "stack-secret"}
+    stack.post("/v1/tenants", json={"tenant": "acme"}, headers=headers).raise_for_status()
+    stack.post("/v1/projects", json={"tenant": "acme", "project": "site"},
+               headers=headers).raise_for_status()
+    other = stack.post("/v1/tasks", json={"title": "acme work", "intent": "i",
+                                          "tenant": "acme", "project": "site"},
+                       headers=headers).json()
+    c = TestClient(app, cookies=_login(TestClient(app)).cookies)
+    r = _transition(c, other["id"], "claimed", "k-x")
+    assert r.status_code == 404, (r.status_code, r.text)  # no oracle, not 403

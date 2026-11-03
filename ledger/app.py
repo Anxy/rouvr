@@ -477,6 +477,7 @@ def make_app(db_url: str = DB_URL) -> FastAPI:
             return JSONResponse({"detail": "unauthorized"}, status_code=401)
         request.state.user = _user.email.split("@")[0]
         request.state.session_tenant = _user.tenant
+        request.state.session_role = _user.role
         if not _authmod.csrf_allows(request, str(_user.id), _auth_secret):
             return JSONResponse({"detail": "csrf check failed"}, status_code=403)
         return None
@@ -488,6 +489,7 @@ def make_app(db_url: str = DB_URL) -> FastAPI:
         # row), never from request args. supervisor=None sees all tenants.
         request.state.user = "supervisor"
         request.state.session_tenant = None
+        request.state.session_role = None
         request.state.hyeve_claims = None
         path = request.url.path
         # FL-A3: Lite aliases share ledger auth exactly — canonicalize
@@ -628,6 +630,15 @@ def make_app(db_url: str = DB_URL) -> FastAPI:
 
     def _stack_only(identity):
         if identity != "supervisor":
+            raise HTTPException(403, "worker-only operation")
+
+    def _transition_allowed(request):
+        """Stack may transition anything; a session owner may approve/retry
+        tasks inside its own tenant (checked by _own_or_stack below).
+        User tokens carry no role and stay worker-only (S016)."""
+        if _identity(request) == "supervisor":
+            return
+        if getattr(request.state, "session_role", None) != "owner":
             raise HTTPException(403, "worker-only operation")
 
     def row(c, sql, **kw):
@@ -1820,7 +1831,7 @@ def make_app(db_url: str = DB_URL) -> FastAPI:
 
     @app.post("/v1/tasks/{tid}/transition")
     def transition(tid: int, body: dict, request: Request):
-        _stack_only(_identity(request))
+        _transition_allowed(request)
         """Idempotent state change. Requires idempotency_key; replays return the first receipt.
         Moving to 'done' requires a contract and at least one evidence row."""
         key = body.get("idempotency_key")
@@ -1833,7 +1844,7 @@ def make_app(db_url: str = DB_URL) -> FastAPI:
                 if prior.get("action") != f"transition:{to}":
                     raise HTTPException(409, f"idempotency key already used for {prior.get('action')}")
                 return {"replayed": True, "receipt": prior}
-            t = task_or_404(c, tid)
+            t = _own_or_stack(c, tid, request)
             if to not in TRANSITIONS.get(t["state"], set()):
                 raise HTTPException(409, f"illegal transition {t['state']} -> {to}")
             if to == "done":

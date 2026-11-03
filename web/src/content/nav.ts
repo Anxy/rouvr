@@ -5,6 +5,7 @@ export const navLinks = [
   { label: "Trust", href: "/#trust" },
   { label: "Evidence", href: "/#evidence" },
   { label: "Get in touch", href: "/contact" },
+  { label: "Workspace", href: "/workspace" },
 ] as const;
 
 export const footerLinks = navLinks;

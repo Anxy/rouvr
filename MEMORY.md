@@ -50,8 +50,13 @@
   inside, only own session junk without asking.
 
 ## 3. Known open items
-- Workhub tasks 138–144 recorded closed (receipts 1752–1764) but NOT
-  live-verified — `workhub_list_tasks`/`show_task` errored this session.
+- Workhub tasks 138–144 VERIFIED done via direct 8221 API (2026-11-03
+  ~15:00 UTC). The `workhub_*` MCP tools are DEAD for the rest of this
+  session: the plugin server had lost ROUVR_LEDGER_TOKEN (env.sh wiped),
+  and restarting it broke the runtime's stdio pipe (no on-demand respawn
+  — two broken-pipe retries). `/tmp/rouvr-supervisor/env.sh` (600) is
+  restored, so a fresh session will resurrect the tools. NEVER restart
+  that server mid-session again — verify-then-report instead.
 - Demo footage (`e2e/recordings/demo-*.webm`, ~4 MB) is local-only; back it
   up before any disk wipe. Receipt sidecars `demo-approve*.json` understate
   (in-script race) — authoritative ids are in `demo/VIDEO-SCRIPT.md`.

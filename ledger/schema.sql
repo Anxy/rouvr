@@ -140,3 +140,16 @@ CREATE TABLE IF NOT EXISTS results (
   created_at  TEXT NOT NULL,
   UNIQUE (task_id, attempt_id)
 );
+-- FL-A4 outbox: the only live channel. Rows are written transactionally by
+-- the mutation that produced them, never synthesized, and streamed by
+-- GET /v1/events and /api/v1/events with a per-tenant server-side filter.
+CREATE TABLE IF NOT EXISTS outbox (
+  id         INTEGER PRIMARY KEY,
+  tenant     TEXT NOT NULL,
+  project    TEXT NOT NULL,
+  type       TEXT NOT NULL,
+  task_id    INTEGER REFERENCES tasks(id),
+  body       TEXT NOT NULL,
+  created_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS outbox_tenant_id ON outbox(tenant, id);

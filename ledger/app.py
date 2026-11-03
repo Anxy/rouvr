@@ -345,14 +345,16 @@ def make_app(db_url: str = DB_URL) -> FastAPI:
 
     # Pre-account onboarding paths authenticate against hyeve-auth
     # upstream, not the ledger token (the caller has no ledger user yet).
-    _ONBOARD_OPEN = {"/v1/onboard/register", "/v1/onboard/login"}
+    _ONBOARD_OPEN = {"/v1/onboard/register", "/v1/onboard/login",
+                        "/api/v1/onboard/register", "/api/v1/onboard/login",
+                        "/api/v1/health"}
 
     @app.middleware("http")
     async def _auth(request, call_next):
         request.state.user = "supervisor"
         request.state.hyeve_claims = None
         path = request.url.path
-        if path.startswith("/v1") and path not in _ONBOARD_OPEN:
+        if (path.startswith("/v1") or path.startswith("/api/v1")) and path not in _ONBOARD_OPEN:
             from fastapi.responses import JSONResponse
             authz = request.headers.get("authorization", "")
             if authz.casefold().startswith("bearer "):
@@ -1756,6 +1758,12 @@ def make_app(db_url: str = DB_URL) -> FastAPI:
             r = row(c, "SELECT * FROM results WHERE task_id=:i AND attempt_id=:a", i=tid, a=attempt_id)
             _remember(c, tid, key, "result", r)
             return {"replayed": False, "result": r}
+
+    try:
+        from ledger.lite import mount_lite_routes as _mount_lite
+    except ImportError:  # run as a bare module (python ledger/app.py)
+        from lite import mount_lite_routes as _mount_lite  # type: ignore[no-redef]
+    _mount_lite(app)
 
     return app
 

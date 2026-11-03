@@ -25,8 +25,10 @@ from sqlalchemy import create_engine, event, text
 
 try:
     from ledger import auth as _authmod
+    from ledger import chat as _chatmod
 except ImportError:  # run as a bare module (python ledger/app.py)
     import auth as _authmod  # type: ignore[no-redef]
+    import chat as _chatmod  # type: ignore[no-redef]
 
 try:
     from ledger import hyeve_auth as _ha
@@ -612,10 +614,15 @@ def make_app(db_url: str = DB_URL) -> FastAPI:
                                     f" then project {project!r}, before adding tasks")
         return p
 
-    def _own_or_stack(c, tid, identity):
-        """404 for a caller outside the task's tenant (no oracle)."""
+    def _own_or_stack(c, tid, request):
+        """404 for a caller outside the task's tenant (no oracle).
+
+        Session-aware: the tenant comes from the credential (cookie
+        session or token), never from args, so web sessions can read
+        and act on their own tenant's tasks."""
         t = task_or_404(c, tid)
-        if identity != "supervisor" and t.get("tenant") != _tenant_of(c, identity):
+        ident = _identity(request)
+        if ident != "supervisor" and t.get("tenant") != _caller_tenant(request, c):
             raise HTTPException(404, "task not found")
         return t
 
@@ -1606,6 +1613,111 @@ def make_app(db_url: str = DB_URL) -> FastAPI:
                 text("SELECT * FROM contracts WHERE task_id=:i ORDER BY id"), {"i": rid}).mappings()]
             return t
 
+    @app.post("/v1/chat")
+    def chat(body: dict, request: Request):
+        """Step 2: one supervised model turn -> slice with tasks, over SSE.
+
+        Streams ``token`` events as the model responds, then a ``result``
+        event with the reply, created ids, and receipt source. A clarifying
+        question (at most one) creates nothing; otherwise the slice task
+        (contract = acceptance criteria), child tasks, slice-link evidence,
+        and per-row ``chat:create`` receipts naming the message id are all
+        written in one transaction with their ``task.created`` outbox rows.
+        """
+        from fastapi.responses import StreamingResponse
+        message = body.get("message", "")
+        if not isinstance(message, str) or not message.strip():
+            raise HTTPException(422, "message is required")
+        if len(message) > _chatmod.MESSAGE_LIMIT:
+            raise HTTPException(422,
+                                f"message exceeds {_chatmod.MESSAGE_LIMIT} characters")
+        message_id = body.get("message_id") or _secrets.token_hex(8)
+        if not isinstance(message_id, str) or not message_id.strip():
+            raise HTTPException(422, "message_id must be a string")
+        message_id = message_id.strip()
+        try:
+            provider = _chatmod.provider_from_env()
+        except (ValueError, RuntimeError) as e:
+            raise HTTPException(502, f"model provider unavailable: {e}")
+        with eng.begin() as c:  # fail fast on scope before streaming
+            tenant, project = _session_scope(request, c, body)
+            _registered(c, tenant, project)
+
+        def _frame(event: str, payload: dict) -> str:
+            return f"event: {event}\ndata: {json.dumps(payload)}\n\n"
+
+        def _events():
+            chunks: list[str] = []
+            try:
+                stream = _chatmod.stream_completion(
+                    [{"role": "system", "content": _chatmod.SYSTEM_PROMPT},
+                     {"role": "user", "content": message.strip()}], provider)
+                for piece in stream:
+                    chunks.append(piece)
+                    yield _frame("token", {"text": piece})
+            except RuntimeError as e:
+                yield _frame("error", {"detail": f"model request failed: {e}"})
+                return
+            try:
+                plan = _chatmod.parse_chat_plan("".join(chunks))
+            except ValueError as e:
+                yield _frame("error", {"detail": f"unusable model turn: {e}"})
+                return
+            if plan["question"] is not None:
+                yield _frame("result", {"message_id": message_id,
+                                        "reply": plan["question"], "question": plan["question"],
+                                        "slice": None, "tasks": [], "created": 0})
+                return
+            ident = _identity(request)
+            with eng.begin() as c:
+                n = _now()
+                spec = plan["slice"]
+                sid = c.execute(text("INSERT INTO tasks(title,intent,state,created_at,updated_at,"
+                                     "created_by,tenant,project) VALUES(:t,:i,'open',:n,:n,:by,:tn,:p)"),
+                                {"t": spec["title"], "i": spec["intent"], "n": n,
+                                 "by": ident, "tn": tenant, "p": project}).lastrowid
+                _emit(c, tenant, project, "task.created", sid,
+                      {"task_id": sid, "title": spec["title"], "state": "open"})
+                if spec["acceptance_criteria"]:
+                    s, h = _canon({"acceptance_criteria": spec["acceptance_criteria"]})
+                    c.execute(text("INSERT INTO contracts(task_id,body,sha256,created_at)"
+                                   " VALUES(:i,:b,:h,:n)"), {"i": sid, "b": s, "h": h, "n": n})
+                kids = []
+                for t in plan["tasks"]:
+                    kid = c.execute(text("INSERT INTO tasks(title,intent,state,created_at,updated_at,"
+                                         "created_by,tenant,project) VALUES(:t,:i,'open',:n,:n,:by,:tn,:p)"),
+                                    {"t": t["title"], "i": t["intent"], "n": n,
+                                     "by": ident, "tn": tenant, "p": project}).lastrowid
+                    _emit(c, tenant, project, "task.created", kid,
+                          {"task_id": kid, "title": t["title"], "state": "open"})
+                    kids.append(kid)
+                for kid in kids:
+                    s, h = _canon({"slice_id": sid, "source": message_id})
+                    c.execute(text("INSERT INTO evidence(task_id,kind,body,sha256,created_at)"
+                                   " VALUES(:i,'slice_member',:b,:h,:n)"),
+                              {"i": kid, "b": s, "h": h, "n": n})
+                for tid, role in [(sid, "slice")] + [(k, "task") for k in kids]:
+                    s, _ = _canon({"source": message_id, "role": role,
+                                   "slice_id": sid, "model": provider["model"]})
+                    c.execute(text("INSERT INTO receipts(task_id,idempotency_key,action,body,created_at)"
+                                   " VALUES(:i,:k,'chat:create',:b,:n)"),
+                              {"i": tid, "k": message_id, "b": s, "n": n})
+                s, h = _canon({"source": message_id, "children": kids})
+                c.execute(text("INSERT INTO evidence(task_id,kind,body,sha256,created_at)"
+                               " VALUES(:i,'slice',:b,:h,:n)"),
+                          {"i": sid, "b": s, "h": h, "n": n})
+                slice_row = row(c, "SELECT * FROM tasks WHERE id=:i", i=sid)
+                task_rows = [row(c, "SELECT * FROM tasks WHERE id=:i", i=k) for k in kids]
+            reply = (f"Slice #{slice_row['id']} {slice_row['title']}: "
+                     f"{len(task_rows)} task(s).\n" + _chatmod.render_cards(slice_row, task_rows))
+            yield _frame("result", {"message_id": message_id, "reply": reply,
+                                    "question": None,
+                                    "slice": {"id": slice_row["id"], "title": slice_row["title"]},
+                                    "tasks": [{"id": t["id"], "title": t["title"]} for t in task_rows],
+                                    "created": 1 + len(task_rows)})
+
+        return StreamingResponse(_events(), media_type="text/event-stream")
+
     @app.get("/v1/tasks")
     def list_tasks(request: Request, state: str | None = None, tenant: str | None = None):
         ident = _identity(request)
@@ -1625,7 +1737,7 @@ def make_app(db_url: str = DB_URL) -> FastAPI:
     @app.get("/v1/tasks/{tid}")
     def get_task(tid: int, request: Request):
         with eng.begin() as c:
-            t = _own_or_stack(c, tid, _identity(request))
+            t = _own_or_stack(c, tid, request)
             t["contracts"] = [dict(r) for r in c.execute(text("SELECT * FROM contracts WHERE task_id=:i ORDER BY id"), {"i": tid}).mappings()]
             t["evidence"] = [dict(r) for r in c.execute(text("SELECT * FROM evidence WHERE task_id=:i ORDER BY id"), {"i": tid}).mappings()]
             t["receipts"] = [dict(r) for r in c.execute(text("SELECT * FROM receipts WHERE task_id=:i ORDER BY id"), {"i": tid}).mappings()]
@@ -1635,7 +1747,7 @@ def make_app(db_url: str = DB_URL) -> FastAPI:
     def add_contract(tid: int, body: dict, request: Request):
         s, h = _canon(body)
         with eng.begin() as c:
-            _own_or_stack(c, tid, _identity(request))
+            _own_or_stack(c, tid, request)
             existing = row(c, "SELECT * FROM contracts WHERE task_id=:i AND sha256=:h", i=tid, h=h)
             if existing:
                 return existing
@@ -1690,7 +1802,7 @@ def make_app(db_url: str = DB_URL) -> FastAPI:
     def add_evidence(tid: int, body: dict, request: Request):
         s, h = _canon(body.get("body", {}))
         with eng.begin() as c:
-            t = _own_or_stack(c, tid, _identity(request))
+            t = _own_or_stack(c, tid, request)
             kind = body.get("kind", "note")
             rid = c.execute(text("INSERT INTO evidence(task_id,kind,body,sha256,created_at) VALUES(:i,:k,:b,:h,:n)"),
                             {"i": tid, "k": kind, "b": s, "h": h, "n": _now()}).lastrowid
@@ -2042,7 +2154,7 @@ def make_app(db_url: str = DB_URL) -> FastAPI:
         from fastapi.responses import StreamingResponse
         ident = _identity(request)
         with eng.connect() as c:
-            mine = _tenant_of(c, ident)  # 403 when the identity has no tenant
+            mine = _caller_tenant(request, c)  # session tenant wins; 403 when tenantless
         hdr = (request.headers.get("last-event-id") or "").strip()
         raw = cursor.strip() or hdr
         if raw and not raw.isdigit():

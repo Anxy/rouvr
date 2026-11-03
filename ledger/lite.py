@@ -72,6 +72,7 @@ MAPPING: list[tuple[str, str, str]] = [
     ("POST", "/v1/tasks/{tid}/results", "record_result"),
     ("POST", "/v1/workers/heartbeat", "worker_heartbeat"),
     ("GET", "/v1/events", "events"),
+    ("POST", "/v1/chat", "chat"),
 ]
 
 

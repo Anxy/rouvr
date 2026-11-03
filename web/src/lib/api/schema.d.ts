@@ -4,6 +4,33 @@
  */
 
 export interface paths {
+    "/api/v1/chat": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Chat Lite
+         * @description Step 2: one supervised model turn -> slice with tasks, over SSE.
+         *
+         *     Streams ``token`` events as the model responds, then a ``result``
+         *     event with the reply, created ids, and receipt source. A clarifying
+         *     question (at most one) creates nothing; otherwise the slice task
+         *     (contract = acceptance criteria), child tasks, slice-link evidence,
+         *     and per-row ``chat:create`` receipts naming the message id are all
+         *     written in one transaction with their ``task.created`` outbox rows.
+         */
+        post: operations["chat_lite_api_v1_chat_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/events": {
         parameters: {
             query?: never;
@@ -753,6 +780,33 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/chat": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Chat
+         * @description Step 2: one supervised model turn -> slice with tasks, over SSE.
+         *
+         *     Streams ``token`` events as the model responds, then a ``result``
+         *     event with the reply, created ids, and receipt source. A clarifying
+         *     question (at most one) creates nothing; otherwise the slice task
+         *     (contract = acceptance criteria), child tasks, slice-link evidence,
+         *     and per-row ``chat:create`` receipts naming the message id are all
+         *     written in one transaction with their ``task.created`` outbox rows.
+         */
+        post: operations["chat_v1_chat_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/events": {
         parameters: {
             query?: never;
@@ -1472,6 +1526,41 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+    chat_lite_api_v1_chat_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    [key: string]: unknown;
+                };
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     events_api_v1_events_get: {
         parameters: {
             query?: {
@@ -2909,6 +2998,41 @@ export interface operations {
                 };
                 content: {
                     "application/json": unknown;
+                };
+            };
+        };
+    };
+    chat_v1_chat_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    [key: string]: unknown;
+                };
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };

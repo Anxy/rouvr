@@ -59,6 +59,7 @@ API).
 | `/api/v1/tasks/{tid}/results` | POST | `POST /v1/tasks/{tid}/results` (`record_result`) | verdict + core |
 | `/api/v1/workers/heartbeat` | POST | `POST /v1/workers/heartbeat` (`worker_heartbeat`) | stack-only |
 | `/api/v1/events` | GET | `GET /v1/events` (`events`) | SSE replay, tenant-scoped |
+| `/api/v1/chat` | POST | `POST /v1/chat` (`chat`) | SSE model turn, slice+tasks, task cards |
 
 Contract tests: `ledger/test_lite_contract.py` (alias identity,
 functional parity, error parity, auth parity, OpenAPI coverage).

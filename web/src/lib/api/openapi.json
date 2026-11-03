@@ -121,6 +121,45 @@
   },
   "openapi": "3.1.0",
   "paths": {
+    "/api/v1/chat": {
+      "post": {
+        "description": "Step 2: one supervised model turn -> slice with tasks, over SSE.\n\nStreams ``token`` events as the model responds, then a ``result``\nevent with the reply, created ids, and receipt source. A clarifying\nquestion (at most one) creates nothing; otherwise the slice task\n(contract = acceptance criteria), child tasks, slice-link evidence,\nand per-row ``chat:create`` receipts naming the message id are all\nwritten in one transaction with their ``task.created`` outbox rows.",
+        "operationId": "chat_lite_api_v1_chat_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": true,
+                "title": "Body",
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Chat Lite"
+      }
+    },
     "/api/v1/events": {
       "get": {
         "description": "SSE: the only live channel. Tenant comes from the session\nserver-side, never from args. Omit cursor to replay full tenant\nhistory; pass the last seen id (explicit cursor wins, else\nLast-Event-ID) to resume. live=0 sends the backlog and closes\n(deterministic seed); live=1 (default) tails new rows with\n\": ping\" keepalives \u2014 comments, not events, so the server never\nsynthesizes progress.",
@@ -1919,6 +1958,45 @@
           }
         },
         "summary": "Health"
+      }
+    },
+    "/v1/chat": {
+      "post": {
+        "description": "Step 2: one supervised model turn -> slice with tasks, over SSE.\n\nStreams ``token`` events as the model responds, then a ``result``\nevent with the reply, created ids, and receipt source. A clarifying\nquestion (at most one) creates nothing; otherwise the slice task\n(contract = acceptance criteria), child tasks, slice-link evidence,\nand per-row ``chat:create`` receipts naming the message id are all\nwritten in one transaction with their ``task.created`` outbox rows.",
+        "operationId": "chat_v1_chat_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": true,
+                "title": "Body",
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Chat"
       }
     },
     "/v1/events": {

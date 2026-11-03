@@ -52,6 +52,15 @@ const eslintConfig = [
       "next-env.d.ts",
     ],
   },
+  {
+    // A1: every screen uses the generated client; raw fetch lives only in
+    // src/lib/api (client.ts) so API calls stay typed in one place.
+    files: ["src/**/*.{ts,tsx}"],
+    ignores: ["src/lib/api/**"],
+    rules: {
+      "no-restricted-globals": ["error", "fetch"],
+    },
+  },
 ];
 
 export default eslintConfig;

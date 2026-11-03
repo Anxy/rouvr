@@ -8,6 +8,7 @@ import { ArrowUpRight, Loader2 } from "lucide-react";
 import { Mascot } from "@/components/brand/Mascot";
 import { Button } from "@/components/ui/Button";
 import { contactSchema, type ContactInput } from "@/lib/validations";
+import { postContact } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { FieldError, fieldClass } from "./FieldError";
 
@@ -27,13 +28,8 @@ export function ContactForm() {
   const onSubmit = async (values: ContactInput) => {
     setServerError(null);
     try {
-      const res = await fetch("/api/contact", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(values),
-      });
-      const data = (await res.json()) as { ok: boolean; error?: string };
-      if (!res.ok || !data.ok) throw new Error(data.error ?? "Something went wrong.");
+      const data = await postContact(values);
+      if (!data.ok) throw new Error(data.error ?? "Something went wrong.");
       setStatus("success");
     } catch (err) {
       setStatus("error");

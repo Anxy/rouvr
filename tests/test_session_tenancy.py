@@ -2,13 +2,14 @@
 (token/JWT -> user row via middleware), never from request args.
 
 Parity rule pinned here (S022 contract preserved):
-- row-addressed cross-tenant task access -> 403 (refused);
+- row-addressed cross-tenant task access -> 404 (no oracle);
 - knowledge rows invisible across the boundary -> 404 (no oracle);
-- explicit foreign scope in a body -> 403 before any existence check
+- explicit foreign scope in a body -> 404 before any existence check
   (no ghost-vs-registered project oracle);
 - worker-only endpoints -> 403 for user tokens, 401 anonymous.
 """
 import hashlib
+import os
 
 from fastapi.testclient import TestClient
 
@@ -17,9 +18,29 @@ GLOBEX = "globex"
 SITE = "site"
 
 
-def _seed(tmp_path, monkeypatch):
-    monkeypatch.setenv("ROUVR_LEDGER_TOKEN", "stack-secret")
-    monkeypatch.delenv("ROUVR_INSECURE_DEV", raising=False)
+_ABSENT = object()
+
+def _apply_stack_env():
+    prev_tok = os.environ.get("ROUVR_LEDGER_TOKEN", _ABSENT)
+    prev_insecure = os.environ.get("ROUVR_INSECURE_DEV", _ABSENT)
+    os.environ["ROUVR_LEDGER_TOKEN"] = "stack-secret"
+    os.environ.pop("ROUVR_INSECURE_DEV", None)
+    return (prev_tok, prev_insecure)
+
+
+def _restore_env(saved):
+    prev_tok, prev_insecure = saved
+    if prev_tok is _ABSENT:
+        os.environ.pop("ROUVR_LEDGER_TOKEN", None)
+    else:
+        os.environ["ROUVR_LEDGER_TOKEN"] = prev_tok
+    if prev_insecure is _ABSENT:
+        os.environ.pop("ROUVR_INSECURE_DEV", None)
+    else:
+        os.environ["ROUVR_INSECURE_DEV"] = prev_insecure
+
+
+def _seed(tmp_path):
     from ledger.app import make_app
     app = make_app(f"sqlite:///{tmp_path}/s.db")
     stack = {"X-Rouvr-Token": "stack-secret"}
@@ -55,7 +76,8 @@ def _entry(c, headers, **kw):
 # -- c1: 403/404 parity -----------------------------------------------------
 
 def test_cross_tenant_task_access_denied(tmp_path, monkeypatch):
-    c, _stack, amy, gus = _seed(tmp_path, monkeypatch)
+    saved = _apply_stack_env()
+    c, _stack, amy, gus = _seed(tmp_path)
     try:
         ta = _task(c, amy, title="acme task").json()["id"]
         assert c.get(f"/v1/tasks/{ta}", headers=amy).status_code == 200
@@ -63,13 +85,17 @@ def test_cross_tenant_task_access_denied(tmp_path, monkeypatch):
                   c.post(f"/v1/tasks/{ta}/evidence", json={"kind": "note", "body": {}},
                          headers=gus),
                   c.post(f"/v1/tasks/{ta}/contracts", json={"checks": ["x"]}, headers=gus)):
-            assert r.status_code == 403, (r.status_code, r.text)
+            assert r.status_code == 404, (r.status_code, r.text)
     finally:
-        c.__exit__(None, None, None)
+        try:
+            c.__exit__(None, None, None)
+        finally:
+            _restore_env(saved)
 
 
 def test_explicit_foreign_scope_create_is_403_no_project_oracle(tmp_path, monkeypatch):
-    c, _stack, _amy, gus = _seed(tmp_path, monkeypatch)
+    saved = _apply_stack_env()
+    c, _stack, _amy, gus = _seed(tmp_path)
     try:
         bodies = [
             ("POST", "/v1/tasks", {"title": "x", "intent": "i"}),
@@ -88,13 +114,17 @@ def test_explicit_foreign_scope_create_is_403_no_project_oracle(tmp_path, monkey
             for project in (SITE, "ghost"):
                 body = {"tenant": ACME, "project": project, **extra}
                 r = c.request(method, path, json=body, headers=gus)
-                assert r.status_code == 403, (path, project, r.status_code, r.text)
+                assert r.status_code == 404, (path, project, r.status_code, r.text)
     finally:
-        c.__exit__(None, None, None)
+        try:
+            c.__exit__(None, None, None)
+        finally:
+            _restore_env(saved)
 
 
 def test_scope_defaults_from_session(tmp_path, monkeypatch):
-    c, stack, amy, _gus = _seed(tmp_path, monkeypatch)
+    saved = _apply_stack_env()
+    c, stack, amy, _gus = _seed(tmp_path)
     try:
         r = c.post("/v1/tasks", json={"title": "t", "intent": "i", "project": SITE}, headers=amy)
         assert r.status_code == 200, r.text
@@ -109,11 +139,15 @@ def test_scope_defaults_from_session(tmp_path, monkeypatch):
                                              "title": "t", "body": "b"},
                       headers=stack).status_code == 422
     finally:
-        c.__exit__(None, None, None)
+        try:
+            c.__exit__(None, None, None)
+        finally:
+            _restore_env(saved)
 
 
 def test_knowledge_read_parity_404(tmp_path, monkeypatch):
-    c, _stack, amy, gus = _seed(tmp_path, monkeypatch)
+    saved = _apply_stack_env()
+    c, _stack, amy, gus = _seed(tmp_path)
     try:
         company = _entry(c, amy, title="co", body="company canary").json()
         restricted = _entry(c, amy, title="re", body="restricted canary",
@@ -133,11 +167,15 @@ def test_knowledge_read_parity_404(tmp_path, monkeypatch):
                       json={"title": "x", "body": "y"}, headers=gus).status_code == 403
         assert c.post(f"/v1/knowledge/{public['id']}/confirm", json={}, headers=gus).status_code == 403
     finally:
-        c.__exit__(None, None, None)
+        try:
+            c.__exit__(None, None, None)
+        finally:
+            _restore_env(saved)
 
 
 def test_stack_only_endpoints_403_for_users_401_anonymous(tmp_path, monkeypatch):
-    c, _stack, amy, _gus = _seed(tmp_path, monkeypatch)
+    saved = _apply_stack_env()
+    c, _stack, amy, _gus = _seed(tmp_path)
     try:
         ta = _task(c, amy).json()["id"]
         denied = [
@@ -171,11 +209,15 @@ def test_stack_only_endpoints_403_for_users_401_anonymous(tmp_path, monkeypatch)
             r = c.request(method, path, json=body)
             assert r.status_code == 401, (method, path, r.status_code, r.text)
     finally:
-        c.__exit__(None, None, None)
+        try:
+            c.__exit__(None, None, None)
+        finally:
+            _restore_env(saved)
 
 
 def test_list_endpoints_ignore_foreign_tenant_param(tmp_path, monkeypatch):
-    c, stack, amy, gus = _seed(tmp_path, monkeypatch)
+    saved = _apply_stack_env()
+    c, stack, amy, gus = _seed(tmp_path)
     try:
         _task(c, amy, title="a-task")
         assert c.post("/v1/tasks", json={"title": "g-task", "intent": "i",
@@ -188,7 +230,10 @@ def test_list_endpoints_ignore_foreign_tenant_param(tmp_path, monkeypatch):
         assert len(c.get("/v1/tasks", params={"tenant": ACME}, headers=stack).json()["items"]) == 1
         assert len(c.get("/v1/projects", headers=stack).json()["projects"]) == 2
     finally:
-        c.__exit__(None, None, None)
+        try:
+            c.__exit__(None, None, None)
+        finally:
+            _restore_env(saved)
 
 
 # -- c2: cross-tenant fuzz ----------------------------------------------------
@@ -197,7 +242,8 @@ CANARY = "zzfuzzcanary"
 
 
 def test_cross_tenant_fuzz_no_read_no_write(tmp_path, monkeypatch):
-    c, stack, amy, gus = _seed(tmp_path, monkeypatch)
+    saved = _apply_stack_env()
+    c, stack, amy, gus = _seed(tmp_path)
     try:
         ta = _task(c, amy, title=f"task {CANARY}",
                    intent=f"intent {CANARY}").json()["id"]
@@ -303,4 +349,7 @@ def test_cross_tenant_fuzz_no_read_no_write(tmp_path, monkeypatch):
         assert len(c.get("/v1/knowledge/search", params={"q": CANARY, "n": 100},
                          headers=stack).json()["items"]) == n_know
     finally:
-        c.__exit__(None, None, None)
+        try:
+            c.__exit__(None, None, None)
+        finally:
+            _restore_env(saved)

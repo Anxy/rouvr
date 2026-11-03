@@ -432,7 +432,7 @@ def make_app(db_url: str = DB_URL) -> FastAPI:
 
     def _session_scope(request, c, body: dict) -> tuple[str, str]:
         """Authoritative scope: tenant ALWAYS comes from the session; a body
-        tenant may restate it but a foreign one is refused (403) before any
+        tenant may restate it but a foreign one is refused (404) before any
         existence check (no project oracle). Project selects within the
         session tenant and must be registered. The stack identity has no
         session tenant and names explicit scope."""
@@ -446,7 +446,7 @@ def make_app(db_url: str = DB_URL) -> FastAPI:
             if not isinstance(claimed, str) or not claimed.strip():
                 raise HTTPException(422, "tenant must be a string")
             if claimed.strip() != mine:
-                raise HTTPException(403, "tenant scope comes from the session")
+                raise HTTPException(404, "tenant scope comes from the session")
         project = body.get("project")
         if not isinstance(project, str) or not project.strip():
             raise HTTPException(422, "project is required")
@@ -469,10 +469,10 @@ def make_app(db_url: str = DB_URL) -> FastAPI:
         return p
 
     def _own_or_stack(c, tid, identity):
-        """403 for a caller outside the task's tenant (S022 partition)."""
+        """404 for a caller outside the task's tenant (no oracle)."""
         t = task_or_404(c, tid)
         if identity != "supervisor" and t.get("tenant") != _tenant_of(c, identity):
-            raise HTTPException(403, f"task in tenant {t.get('tenant')!r}")
+            raise HTTPException(404, "task not found")
         return t
 
     def _stack_only(identity):

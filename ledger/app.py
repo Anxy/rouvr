@@ -1852,6 +1852,14 @@ def make_app(db_url: str = DB_URL) -> FastAPI:
                 ne = row(c, "SELECT COUNT(*) AS n FROM evidence WHERE task_id=:i", i=tid)["n"]
                 if not nc or not ne:
                     raise HTTPException(409, "done requires a contract and evidence")
+                if _identity(request) != "supervisor":
+                    # Owner approve: no skipping verification. The demo
+                    # must show a reviewed, verified head — never a jump.
+                    if t["state"] != "needs_review":
+                        raise HTTPException(409, f"approve requires needs_review (task is {t['state']})")
+                    head = row(c, "SELECT verdict FROM results WHERE task_id=:i ORDER BY id DESC LIMIT 1", i=tid)
+                    if not head or head["verdict"] != "pass":
+                        raise HTTPException(409, "approve requires a passing verify on the current head")
             c.execute(text("UPDATE tasks SET state=:s, owner=COALESCE(:o, owner), updated_at=:n WHERE id=:i"),
                       {"s": to, "o": body.get("owner"), "n": _now(), "i": tid})
             s, _ = _canon({"from": t["state"], "to": to, "note": body.get("note")})

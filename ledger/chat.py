@@ -104,20 +104,39 @@ def stream_completion(messages: list[dict], provider: dict, max_tokens: int = MA
     except Exception as e:
         raise RuntimeError(f"model request failed: {e}")
     with resp:
+        buf = ""
         for raw in resp:
-            line = raw.decode("utf-8", "replace").strip() if isinstance(raw, bytes) else raw.strip()
-            if not line.startswith("data:"):
+            buf += raw.decode("utf-8", "replace") if isinstance(raw, bytes) else raw
+            while "\n" in buf:
+                line, buf = buf.split("\n", 1)
+                chunk = _sse_content(line)
+                if chunk == "[DONE]":
+                    buf = ""
+                    break
+                if chunk:
+                    yield chunk
+            else:
                 continue
-            data = line[5:].strip()
-            if data == "[DONE]":
-                break
-            try:
-                delta = json.loads(data)["choices"][0].get("delta", {})
-            except (ValueError, KeyError, IndexError):
-                continue
-            text = delta.get("content")
-            if text:
-                yield text
+            break
+        if buf.strip():
+            chunk = _sse_content(buf)
+            if chunk and chunk != "[DONE]":
+                yield chunk
+
+
+def _sse_content(line: str) -> str | None:
+    """Text of one SSE data line, or None when the line carries nothing."""
+    line = line.strip()
+    if not line.startswith("data:"):
+        return None
+    data = line[5:].strip()
+    if data == "[DONE]":
+        return "[DONE]"
+    try:
+        delta = json.loads(data)["choices"][0].get("delta", {})
+    except (ValueError, KeyError, IndexError):
+        return None
+    return delta.get("content") or None
 
 
 def parse_chat_plan(text: str) -> dict:

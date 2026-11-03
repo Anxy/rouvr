@@ -155,18 +155,45 @@ def _transition(c, tid, to, key):
                   headers={"Origin": "http://testserver"})
 
 
-def test_session_owner_can_approve_and_retry(user_client):
-    c = TestClient(user_client.app, cookies=_login(user_client).cookies)
-    t = _session_task(c, "approve me")
-    tid = t["id"]
-    assert _transition(c, tid, "claimed", "k-claim").status_code == 200
-    assert _transition(c, tid, "needs_review", "k-review").status_code == 200
+def _worker_verify(stack_client, tid, verdict, tag):
+    """Drive the worker flow with the stack token: claim -> attempt -> result."""
+    h = {"x-rouvr-token": "stack-secret"}
+    claim = stack_client.post(f"/v1/tasks/{tid}/assignments/claim",
+                              json={"key": f"v-{tag}-claim", "principal": "worker-1",
+                                    "attempt_no": 1}, headers=h)
+    assert claim.status_code == 200, (claim.status_code, claim.text)
+    epoch = claim.json()["lease_epoch"]
+    att = stack_client.post(f"/v1/tasks/{tid}/attempts",
+                            json={"key": f"v-{tag}-attempt", "attempt_no": 1,
+                                  "lease_epoch": epoch}, headers=h)
+    assert att.status_code == 200, (att.status_code, att.text)
+    res = stack_client.post(f"/v1/tasks/{tid}/results",
+                            json={"key": f"v-{tag}-result",
+                                  "attempt_id": att.json()["attempt"]["id"],
+                                  "lease_epoch": epoch, "verdict": verdict,
+                                  "result": {}}, headers=h)
+    assert res.status_code == 200, (res.status_code, res.text)
+
+
+def _ready_for_done(c, tid):
     # done needs a contract and evidence: add both as the session owner
     assert c.post(f"/api/v1/tasks/{tid}/contracts",
                   json={"acceptance_criteria": ["owner approved"]},
                   headers={"Origin": "http://testserver"}).status_code == 200
     assert c.post(f"/api/v1/tasks/{tid}/evidence", json={"kind": "note", "body": {}},
                   headers={"Origin": "http://testserver"}).status_code == 200
+
+
+def test_session_owner_can_approve_and_retry(user_client):
+    stack_client = TestClient(user_client.app)
+    c = TestClient(user_client.app, cookies=_login(user_client).cookies)
+    t = _session_task(c, "approve me")
+    tid = t["id"]
+    assert _transition(c, tid, "claimed", "k-claim").status_code == 200
+    assert _transition(c, tid, "needs_review", "k-review").status_code == 200
+    _ready_for_done(c, tid)
+    _worker_verify(stack_client, tid, "pass", "approve")
+    assert _transition(c, tid, "needs_review", "k-rereview").status_code == 200
     r = _transition(c, tid, "done", "k-done")
     assert r.status_code == 200, (r.status_code, r.text)
     assert c.get(f"/api/v1/tasks/{tid}").json()["state"] == "done"
@@ -176,6 +203,32 @@ def test_session_owner_can_approve_and_retry(user_client):
     assert _transition(c, t2["id"], "failed", "k2-fail").status_code == 200
     assert _transition(c, t2["id"], "open", "k2-retry").status_code == 200
     assert c.get(f"/api/v1/tasks/{t2['id']}").json()["state"] == "open"
+
+
+def test_owner_approve_requires_verified_review(user_client):
+    stack_client = TestClient(user_client.app)
+    c = TestClient(user_client.app, cookies=_login(user_client).cookies)
+    # unverified head: needs_review but no result yet
+    t = _session_task(c, "unverified")
+    assert _transition(c, t["id"], "claimed", "g-claim").status_code == 200
+    assert _transition(c, t["id"], "needs_review", "g-review").status_code == 200
+    _ready_for_done(c, t["id"])
+    r = _transition(c, t["id"], "done", "g-done")
+    assert r.status_code == 409, (r.status_code, r.text)
+    assert "passing verify" in r.text, r.text
+    # failing head: a fail verdict is not a pass
+    _worker_verify(stack_client, t["id"], "fail", "guard-fail")
+    assert _transition(c, t["id"], "needs_review", "g-rereview").status_code == 200
+    r = _transition(c, t["id"], "done", "g-done-2")
+    assert r.status_code == 409 and "passing verify" in r.text
+    # wrong state: verified but still claimed
+    t2 = _session_task(c, "wrong state")
+    assert _transition(c, t2["id"], "claimed", "g2-claim").status_code == 200
+    _ready_for_done(c, t2["id"])
+    _worker_verify(stack_client, t2["id"], "pass", "guard-state")
+    r = _transition(c, t2["id"], "done", "g2-done")
+    assert r.status_code == 409, (r.status_code, r.text)
+    assert "needs_review" in r.text, r.text
 
 
 def test_session_owner_cannot_touch_foreign_tenant(app):

@@ -156,9 +156,12 @@ def test_chat_http_stream_parses_sse_chunks(session_client, monkeypatch):
             raw = body.encode()
             self.send_response(200)
             self.send_header("Content-Type", "text/event-stream")
-            self.send_header("Content-Length", str(len(raw)))
+            # no Content-Length: chunked delivery splits SSE lines mid-frame,
+            # which the client must reassemble before parsing
             self.end_headers()
-            self.wfile.write(raw)
+            for i in range(0, len(raw), 7):
+                self.wfile.write(raw[i:i + 7])
+                self.wfile.flush()
 
         def log_message(self, *a):
             pass

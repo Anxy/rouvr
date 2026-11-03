@@ -21,7 +21,7 @@ interface LiveEvent {
   summary: string;
 }
 
-const APPROVABLE = new Set(["claimed", "needs_review"]);
+const APPROVABLE = new Set(["needs_review"]);
 const RETRYABLE = new Set(["failed", "blocked"]);
 
 export default function TaskPage() {

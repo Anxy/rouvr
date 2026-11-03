@@ -14,6 +14,7 @@ import hashlib
 import json
 import os
 import re
+import subprocess
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
@@ -37,6 +38,24 @@ except ImportError:  # run as a bare module (python ledger/app.py)
 
 DB_URL = os.environ.get("ROUVR_LEDGER_DATABASE_URL", "sqlite:///./.rouvr/ledger.db")
 VERSION = "0.1.0"
+
+
+def _build_sha() -> str:
+    """Short git HEAD sha, or "dev" when git is unavailable."""
+    try:
+        out = subprocess.run(
+            ["git", "rev-parse", "--short", "HEAD"],
+            capture_output=True, text=True, timeout=5,
+        )
+        sha = (out.stdout or "").strip()
+        if out.returncode != 0 or not sha:
+            return "dev"
+        return sha
+    except Exception:
+        return "dev"
+
+
+BUILD = _build_sha()
 TRANSITIONS = {
     "open": {"claimed", "blocked"},
     "claimed": {"done", "failed", "blocked", "open", "needs_review"},
@@ -680,7 +699,7 @@ def make_app(db_url: str = DB_URL) -> FastAPI:
 
     @app.get("/v1/version")
     def version():
-        return {"version": VERSION}
+        return {"version": VERSION, "build": BUILD}
 
     @app.get("/demo/onboard")
     def demo_onboard():

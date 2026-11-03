@@ -32,6 +32,8 @@ def _headers() -> dict:
     # Read lazily: pure helpers (kind mapping, corpus) must import without a
     # stack token present (bare checkouts, CI, clean-room test runs).
     return {"X-Rouvr-Token": (ROOT / ".data" / "api-token").read_text().strip()}
+
+
 SCOPE = {"tenant": "supervisor", "project": "liveproof"}
 CANARY = "rouvr-lite-corpus-2026-11"
 

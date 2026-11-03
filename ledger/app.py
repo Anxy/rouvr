@@ -349,7 +349,11 @@ def make_app(db_url: str = DB_URL) -> FastAPI:
 
     @app.middleware("http")
     async def _auth(request, call_next):
+        # FL-A2: the session binds scope server-side. Every /v1 handler takes
+        # the tenant from request.state.session_tenant (credential -> user
+        # row), never from request args. supervisor=None sees all tenants.
         request.state.user = "supervisor"
+        request.state.session_tenant = None
         request.state.hyeve_claims = None
         path = request.url.path
         if path.startswith("/v1") and path not in _ONBOARD_OPEN:
@@ -369,7 +373,13 @@ def make_app(db_url: str = DB_URL) -> FastAPI:
                         "SELECT username FROM external_identities"
                         " WHERE provider='hyeve' AND subject=:s"),
                         {"s": str(claims["sub"])}).mappings().first()
+                    tenant = None
+                    if link:
+                        tenant = c.execute(
+                            text("SELECT tenant FROM users WHERE username=:u"),
+                            {"u": link["username"]}).scalar()
                 request.state.user = link["username"] if link else f"hyeve:{claims['sub']}"
+                request.state.session_tenant = tenant  # None: unlinked fails closed downstream
                 return await call_next(request)
             if _insecure and not _token:
                 pass  # explicit local-dev bypass (warned at startup, local bind only)
@@ -380,11 +390,13 @@ def make_app(db_url: str = DB_URL) -> FastAPI:
                 elif hdr:
                     h = hashlib.sha256(hdr.encode()).hexdigest()
                     with eng.connect() as c:
-                        u = c.execute(text("SELECT username, disabled FROM users WHERE token_hash=:h"),
+                        u = c.execute(text("SELECT username, disabled, tenant FROM users"
+                                           " WHERE token_hash=:h"),
                                       {"h": h}).mappings().first()
                     if not u or u["disabled"]:
                         return JSONResponse({"detail": "unauthorized"}, status_code=401)
                     request.state.user = u["username"]
+                    request.state.session_tenant = u["tenant"]
                 else:
                     return JSONResponse({"detail": "unauthorized"}, status_code=401)
             else:
@@ -403,6 +415,42 @@ def make_app(db_url: str = DB_URL) -> FastAPI:
         if not u or not u.get("tenant"):
             raise HTTPException(403, f"no tenant assigned to {identity}")
         return u["tenant"]
+
+    def _caller_tenant(request, c) -> str | None:
+        """Session tenant resolved by auth middleware (credential -> user row).
+        Supervisor (stack) sees all tenants (None). Tenantless identities
+        (never-onboarded hyeve subjects) fail closed."""
+        ident = _identity(request)
+        if ident == "supervisor":
+            return None
+        st = getattr(request.state, "session_tenant", "unset")
+        if st != "unset":
+            if not st:
+                raise HTTPException(403, f"no tenant assigned to {ident}")
+            return st
+        return _tenant_of(c, ident)  # direct-call fallback (no middleware run)
+
+    def _session_scope(request, c, body: dict) -> tuple[str, str]:
+        """Authoritative scope: tenant ALWAYS comes from the session; a body
+        tenant may restate it but a foreign one is refused (403) before any
+        existence check (no project oracle). Project selects within the
+        session tenant and must be registered. The stack identity has no
+        session tenant and names explicit scope."""
+        ident = _identity(request)
+        if ident == "supervisor":
+            return _scope(body)
+        mine = _caller_tenant(request, c)
+        assert mine is not None  # _caller_tenant raises for tenantless users
+        claimed = body.get("tenant")
+        if claimed is not None:
+            if not isinstance(claimed, str) or not claimed.strip():
+                raise HTTPException(422, "tenant must be a string")
+            if claimed.strip() != mine:
+                raise HTTPException(403, "tenant scope comes from the session")
+        project = body.get("project")
+        if not isinstance(project, str) or not project.strip():
+            raise HTTPException(422, "project is required")
+        return mine, project.strip()
 
     def _scope(body: dict) -> tuple[str, str]:
         """Mandatory separate scope fields (S022): blank/missing/non-string refused."""
@@ -508,7 +556,7 @@ def make_app(db_url: str = DB_URL) -> FastAPI:
         """Projects visible to the caller: its own tenant, or all for stack."""
         ident = _identity(request)
         with eng.begin() as c:
-            mine = _tenant_of(c, ident)
+            mine = _caller_tenant(request, c)
             want = mine if mine is not None else tenant
             q = "SELECT tenant, project FROM projects"
             kw: dict = {}
@@ -810,7 +858,6 @@ def make_app(db_url: str = DB_URL) -> FastAPI:
     @app.post("/v1/knowledge")
     def create_knowledge(body: dict, request: Request):
         ident = _identity(request)
-        tenant, project = _scope(body)
         kind = str(body.get("kind") or "")
         title = str(body.get("title") or "").strip()
         kbody = str(body.get("body") or "")
@@ -823,9 +870,8 @@ def make_app(db_url: str = DB_URL) -> FastAPI:
         if vis != "restricted" and allowed:
             raise HTTPException(422, "allowed_users only with visibility=restricted")
         with eng.begin() as c:
+            tenant, project = _session_scope(request, c, body)
             _registered(c, tenant, project)
-            if _tenant_of(c, ident) not in (None, tenant):
-                raise HTTPException(403, f"knowledge in tenant {tenant!r}")
             return _krow(_knowledge_insert(c, tenant, project, kind, title, kbody, ident,
                                            visibility=vis, allowed=allowed,
                                            slug=body.get("slug"), tags=body.get("tags"),
@@ -1067,15 +1113,13 @@ def make_app(db_url: str = DB_URL) -> FastAPI:
     @app.post("/v1/knowledge/store")
     def knowledge_store(body: dict, request: Request):
         ident = _identity(request)
-        tenant, project = _scope(body)
         items = body.get("items")
         if not isinstance(items, list) or not items:
             raise HTTPException(422, "items is required")
         out = []
         with eng.begin() as c:
+            tenant, project = _session_scope(request, c, body)
             _registered(c, tenant, project)
-            if _tenant_of(c, ident) not in (None, tenant):
-                raise HTTPException(403, f"knowledge in tenant {tenant!r}")
             for it in items:
                 if not isinstance(it, dict):
                     raise HTTPException(422, "each item needs kind/title/body")
@@ -1096,12 +1140,10 @@ def make_app(db_url: str = DB_URL) -> FastAPI:
     @app.post("/v1/knowledge/compact")
     def knowledge_compact(body: dict, request: Request):
         ident = _identity(request)
-        tenant, project = _scope(body)
         title = str(body.get("title") or "Session compact").strip() or "Session compact"
         with eng.begin() as c:
+            tenant, project = _session_scope(request, c, body)
             _registered(c, tenant, project)
-            if _tenant_of(c, ident) not in (None, tenant):
-                raise HTTPException(403, f"knowledge in tenant {tenant!r}")
             rows = [dict(r) for r in c.execute(text(
                 "SELECT * FROM knowledge_entries WHERE tenant=:t AND project=:p"
                 " AND verified=1 ORDER BY id DESC LIMIT 50"),
@@ -1137,11 +1179,9 @@ def make_app(db_url: str = DB_URL) -> FastAPI:
     @app.post("/v1/knowledge/snapshot")
     def knowledge_snapshot(body: dict, request: Request):
         ident = _identity(request)
-        tenant, project = _scope(body)
         with eng.begin() as c:
+            tenant, project = _session_scope(request, c, body)
             _registered(c, tenant, project)
-            if _tenant_of(c, ident) not in (None, tenant):
-                raise HTTPException(403, f"knowledge in tenant {tenant!r}")
             rows = [dict(r) for r in c.execute(text(
                 "SELECT * FROM knowledge_entries WHERE tenant=:t AND project=:p"
                 " AND verified=1 ORDER BY id"),
@@ -1164,13 +1204,11 @@ def make_app(db_url: str = DB_URL) -> FastAPI:
     @app.post("/v1/knowledge/store-and-close")
     def knowledge_store_and_close(body: dict, request: Request):
         ident = _identity(request)
-        tenant, project = _scope(body)
         items = body.get("items") or []
         title = str(body.get("title") or "Session close").strip() or "Session close"
         with eng.begin() as c:
+            tenant, project = _session_scope(request, c, body)
             _registered(c, tenant, project)
-            if _tenant_of(c, ident) not in (None, tenant):
-                raise HTTPException(403, f"knowledge in tenant {tenant!r}")
             stored = []
             for it in items:
                 if not isinstance(it, dict):
@@ -1224,11 +1262,9 @@ def make_app(db_url: str = DB_URL) -> FastAPI:
     def knowledge_curate(body: dict, request: Request):
         """On-demand curator (light): suggestions only, never verifies/deletes."""
         ident = _identity(request)
-        tenant, project = _scope(body)
         with eng.begin() as c:
+            tenant, project = _session_scope(request, c, body)
             _registered(c, tenant, project)
-            if _tenant_of(c, ident) not in (None, tenant):
-                raise HTTPException(403, f"knowledge in tenant {tenant!r}")
             rows = [dict(r) for r in c.execute(text(
                 "SELECT * FROM knowledge_entries WHERE tenant=:t AND project=:p"),
                 {"t": tenant, "p": project}).mappings()]
@@ -1327,11 +1363,9 @@ def make_app(db_url: str = DB_URL) -> FastAPI:
     @app.post("/v1/tasks")
     def create_task(body: dict, request: Request):
         ident = _identity(request)
-        tenant, project = _scope(body)  # S022: mandatory, never defaulted
         with eng.begin() as c:
+            tenant, project = _session_scope(request, c, body)
             _registered(c, tenant, project)
-            if _tenant_of(c, ident) not in (None, tenant):
-                raise HTTPException(403, f"task in tenant {tenant!r}")
             n = _now()
             rid = c.execute(text("INSERT INTO tasks(title,intent,state,created_at,updated_at,created_by,"
                                  "tenant,project)"
@@ -1363,11 +1397,9 @@ def make_app(db_url: str = DB_URL) -> FastAPI:
         if not isinstance(ac, list) or not ac or not all(isinstance(x, str) and x.strip() for x in ac):
             raise HTTPException(422, "contract with acceptance_criteria is required")
         ident = _identity(request)
-        tenant, project = _scope(body)  # S022: mandatory, never defaulted
         with eng.begin() as c:
+            tenant, project = _session_scope(request, c, body)
             _registered(c, tenant, project)
-            if _tenant_of(c, ident) not in (None, tenant):
-                raise HTTPException(403, f"task in tenant {tenant!r}")
             n = _now()
             rid = c.execute(text("INSERT INTO tasks(title,intent,state,created_at,updated_at,created_by,"
                                  "tenant,project)"
@@ -1386,7 +1418,7 @@ def make_app(db_url: str = DB_URL) -> FastAPI:
     def list_tasks(request: Request, state: str | None = None, tenant: str | None = None):
         ident = _identity(request)
         with eng.begin() as c:
-            mine = _tenant_of(c, ident)
+            mine = _caller_tenant(request, c)
             want = mine if mine is not None else tenant  # S022: users see their own tenant
             q, kw = "SELECT * FROM tasks", {}
             conds = []

@@ -1,62 +1,79 @@
-# MEMORY.md — handoff (updated 2026-11-03 ~15:00 UTC; Steps 1–7 + demos + wrap-up DONE)
+# MEMORY.md — handoff (fresh instance resumes here; updated 2026-11-03 ~15:30 UTC)
 
 ## 0. Right now (read first)
-- Branch `rouvr-development` @ `19228d3`, tree CLEAN, all pushed as Anxy.
-  `main` untouched — merges to base remain owner-only.
-- DONE: Steps 1–7, Demo 0 (stub runs labeled regression tests, empty-stream
-  diagnosis), Demo 1 (genuine version-endpoint slice), Demo 2 (genuine
-  build-field slice incl. real fail → fix → pass), wrap-up (chat contracts
-  fix, footage cleanup, demo branches merged, VIDEO-SCRIPT).
+- Branch `rouvr-development` @ `601c472`, tree CLEAN, all pushed as Anxy.
+  `main` untouched — merges to base are owner-only.
+- Steps 1–7 DONE, Demo 0/1/2 DONE, wrap-up DONE (contracts fix, footage
+  cleanup, demo branches merged, video script, knowledge updated).
 - Demo branches merged: `demo/version-endpoint` (`1265a65`),
-  `demo/version-build` (`b5aea9c`). Worktrees still on disk at
-  `rouvr-demo-wt`, `rouvr-demo2-wt` (branches on origin; safe to remove).
-- Smoke demo stack (ledger :18234, web :13002, demo DB) left RUNNING.
-  Supervisor ledger :8221 must stay untouched. Full suite 594 passed,
-  7 skipped; hygiene clean.
-- Workhub MCP tools were erroring (see §3). Session todos all complete.
+  `demo/version-build` (`b5aea9c`). No worktrees remain. Smoke demo stack
+  (:18234 ledger, :13002 web) left RUNNING; supervisor ledger :8221 untouched.
+- Full suite 594 passed / 7 skipped; hygiene clean. Footage local-only:
+  `e2e/recordings/demo-*.webm` (gitignored, ~4 MB — back up before disk wipes).
+- **Workhub/knowledge MCP tools are DEAD this session** (broken stdio pipe,
+  no respawn). `/tmp/rouvr-supervisor/env.sh` (600) restored — a fresh
+  session resurrects them. Until then use direct 8221 HTTP with the
+  repo-local stack token (verified working).
 
-## 1. Durable lessons (new)
-- **Chat must attach contracts to every child task** (`ledger/app.py` kids
-  loop; test `test_chat_plan_attaches_contract_to_every_child_task`). The
-  approve guard needs a contract per task — the supervisor should never
-  hand-attach them after the fact (that gap is what Demo 1 hit).
-- **Hygiene scans `/home/anxy`**: use `$HOME`/expanduser in e2e harness
-  files; footage stays untracked (`e2e/recordings/*.webm` in .gitignore,
-  local only). Never `git add -A` a dir with recordings.
-- **Empty streams**: reasoning model burns streaming budget thinking →
-  zero content deltas. Chat uses non-streaming + one real token event
-  (see `e2e/diag_empty.py`, app.py `_events` comment).
-- **Reviewer honesty**: demo reviewers were Muse Code subagents, NOT Rouvr
-  reviewer personas; probe author was the orchestrator. `demo/VIDEO-SCRIPT.md`
-  captions say exactly this — keep them honest.
-- **Workhub MCP auth**: plugin server gets `ROUVR_LEDGER_TOKEN` ONLY from
-  `/tmp/rouvr-supervisor/env.sh` at (re)start. If that file is wiped, all
-  `workhub_*` tools 401. Fix = restore token + restart the run.sh loop
-  (kill loop PID then python child, relaunch via run.sh with token in env —
-  never write the secret to a new file, never print it).
+## 1. Key findings
+- **Chat must attach acceptance contracts to every child task**
+  (`ledger/app.py` kids loop; test
+  `test_chat_plan_attaches_contract_to_every_child_task`). Approve guard
+  needs per-task contract + evidence + pass verdict; fixed after Demo 1 hit
+  the 409. Never hand-attach contracts post-hoc again.
+- **Empty streams fixed**: reasoning model burns streaming budget thinking
+  → zero content deltas. Chat uses non-streaming + retry×2 + one real
+  `token` event (`e2e/diag_empty.py` proof; see app.py `_events` comment).
+- **Demo provenance (keep honest)**: headless `muse exec` coders ran on the
+  Muse Code subscription; reviewers were Muse Code subagents, NOT Rouvr
+  reviewer personas; hidden acceptance/probe written blind before coder ran.
+  `demo/VIDEO-SCRIPT.md` captions say exactly this. Receipts: tasks 2,3,4 →
+  17,18,19; tasks 6,7,8 → 39,40,41 (all `web-`-keyed).
+- **Demo 2 genuine fail→fix**: coder v1 spawned `git rev-parse` per request;
+  reviewer probe caught it, fix moved BUILD to import time + regression test.
+- **MCP transport fragility**: plugin server reads `ROUVR_LEDGER_TOKEN`
+  only from `/tmp/rouvr-supervisor/env.sh` at start; wipe = all `workhub_*`
+  + `knowledge_*` tools 401. NEVER restart it mid-session — runtime holds
+  the stdio pipe and won't respawn (3× broken pipe). Repair = restore env.sh,
+  fresh session brings tools back.
+- **Knowledge Lite updated 2026-11-03**: entries 1187–1193 under
+  `supervisor/liveproof` (contracts rule, footage/hygiene rule,
+  non-streaming decision, demo provenance, MCP fragility rule, demo-done
+  note, API-key bot proof). Searchable via direct API; MCP search is down
+  with the pipe.
+- **API-key bot path proven**: headless turn via
+  `core/backend/rouvr_models/providers.py` `get_provider("meta")` with key
+  only from env file returned exactly `PONG`. Demo coders used subscription
+  instead; full worker-loop-off-key run NOT yet exercised.
+- **Hygiene**: no `/home/anxy` in tracked files (use `$HOME`/expanduser);
+  never `git add -A` dirs with recordings. `.venv` is 3.12.
 
-## 2. Evergreen gotchas (kept)
+## 2. Canonical roadmap / status
+- DONE, all pushed: Steps 1–7 (workhub tasks 138–144, all `done` —
+  live-verified via direct 8221 API, receipts 1752–1764 on file).
+- DONE: e2e regression runs (stub, labeled in `e2e/README.md`), Demo 1
+  (version endpoint), Demo 2 (build field + real recovery), wrap-up
+  (6 items), `demo/VIDEO-SCRIPT.md` (3-min beats, verified receipt ids).
+- OPEN, needs owner decisions: (a) **knowledge organizer bot** — pieces
+  exist (`knowledge_curate/compact/store/confirm`, `morning_report.py`,
+  `rouvr_schedule_ops`) but no runner, no cron, no cadence/scope/verify
+  policy; awaiting: cadence, tenant/project scope, verify policy.
+  (b) worker-loop-off-API-key end-to-end run. (c) merges to `main` (owner).
+- FROZEN: request_changes hunts, renames/off-path drift, proof rounds
+  unless asked.
+
+## 3. Quirks / gotchas
 - /tmp is hostile (shared tmpfs): never stage anything big there; workers
-  run `TMPDIR=.data/tmp`. Check `/proc/<pid>/environ` before assuming env.
-- `make test-public` in full order is the gate (594 passed). `.venv` is
-  3.12 (3.14 breaks tiktoken).
+  use `TMPDIR=.data/tmp`. Anything the stack needs at restart must NOT live
+  in /tmp (lesson paid for with the MCP outage).
+- `make test-public` in full order is the gate. `pkill` self-matches — use
+  pidfiles (`scripts/smoke.sh`). Never print secrets (status + last-4 only).
 - Transitions: `open→claimed→needs_review→done`; `blocked→open→…`. Fresh
   `idempotency_key` per transition; `replayed=True` = key reuse.
 - 3-round rule: same goal failing 3 rounds with no new finding → stop, report.
-- Never print secrets (keys/tokens): HTTP status + last-4 only. Never
-  rewrite history; never touch `main`; merges to base are owner's.
-- `pkill` self-matches — use pidfiles (`scripts/smoke.sh` pattern).
+- Never rewrite history; never touch `main`; merges to base are owner's.
 - Nothing outside the rouvr repo gets deleted without explicit OK; even
-  inside, only own session junk without asking.
-
-## 3. Known open items
-- Workhub tasks 138–144 VERIFIED done via direct 8221 API (2026-11-03
-  ~15:00 UTC). The `workhub_*` MCP tools are DEAD for the rest of this
-  session: the plugin server had lost ROUVR_LEDGER_TOKEN (env.sh wiped),
-  and restarting it broke the runtime's stdio pipe (no on-demand respawn
-  — two broken-pipe retries). `/tmp/rouvr-supervisor/env.sh` (600) is
-  restored, so a fresh session will resurrect the tools. NEVER restart
-  that server mid-session again — verify-then-report instead.
-- Demo footage (`e2e/recordings/demo-*.webm`, ~4 MB) is local-only; back it
-  up before any disk wipe. Receipt sidecars `demo-approve*.json` understate
-  (in-script race) — authoritative ids are in `demo/VIDEO-SCRIPT.md`.
+  inside, only own session scratch without asking.
+- `workhub_*`/`knowledge_*` MCP tools: dead until session restart (see §0).
+  Workaround that works now: direct `curl` to 8221 with repo-local token.
+- Billing: no spend meter — wall-clock only for model costs.

@@ -70,44 +70,66 @@ flowchart LR
 | `docs/` | Short design notes |
 | `web/` | The project website |
 
-## Quickstart
+## Quickstart (fresh clone)
 
-Requires Python 3.12 or 3.13 (3.14 currently breaks the `tiktoken` build). Docker is required for the full stack.
-
-```bash
-cp .env.example .env              # defaults to the offline stub model provider
-make setup                         # creates .venv and installs requirements
-make test-public                   # ledger, demo, lane, workers, cli, provider tests; no services needed
-make demo                          # runs the morning-report task against a local SQLite ledger
-demo/failure_injection/kill_midstep.sh      # also: silent_delivery.sh, revoked_key.sh
-# full stack:
-make up                            # demo/docker-compose.yml: Postgres, Redis, Temporal (+UI :8080), ledger :8221
-set -a; . ./.env; set +a
-make api                           # core FastAPI on :8000, docs at /docs
-
-# supervisor stack (canonical full stack; verified from a clean checkout 2026-11-01):
-make setup PY=python3.12           # if your default python3 is not 3.12/3.13
-./scripts/rouvr --no-chat          # Temporal + ledger :8221 + 4 workers + MCP :8231
-./scripts/rouvr status             # health of every piece
-./scripts/rouvr down               # stop everything
-```
-
-### Use a Meta model
+Toolchains: Python 3.12+ and Node 22 + pnpm. The only external secret is the
+Meta key, read from the environment (never committed). Without it everything
+below runs on the offline stub provider.
 
 ```bash
-# .env
-ROUVR_MODEL_PROVIDER=meta
-META_API_KEY=<your key>    # only ever read from the environment
-# or open weights, locally:
-ROUVR_MODEL_PROVIDER=ollama
-OLLAMA_MODEL=llama3.1
+git clone https://github.com/Anxy/rouvr.git && cd rouvr
+make setup                       # .venv + requirements.txt
+make test-public                  # green, no services needed
 ```
 
-```python
-# run from repo root with PYTHONPATH=.:core:core/src:core/libs (the Makefile sets this)
-from backend.rouvr_models import get_provider
-print(get_provider().chat([{"role": "user", "content": "Compile this instruction into a contract: ..."}]))
+Run the ledger (terminal 1). Pick the stack token and admin password once:
+
+```bash
+export ROUVR_LEDGER_TOKEN=$(openssl rand -hex 16)
+export ROUVR_ADMIN_PASSWORD=<a strong password, 12+ chars>
+make ledger                       # FastAPI on :8221, SQLite at .rouvr/ledger.db
 ```
+
+Register the demo scope once (terminal 2):
+
+```bash
+curl -s -H "x-rouvr-token: $ROUVR_LEDGER_TOKEN" -H 'Content-Type: application/json' \
+  -d '{"tenant":"demo"}' http://127.0.0.1:8221/v1/tenants
+curl -s -H "x-rouvr-token: $ROUVR_LEDGER_TOKEN" -H 'Content-Type: application/json' \
+  -d '{"tenant":"demo","project":"demo"}' http://127.0.0.1:8221/v1/projects
+```
+
+Run the web workspace (terminal 3):
+
+```bash
+cd web && pnpm install && pnpm dev --port 3000
+# open http://localhost:3000/workspace/login, sign in as admin
+# with ROUVR_ADMIN_PASSWORD, then use the board, chat and task pages
+```
+
+Omitting `ROUVR_ADMIN_PASSWORD` seeds a random one, printed once to the
+ledger's terminal (never to logs). To use a Meta model instead of the stub:
+
+```bash
+export ROUVR_MODEL_PROVIDER=meta
+export META_API_KEY=<your key> META_MODEL_API_BASE_URL=<model endpoint> META_MODEL_NAME=muse-spark-1.3
+# or local open weights: ROUVR_MODEL_PROVIDER=ollama OLLAMA_MODEL=llama3.1
+```
+
+### Who runs what (agent roles → model → runtime)
+
+| Role | Job | Model / tool | How it runs |
+|---|---|---|---|
+| Supervisor chat | One turn → slice with tasks, inline cards (`POST /v1/chat`) | `muse-spark-1.3` (default) via the **Meta Model API key**; stub when unset | Server-side in the ledger, streamed as SSE |
+| Coder / worker | Claim → attempt → result on a leased task | Headless `muse` CLI (`MUSE_BIN`) | May run on the **Muse Code subscription (OAuth)** when the launcher host has it, otherwise on `META_API_KEY`; headless adapters for other CLIs live in `lane/` |
+| Reviewer / judge | Compile, narrate, judge (`workers/meta_worker`) | Meta Model API key via the pluggable provider; stub when unset | Worker process against the ledger |
+| Verifier | Deterministic checks (contracts, readbacks, figures) | No model | Ledger receipts + workflow assertions |
+| Owner (you) | Board, chat, approve verified work, retry failures | Web workspace session (cookie + CSRF) | Browser → same-origin proxy → ledger |
+
+Coder turns and supervisor turns deliberately use different credentials:
+subscription OAuth (or a host key) executes code, while the Model API key only
+ever sees prompt text for supervised turns. Neither is ever committed; both
+come from the environment.
 
 ## Ecosystem: powered by Hyeve
 

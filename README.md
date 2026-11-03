@@ -78,16 +78,35 @@ below runs on the offline stub provider.
 
 ```bash
 git clone https://github.com/Anxy/rouvr.git && cd rouvr
+git checkout rouvr-development    # the active branch; main does not have this yet
 make setup                       # .venv + requirements.txt
-make test-public                  # green, no services needed
 ```
 
-Run the ledger (terminal 1). Pick the stack token and admin password once:
+Pick the stack token and admin password next — export them before anything
+else. The first process to create `.rouvr/ledger.db` (even the test suite,
+which builds the app at import) fixes the admin password, so later exports
+cannot change it:
 
 ```bash
 export ROUVR_LEDGER_TOKEN=$(openssl rand -hex 16)
 export ROUVR_ADMIN_PASSWORD=<a strong password, 12+ chars>
+make test-public                  # green, no services needed
+```
+
+If sign-in ever fails with a fresh password, stop the ledger, `rm -rf .rouvr`,
+and restart it with the exported values.
+
+Run the ledger (terminal 1) with the values exported above:
+
+```bash
 make ledger                       # FastAPI on :8221, SQLite at .rouvr/ledger.db
+```
+
+If `make setup` fails creating the venv (system python without pip wheels),
+use uv instead — verified with Python 3.12:
+
+```bash
+uv venv --python 3.12 .venv && uv pip install --python .venv/bin/python -r requirements.txt
 ```
 
 Register the demo scope once (terminal 2):

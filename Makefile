@@ -16,5 +16,6 @@ test:
 	$(VENV)/bin/pytest -q
 # Fast, self-contained checks for the public-cut pieces (no Postgres/Temporal needed).
 test-public:
-	$(VENV)/bin/pytest -q ledger demo lane/tests workers cli tests core/backend/tests/test_rouvr_model_providers.py
+	mkdir -p .data/tmp  # temporal test-server binary + test scratch (not committed)
+	TMPDIR=$(PWD)/.data/tmp $(VENV)/bin/pytest -q ledger demo lane/tests workers cli tests core/backend/tests/test_rouvr_model_providers.py
 .PHONY: setup up api ledger demo test test-public

@@ -8,6 +8,7 @@
 - No hand-written fetch/XHR to API routes exists anywhere under web/src:
   screens import from web/src/lib/api instead.
 """
+import contextlib
 import json
 import os
 import re
@@ -37,10 +38,8 @@ def _live_spec():
         return make_app(f"sqlite:///{tmp}").openapi()
     finally:
         for suffix in ("", "-wal", "-shm"):
-            try:
+            with contextlib.suppress(OSError):
                 os.unlink(tmp + suffix)
-            except OSError:
-                pass
 
 
 def _methods(spec: dict) -> dict:

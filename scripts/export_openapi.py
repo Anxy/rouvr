@@ -20,6 +20,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 OUT = ROOT / "web" / "src" / "lib" / "api" / "openapi.json"
+OUT_LEDGER = ROOT / "ledger" / "openapi.json"
 
 
 def live_spec() -> dict:
@@ -50,20 +51,26 @@ def main() -> int:
 
     text = render(live_spec())
     if args.check:
-        if not OUT.is_file():
-            print(f"missing {OUT.relative_to(ROOT)}: run scripts/export_openapi.py")
-            return 1
-        if OUT.read_text() != text:
-            print(f"drift in {OUT.relative_to(ROOT)}: re-run scripts/export_openapi.py"
-                  " and pnpm --filter web gen:api")
-            return 1
-        print(f"{OUT.relative_to(ROOT)} matches the live spec"
+        for target in (OUT, OUT_LEDGER):
+            if not target.is_file():
+                print(f"missing {target.relative_to(ROOT)}:"
+                      " run scripts/export_openapi.py")
+                return 1
+            if target.read_text() != text:
+                print(f"drift in {target.relative_to(ROOT)}:"
+                      " re-run scripts/export_openapi.py"
+                      " and pnpm --filter web gen:api")
+                return 1
+        print(f"both snapshots match the live spec"
               f" ({len(json.loads(text).get('paths', {}))} paths)")
         return 0
 
     OUT.parent.mkdir(parents=True, exist_ok=True)
     OUT.write_text(text)
     print(f"wrote {OUT.relative_to(ROOT)}"
+          f" ({len(json.loads(text).get('paths', {}))} paths)")
+    OUT_LEDGER.write_text(text)
+    print(f"wrote {OUT_LEDGER.relative_to(ROOT)}"
           f" ({len(json.loads(text).get('paths', {}))} paths)")
     return 0
 

@@ -53,8 +53,10 @@ def test_update_is_new_version_old_kept(ctx):
     assert r.status_code == 200, r.text
     e2 = r.json()
     assert (e2["version"], e2["supersedes_id"]) == (2, e1["id"])
-    old = c.get(f"/v1/knowledge/{e1['id']}", headers=amy).json()
-    assert old["body"] == "We chose SQLite for the demo store."  # append-only: history intact
+    fwd = c.get(f"/v1/knowledge/{e1['id']}", headers=amy).json()
+    assert fwd["id"] == e2["id"]  # superseded id resolves forward to current
+    hist = c.get(f"/v1/knowledge/{e2['id']}/history", headers=amy).json()["items"]
+    assert [h["id"] for h in hist] == [e1["id"], e2["id"]]  # append-only: history intact
     latest = c.get("/v1/knowledge/search", params={"q": "FTS5"}, headers=amy).json()["items"]
     assert [h["citation"] for h in latest] == [e2["citation"]]  # search returns latest version only
 

@@ -90,7 +90,7 @@ def test_cross_tenant_canary_never_leaks(ctx):
     assert c.post(f"/v1/knowledge/{eid}/confirm", json={}, headers=gus).status_code in (403, 404)
     # writing into another tenant is refused even with an explicit scope body
     r = _entry(c, gus)  # body tenant=acme, caller tenant=globex
-    assert r.status_code == 403
+    assert r.status_code == 404
 
 
 def test_hostile_search_input_never_500s(ctx):

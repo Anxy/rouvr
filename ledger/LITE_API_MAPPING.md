@@ -57,6 +57,8 @@ API).
 | `/api/v1/tasks/{tid}/assignments/reclaim` | POST | `POST /v1/tasks/{tid}/assignments/reclaim` (`reclaim_assignment`) | expired only |
 | `/api/v1/tasks/{tid}/attempts` | POST | `POST /v1/tasks/{tid}/attempts` (`open_attempt`) | epoch must match lease |
 | `/api/v1/tasks/{tid}/results` | POST | `POST /v1/tasks/{tid}/results` (`record_result`) | verdict + core |
+| `/api/v1/workers/heartbeat` | POST | `POST /v1/workers/heartbeat` (`worker_heartbeat`) | stack-only |
+| `/api/v1/events` | GET | `GET /v1/events` (`events`) | SSE replay, tenant-scoped |
 
 Contract tests: `ledger/test_lite_contract.py` (alias identity,
 functional parity, error parity, auth parity, OpenAPI coverage).

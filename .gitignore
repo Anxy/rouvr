@@ -33,3 +33,5 @@ demo/.rouvr-demo.db
 /.data/
 lane/tools/canary_lane_config.py
 .secrets/
+
+.cache/

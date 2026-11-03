@@ -16,14 +16,18 @@ sys.path.insert(0, str(ROOT))
 from ledger.app import make_app  # noqa: E402
 
 OUT = ROOT / "web" / "src" / "lib" / "api" / "openapi.json"
+OUT_LEDGER = ROOT / "ledger" / "openapi.json"
 
 
 def main() -> None:
     app = make_app("sqlite:///:memory:")
     spec = app.openapi()
+    payload = json.dumps(spec, indent=2, sort_keys=True) + "\n"
     OUT.parent.mkdir(parents=True, exist_ok=True)
-    OUT.write_text(json.dumps(spec, indent=2, sort_keys=True) + "\n")
+    OUT.write_text(payload)
     print(f"wrote {OUT} ({len(spec.get('paths', {}))} paths)")
+    OUT_LEDGER.write_text(payload)
+    print(f"wrote {OUT_LEDGER} ({len(spec.get('paths', {}))} paths)")
 
 
 if __name__ == "__main__":

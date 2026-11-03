@@ -39,3 +39,25 @@ def test_version_on_both_prefixes(user_client):
     assert r2.status_code == 200, (r2.status_code, r2.text)
     assert r1.json() == r2.json()
     assert isinstance(r1.json().get("version"), str) and r1.json()["version"]
+    assert isinstance(r1.json().get("build"), str) and r1.json()["build"]
+    assert r1.json()["build"] == r2.json()["build"]
+
+
+def test_version_no_git_subprocess_per_request(user_client, monkeypatch):
+    """Regression: /v1/version must not shell out to git per request."""
+    import subprocess
+
+    login = _login(user_client)
+    assert login.status_code == 200, login.text
+    c = TestClient(user_client.app, cookies=login.cookies)
+    baseline = c.get("/v1/version")
+    assert baseline.status_code == 200, baseline.text
+    build = baseline.json()["build"]
+
+    def _no_git(*a, **k):
+        raise AssertionError("subprocess.run must not run per request")
+
+    monkeypatch.setattr(subprocess, "run", _no_git)
+    r = c.get("/v1/version")
+    assert r.status_code == 200, (r.status_code, r.text)
+    assert r.json()["build"] == build

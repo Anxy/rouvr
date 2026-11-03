@@ -66,12 +66,13 @@ def test_two_user_scoping_and_worker_only(url):
         mine = c.get("/v1/tasks", headers=_tok("alice-tok")).json()["items"]
         assert [t["id"] for t in mine] == [ta["id"]]
         assert len(c.get("/v1/tasks", headers=STACK).json()["items"]) == 2
-        # cross-tenant access refused, naming the tenant
+        # cross-tenant access is 404 with no existence oracle (FL-A2 parity)
         r = c.get(f"/v1/tasks/{tb['id']}", headers=_tok("alice-tok"))
-        assert r.status_code == 403 and "globex" in r.json()["detail"]
+        assert r.status_code == 404 and r.json()["detail"] == "task not found"
+        assert "globex" not in r.text
         assert c.post(f"/v1/tasks/{tb['id']}/evidence",
                       json={"kind": "agent_message", "body": {}},
-                      headers=_tok("alice-tok")).status_code == 403
+                      headers=_tok("alice-tok")).status_code == 404
         # user token cannot do worker-only operations
         assert c.post(f"/v1/tasks/{ta['id']}/transition",
                       json={"to": "blocked", "idempotency_key": "k1"},

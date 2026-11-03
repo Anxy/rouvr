@@ -105,7 +105,8 @@ def test_tenant_visibility_and_cross_tenant_denied(tmp_path, monkeypatch):
                      headers=stack).json()["items"] == []
         gus = {"X-Rouvr-Token": "gus-tok"}
         r = c.get(f"/v1/tasks/{ta['id']}", headers=gus)
-        assert r.status_code == 403 and "acme" in r.json()["detail"]
+        assert r.status_code == 404 and r.json()["detail"] == "task not found"
+        assert "acme" not in r.text
         assert c.get("/v1/projects", headers=amy).json()["projects"] == [
             {"tenant": "acme", "project": "site"}]
         assert len(c.get("/v1/projects", headers=stack).json()["projects"]) == 2

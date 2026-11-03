@@ -25,6 +25,9 @@ redis==5.0.8
 respx
 ruff==0.13.2
 sqlalchemy==2.0.52
+aiosqlite==0.22.1
+fastapi-users[sqlalchemy]==15.0.5
+pwdlib[argon2]==0.3.0
 structlog
 temporalio==1.23.0
 tiktoken==0.9.0

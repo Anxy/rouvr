@@ -24,6 +24,11 @@ from rapidfuzz import fuzz
 from sqlalchemy import create_engine, event, text
 
 try:
+    from ledger import auth as _authmod
+except ImportError:  # run as a bare module (python ledger/app.py)
+    import auth as _authmod  # type: ignore[no-redef]
+
+try:
     from ledger import hyeve_auth as _ha
 except ImportError:  # run as a bare module (python ledger/app.py)
     import hyeve_auth as _ha  # type: ignore[no-redef]
@@ -330,6 +335,35 @@ def make_app(db_url: str = DB_URL) -> FastAPI:
     app = FastAPI(title="Rouvr ledger")
     app.state.engine = eng  # FL-A5: hardened SQLite config, observable for tests
 
+    # Step 1: local session auth (FastAPI Users, argon2, cookie transport).
+    # Coexists with token auth; cookie sessions additionally pass CSRF.
+    from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+
+    _auth_secret = os.environ.get("ROUVR_AUTH_SECRET") or _secrets.token_hex(32)
+    if not os.environ.get("ROUVR_AUTH_SECRET"):
+        log_warn = __import__("logging").getLogger(__name__)
+        log_warn.warning("ROUVR_AUTH_SECRET unset: sessions invalidate on restart")
+    _async_eng = create_async_engine(_authmod.sqlite_async_url(db_url))
+    _session_factory = async_sessionmaker(_async_eng, expire_on_commit=False)
+    _cookie_secure = _authmod.cookie_secure_for_host(
+        os.environ.get("ROUVR_BIND_HOST", "127.0.0.1"))
+    _auth_router, _transport, _strategy, _throttle = _authmod.build_auth_router(
+        secret=_auth_secret, cookie_secure=_cookie_secure,
+        get_session=_session_factory)
+    app.include_router(_auth_router)
+    app.state.auth_secret = _auth_secret
+    app.state.auth_session_factory = _session_factory
+    app.state.auth_throttle = _throttle
+    app.state.auth_cookie_name = _transport.cookie_name
+
+    # Sync seed on the sync engine: no asyncio.run (make_app must stay
+    # callable from async tests) and no ledger side effects — the seed
+    # touches only the auth `user` table. Tenant/project scope is
+    # registered explicitly through the API (S022), never auto-created.
+    _pw, _generated = _authmod.seed_admin(os.environ.get("ROUVR_ADMIN_PASSWORD"), eng)
+    if _generated:
+        _authmod.emit_secret_once(_pw)
+
     # Add created_by to pre-S016 databases (schema.sql covers fresh ones
     # only via CREATE TABLE; existing tables need the column explicitly).
     with eng.begin() as c:
@@ -426,6 +460,25 @@ def make_app(db_url: str = DB_URL) -> FastAPI:
     # upstream, not the ledger token (the caller has no ledger user yet).
     _ONBOARD_OPEN = {"/v1/onboard/register", "/v1/onboard/login"}
 
+    async def _cookie_identity(request):
+        """Step 1: resolve the session cookie. None = continue, else respond."""
+        from fastapi.responses import JSONResponse
+        tok = request.cookies.get(_transport.cookie_name)
+        if not tok:
+            return JSONResponse({"detail": "unauthorized"}, status_code=401)
+        try:
+            async with _session_factory() as _s:
+                _user = await _strategy.read_token(tok, _authmod.make_manager(_s))
+        except Exception:
+            _user = None
+        if _user is None or not _user.is_active:
+            return JSONResponse({"detail": "unauthorized"}, status_code=401)
+        request.state.user = _user.email.split("@")[0]
+        request.state.session_tenant = _user.tenant
+        if not _authmod.csrf_allows(request, str(_user.id), _auth_secret):
+            return JSONResponse({"detail": "csrf check failed"}, status_code=403)
+        return None
+
     @app.middleware("http")
     async def _auth(request, call_next):
         # FL-A2: the session binds scope server-side. Every /v1 handler takes
@@ -485,9 +538,13 @@ def make_app(db_url: str = DB_URL) -> FastAPI:
                     request.state.user = u["username"]
                     request.state.session_tenant = u["tenant"]
                 else:
-                    return JSONResponse({"detail": "unauthorized"}, status_code=401)
+                    _resp = await _cookie_identity(request)
+                    if _resp is not None:
+                        return _resp
             else:
-                return JSONResponse({"detail": "unauthorized"}, status_code=401)
+                _resp = await _cookie_identity(request)
+                if _resp is not None:
+                    return _resp
         return await call_next(request)
 
     def _identity(request) -> str:

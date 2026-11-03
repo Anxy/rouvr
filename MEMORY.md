@@ -23,7 +23,7 @@
 ## 2. Canonical roadmap + status
 - DONE: Knowledge Lite hardening + fuzzy search + D1–D20 + backfills (66 tasks, 914 knowledge, unverified `backfill-*`) + 22-task triage + frontend-lite plan + 20 FL tasks + A5/A6 + A1 + gate-jam fix (uncommitted) + TMPDIR durability (uncommitted).
 - IN FLIGHT: none — A4 (121) DONE ~08:15 UTC via supervisor close-out on `rouvr/121/a1` @ `b4166bb`, PR #42 CI SUCCESS/SUCCESS: task.step fallback + task_id in outbox body, finite SSE default + limit honored, no-mock contract tests, lazy seed + gitleaks token; hidden 5/5, test-public 528 passed, cheat-scan clean. (Task blocked on E_DOWNSTREAM after the attempt-88 SSE hang; no test verdict was postable.)
-- NEXT: tree holds gate-jam fix + escalation `run_id` fence + rework `failed_output` bundle, all verified (`make test-public` 528 passed, hygiene clean) and UNCOMMITTED awaiting owner commit/push/merge direction. Then C2-first demo slices per `docs/plans/2026-11-02-frontend-lite.md` (roadmap: knowledge:1186@v1).
+- NEXT: C2-first demo slices per `docs/plans/2026-11-02-frontend-lite.md` (roadmap: knowledge:1186@v1). Merges done ~08:30 UTC: PRs #35/#38/#41/#42/#17/#18 MERGED into `rouvr-development` in dependency order (conflicts resolved keeping both sides; OpenAPI snapshot + TS client regenerated; lite mapping extended for A4 routes); all other PRs closed unmerged; zero open PRs. Final gate on merged tree: 568 passed, hidden suites A1–A6 green individually, hygiene clean; pushed as Anxy.
 - AWAITING OWNER: hyeve native-login shape + JWKS (needed before Slice B only). Merges (#17, #18, #35): owner-only.
 - FROZEN: request_changes hunt; renames/off-path drift; no proof rounds unless asked.
 

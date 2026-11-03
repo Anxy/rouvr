@@ -1831,6 +1831,22 @@
         "summary": "Disable User Lite"
       }
     },
+    "/api/v1/version": {
+      "get": {
+        "operationId": "version_lite_api_v1_version_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Version Lite"
+      }
+    },
     "/api/v1/workers/heartbeat": {
       "post": {
         "description": "Worker liveness signal. Emits worker.heartbeat \u2014 drives the UI's\nstuck/idle indicator, never progress (a silent worker yields silence,\nand the UI derives stuck from heartbeat absence).",
@@ -3652,6 +3668,22 @@
           }
         },
         "summary": "Disable User"
+      }
+    },
+    "/v1/version": {
+      "get": {
+        "operationId": "version_v1_version_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Version"
       }
     },
     "/v1/workers/heartbeat": {

@@ -33,6 +33,7 @@ def lite_path(ledger_path: str) -> str | None:
 # name in ledger/app.py::make_app.
 MAPPING: list[tuple[str, str, str]] = [
     ("GET", "/health", "health"),
+    ("GET", "/v1/version", "version"),
     ("POST", "/v1/users", "create_user"),
     ("GET", "/v1/users", "list_users"),
     ("POST", "/v1/tenants", "create_tenant"),

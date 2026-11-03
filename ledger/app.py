@@ -36,6 +36,7 @@ except ImportError:  # run as a bare module (python ledger/app.py)
     import hyeve_auth as _ha  # type: ignore[no-redef]
 
 DB_URL = os.environ.get("ROUVR_LEDGER_DATABASE_URL", "sqlite:///./.rouvr/ledger.db")
+VERSION = "0.1.0"
 TRANSITIONS = {
     "open": {"claimed", "blocked"},
     "claimed": {"done", "failed", "blocked", "open", "needs_review"},
@@ -676,6 +677,10 @@ def make_app(db_url: str = DB_URL) -> FastAPI:
     @app.get("/health")
     def health():
         return {"status": "ok", "service": "rouvr-ledger"}
+
+    @app.get("/v1/version")
+    def version():
+        return {"version": VERSION}
 
     @app.get("/demo/onboard")
     def demo_onboard():

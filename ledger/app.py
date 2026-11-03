@@ -9,6 +9,7 @@ both scope fields are mandatory on every create, never defaulted.
 """
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import json
 import os
@@ -35,6 +36,60 @@ TRANSITIONS = {
     "blocked": {"open"},
     "failed": {"open"},
     "done": set(),
+}
+
+# FL-A4 event catalog (docs/plans/2026-11-02-frontend-lite.md §4): the ONLY
+# live channel. Every UI animation binds 1:1 to one of these types. Outbox
+# rows are written transactionally by the mutation that produced them, so a
+# dead worker yields silence — the UI derives stuck/idle from heartbeat
+# absence — never fake progress.
+EVIDENCE_EVENT_KINDS = {
+    "step": "task.step",
+    "tests": "task.tests",
+    "test_output": "task.tests",
+    "criteria": "task.criteria",
+    "reviewer": "review.note",
+    "review": "review.note",
+    "review_note": "review.note",
+    "receipt": "receipt.signed",
+    "escalation": "escalation.opened",
+    "escalation_resolved": "escalation.resolved",
+}
+EVENT_CATALOG = {
+    "task.created": {"emitter": "POST /v1/tasks, /v1/tasks_with_contract",
+                     "payload": "task_id, title, state"},
+    "task.transition": {"emitter": "POST /v1/tasks/{id}/transition;"
+                                   " claim side-effect open/needs_review -> claimed",
+                        "payload": "task_id, from, to, owner?"},
+    "task.step": {"emitter": "evidence kind=step (worker-provided, forwarded verbatim)",
+                  "payload": "evidence_id + worker body (step/total/label...)"},
+    "task.tests": {"emitter": "evidence kind=tests|test_output (worker-provided)",
+                   "payload": "evidence_id + worker body (passed/total...)"},
+    "task.criteria": {"emitter": "evidence kind=criteria (worker-provided)",
+                      "payload": "evidence_id + worker body (done/total/flipped...)"},
+    "attempt.started": {"emitter": "POST /v1/tasks/{id}/attempts (fresh only, replays silent)",
+                        "payload": "task_id, attempt_id, attempt_no, lease_epoch"},
+    "attempt.finished": {"emitter": "POST /v1/tasks/{id}/results (fresh only)",
+                         "payload": "task_id, attempt_id, verdict"},
+    "review.note": {"emitter": "evidence kind=reviewer|review|review_note",
+                    "payload": "evidence_id + reviewer body (verdict...)"},
+    "receipt.signed": {"emitter": "evidence kind=receipt (HMAC receipt recorded as evidence)",
+                       "payload": "evidence_id + receipt body"},
+    "escalation.opened": {"emitter": "evidence kind=escalation",
+                          "payload": "evidence_id + body (reason...)"},
+    "escalation.resolved": {"emitter": "evidence kind=escalation_resolved",
+                            "payload": "evidence_id + body"},
+    "knowledge.versioned": {"emitter": "knowledge insert"
+                                       " (create/store/version/compact/snapshot/onboard)",
+                            "payload": "id, citation, kind, version, supersedes_id"
+                                       " (no title/body: visibility-safe)"},
+    "knowledge.confirmed": {"emitter": "POST /v1/knowledge/{id}/confirm",
+                            "payload": "id, citation"},
+    "worker.heartbeat": {"emitter": "POST /v1/workers/heartbeat; fresh lease renew",
+                         "payload": "task_id, holder, lease_epoch?, lease_holder?,"
+                                    " lease_expires_at? — drives stuck/idle, never progress"},
+    "task.evidence": {"emitter": "any other evidence kind (generic fallback)",
+                      "payload": "evidence_id, kind + body"},
 }
 
 
@@ -231,6 +286,14 @@ document.getElementById('onb').onsubmit = async e => { e.preventDefault(); msg('
 def _canon(obj) -> tuple[str, str]:
     s = json.dumps(obj, sort_keys=True, separators=(",", ":"))
     return s, hashlib.sha256(s.encode()).hexdigest()
+
+
+def _sse_frame(oid: int, etype: str, tenant: str, project: str,
+               task_id: int | None, created_at: str, payload: dict) -> str:
+    """One SSE event: id: (resume cursor) + event: (type) + data: (envelope)."""
+    data, _ = _canon({"id": oid, "type": etype, "tenant": tenant, "project": project,
+                      "task_id": task_id, "created_at": created_at, "payload": payload})
+    return f"id: {oid}\nevent: {etype}\ndata: {data}\n\n"
 
 
 def make_app(db_url: str = DB_URL) -> FastAPI:
@@ -496,6 +559,28 @@ def make_app(db_url: str = DB_URL) -> FastAPI:
         if not t:
             raise HTTPException(404, "task not found")
         return t
+
+    def _emit(c, tenant, project, etype, task_id, payload):
+        """Append one outbox row in the caller's transaction. Transactional =
+        no event without its mutation and no mutation without its event; the
+        server never writes rows outside a mutation, so the stream can never
+        carry fake progress (FL-A4 kill-worker guarantee)."""
+        s, _ = _canon(payload)
+        return c.execute(text("INSERT INTO outbox(tenant,project,type,task_id,body,created_at)"
+                              " VALUES(:t,:p,:y,:i,:b,:n)"),
+                         {"t": tenant, "p": project, "y": etype, "i": task_id,
+                          "b": s, "n": _now()}).lastrowid
+
+    def _events_after(c, tenant, last_id, limit=1000):
+        """Outbox rows after a cursor, oldest first. tenant=None (supervisor)
+        sees all; otherwise exactly the caller's own tenant, resolved
+        server-side from the session — never from request args."""
+        q = "SELECT * FROM outbox WHERE id>:i"
+        kw: dict = {"i": last_id, "l": limit}
+        if tenant is not None:
+            q += " AND tenant=:t"
+            kw["t"] = tenant
+        return [dict(r) for r in c.execute(text(q + " ORDER BY id LIMIT :l"), kw).mappings()]
 
     @app.get("/health")
     def health():
@@ -853,6 +938,12 @@ def make_app(db_url: str = DB_URL) -> FastAPI:
                        " VALUES(:i,:t,:s,:g,:u)"),
                   {"i": rid, "t": title, "s": slug,
                    "g": " ".join(tags), "u": summary})
+        # Leak-safe payload: id/citation/kind only — titles and bodies stay
+        # behind the visibility-checked GET (restricted entries share the
+        # tenant stream with members who may not see them).
+        _emit(c, tenant, project, "knowledge.versioned", None,
+              {"id": rid, "citation": f"knowledge:{rid}@v{version}", "kind": kind,
+               "version": version, "supersedes_id": supersedes})
         return row(c, "SELECT * FROM knowledge_entries WHERE id=:i", i=rid)
 
     def _req_visibility(body: dict) -> str:
@@ -1115,6 +1206,8 @@ def make_app(db_url: str = DB_URL) -> FastAPI:
             if ident != "supervisor" and ident != k.get("author"):
                 raise HTTPException(403, "only the creator or an admin confirms")
             c.execute(text("UPDATE knowledge_entries SET verified=1 WHERE id=:i"), {"i": kid})
+            _emit(c, k["tenant"], k["project"], "knowledge.confirmed", None,
+                  {"id": kid, "citation": f"knowledge:{kid}@v{k['version']}"})
             return _krow(row(c, "SELECT * FROM knowledge_entries WHERE id=:i", i=kid))
 
     # -- Session commands (minimal): store / compact / snapshot / store-and-close.
@@ -1380,6 +1473,8 @@ def make_app(db_url: str = DB_URL) -> FastAPI:
                                  " VALUES(:t,:i,'open',:n,:n,:by,:tn,:p)"),
                             {"t": body.get("title", ""), "i": body.get("intent", ""), "n": n,
                              "by": ident, "tn": tenant, "p": project}).lastrowid
+            _emit(c, tenant, project, "task.created", rid,
+                  {"task_id": rid, "title": body.get("title", ""), "state": "open"})
             return row(c, "SELECT * FROM tasks WHERE id=:i", i=rid)
 
     def _int_field(body: dict, field: str, default=None):
@@ -1414,6 +1509,8 @@ def make_app(db_url: str = DB_URL) -> FastAPI:
                                  " VALUES(:t,:i,'open',:n,:n,:by,:tn,:p)"),
                             {"t": body.get("title", ""), "i": body.get("intent", ""), "n": n,
                              "by": ident, "tn": tenant, "p": project}).lastrowid
+            _emit(c, tenant, project, "task.created", rid,
+                  {"task_id": rid, "title": body.get("title", ""), "state": "open"})
             s, h = _canon(contract)
             c.execute(text("INSERT INTO contracts(task_id,body,sha256,created_at) VALUES(:i,:b,:h,:n)"),
                       {"i": rid, "b": s, "h": h, "n": n})
@@ -1506,9 +1603,20 @@ def make_app(db_url: str = DB_URL) -> FastAPI:
     def add_evidence(tid: int, body: dict, request: Request):
         s, h = _canon(body.get("body", {}))
         with eng.begin() as c:
-            _own_or_stack(c, tid, _identity(request))
+            t = _own_or_stack(c, tid, _identity(request))
+            kind = body.get("kind", "note")
             rid = c.execute(text("INSERT INTO evidence(task_id,kind,body,sha256,created_at) VALUES(:i,:k,:b,:h,:n)"),
-                            {"i": tid, "k": body.get("kind", "note"), "b": s, "h": h, "n": _now()}).lastrowid
+                            {"i": tid, "k": kind, "b": s, "h": h, "n": _now()}).lastrowid
+            parsed = json.loads(s)
+            payload = {"evidence_id": rid, "task_id": tid}
+            if isinstance(parsed, dict):
+                payload.update(parsed)  # worker-provided progress, forwarded verbatim
+            else:
+                payload["body"] = parsed
+            etype = EVIDENCE_EVENT_KINDS.get(kind, "task.step")
+            if etype == "task.evidence":
+                payload["kind"] = kind
+            _emit(c, t["tenant"], t["project"], etype, tid, payload)
             return row(c, "SELECT * FROM evidence WHERE id=:i", i=rid)
 
     @app.post("/v1/tasks/{tid}/transition")
@@ -1539,6 +1647,8 @@ def make_app(db_url: str = DB_URL) -> FastAPI:
             s, _ = _canon({"from": t["state"], "to": to, "note": body.get("note")})
             c.execute(text("INSERT INTO receipts(task_id,idempotency_key,action,body,created_at) VALUES(:i,:k,:a,:b,:n)"),
                       {"i": tid, "k": key, "a": f"transition:{to}", "b": s, "n": _now()})
+            _emit(c, t["tenant"], t["project"], "task.transition", tid,
+                  {"task_id": tid, "from": t["state"], "to": to, "owner": body.get("owner")})
             return {"replayed": False, "receipt": row(c, "SELECT * FROM receipts WHERE task_id=:i AND idempotency_key=:k", i=tid, k=key)}
 
     # ---- R3 parity: assignment / lease / attempt / result ----
@@ -1606,7 +1716,7 @@ def make_app(db_url: str = DB_URL) -> FastAPI:
         if not key or not principal:
             raise HTTPException(422, "key and principal are required")
         with eng.begin() as c:
-            task_or_404(c, tid)
+            t0 = task_or_404(c, tid)
             stale_key = False
             if (hit := _receipted_latest(c, tid, key)):
                 prev = (hit["row"] or {}).get("assignment") or hit["row"] or {}
@@ -1651,6 +1761,10 @@ def make_app(db_url: str = DB_URL) -> FastAPI:
             c.execute(text("UPDATE tasks SET state='claimed', updated_at=:t "
                            "WHERE id=:i AND state IN ('open','needs_review','claimed')"),
                       {"i": tid, "t": _now()})
+            if t0["state"] in ("open", "needs_review"):
+                _emit(c, t0["tenant"], t0["project"], "task.transition", tid,
+                      {"task_id": tid, "from": t0["state"], "to": "claimed",
+                       "owner": principal})
             lease = row(c, "SELECT * FROM leases WHERE task_id=:i", i=tid)
             payload = {"assignment": a, "lease_epoch": epoch, "lease": lease}
             if stale_key:
@@ -1667,7 +1781,7 @@ def make_app(db_url: str = DB_URL) -> FastAPI:
         if not key or not holder or expected is None:
             raise HTTPException(422, "key, holder and expected_lease_epoch are required")
         with eng.begin() as c:
-            task_or_404(c, tid)
+            t = task_or_404(c, tid)
             stale_key = False
             if (hit := _receipted_latest(c, tid, key)):
                 stored = hit["row"] or {}
@@ -1689,6 +1803,9 @@ def make_app(db_url: str = DB_URL) -> FastAPI:
             c.execute(text("UPDATE leases SET expires_at=:x, updated_at=:t WHERE task_id=:i"),
                       {"x": _expiry(ttl_s), "t": _now(), "i": tid})
             lease = row(c, "SELECT * FROM leases WHERE task_id=:i", i=tid)
+            _emit(c, t["tenant"], t["project"], "worker.heartbeat", tid,
+                  {"task_id": tid, "holder": holder, "lease_epoch": lease["lease_epoch"],
+                   "lease_expires_at": lease["expires_at"]})
             if stale_key:
                 _remember_gen(c, tid, key, "renew", lease)
             else:
@@ -1732,7 +1849,7 @@ def make_app(db_url: str = DB_URL) -> FastAPI:
         if not key or attempt_no is None or epoch is None:
             raise HTTPException(422, "key, attempt_no and lease_epoch are required")
         with eng.begin() as c:
-            task_or_404(c, tid)
+            t = task_or_404(c, tid)
 
             def _reuse(att):
                 # Resumed after reclaim: re-fence the reused attempt to the
@@ -1763,6 +1880,9 @@ def make_app(db_url: str = DB_URL) -> FastAPI:
             c.execute(text("INSERT INTO attempts(task_id,attempt_no,lease_epoch,created_at) VALUES(:i,:n,:e,:t)"),
                       {"i": tid, "n": attempt_no, "e": epoch, "t": _now()})
             a = row(c, "SELECT * FROM attempts WHERE task_id=:i AND attempt_no=:n", i=tid, n=attempt_no)
+            _emit(c, t["tenant"], t["project"], "attempt.started", tid,
+                  {"task_id": tid, "attempt_id": a["id"], "attempt_no": attempt_no,
+                   "lease_epoch": epoch})
             _remember(c, tid, key, "attempt", a)
             return {"replayed": False, "attempt": a}
 
@@ -1775,7 +1895,7 @@ def make_app(db_url: str = DB_URL) -> FastAPI:
             raise HTTPException(422, "key, attempt_id, lease_epoch and verdict are required")
         core, _ = _canon({"attempt_id": attempt_id, "lease_epoch": epoch, "verdict": verdict, "result": result})
         with eng.begin() as c:
-            task_or_404(c, tid)
+            t = task_or_404(c, tid)
             if (hit := _receipted(c, tid, key)):
                 return {"replayed": True, "result": hit["row"]}
             existing = row(c, "SELECT * FROM results WHERE task_id=:i AND attempt_id=:a", i=tid, a=attempt_id)
@@ -1794,8 +1914,78 @@ def make_app(db_url: str = DB_URL) -> FastAPI:
             c.execute(text("INSERT INTO results(task_id,attempt_id,lease_epoch,verdict,body,created_at) VALUES(:i,:a,:e,:v,:b,:t)"),
                       {"i": tid, "a": attempt_id, "e": epoch, "v": verdict, "b": core, "t": _now()})
             r = row(c, "SELECT * FROM results WHERE task_id=:i AND attempt_id=:a", i=tid, a=attempt_id)
+            _emit(c, t["tenant"], t["project"], "attempt.finished", tid,
+                  {"task_id": tid, "attempt_id": attempt_id, "verdict": verdict})
             _remember(c, tid, key, "result", r)
             return {"replayed": False, "result": r}
+
+    @app.post("/v1/workers/heartbeat")
+    @app.post("/api/v1/workers/heartbeat")
+    def worker_heartbeat(body: dict, request: Request):
+        """Worker liveness signal. Emits worker.heartbeat — drives the UI's
+        stuck/idle indicator, never progress (a silent worker yields silence,
+        and the UI derives stuck from heartbeat absence)."""
+        _stack_only(_identity(request))
+        tid = _int_field(body, "task_id")
+        holder = body.get("holder")
+        if tid is None or not isinstance(holder, str) or not holder.strip():
+            raise HTTPException(422, "task_id and holder are required")
+        with eng.begin() as c:
+            t = task_or_404(c, tid)
+            lease = row(c, "SELECT * FROM leases WHERE task_id=:i", i=tid)
+            eid = _emit(c, t["tenant"], t["project"], "worker.heartbeat", tid,
+                        {"task_id": tid, "holder": holder.strip(),
+                         "lease_epoch": _int_field(body, "lease_epoch"),
+                         "lease_holder": lease["holder"] if lease else None,
+                         "lease_expires_at": lease["expires_at"] if lease else None})
+            return {"id": eid, "type": "worker.heartbeat", "task_id": tid,
+                    "tenant": t["tenant"], "project": t["project"]}
+
+    @app.get("/v1/events")
+    @app.get("/api/v1/events")
+    async def events(request: Request, cursor: str = "", live: int = 0,
+                       limit: int = 100):
+        """SSE: the only live channel. Tenant comes from the session
+        server-side, never from args. Omit cursor to replay full tenant
+        history; pass the last seen id (explicit cursor wins, else
+        Last-Event-ID) to resume. live=0 sends the backlog and closes
+        (deterministic seed); live=1 (default) tails new rows with
+        ": ping" keepalives — comments, not events, so the server never
+        synthesizes progress."""
+        from fastapi.responses import StreamingResponse
+        ident = _identity(request)
+        with eng.connect() as c:
+            mine = _tenant_of(c, ident)  # 403 when the identity has no tenant
+        hdr = (request.headers.get("last-event-id") or "").strip()
+        raw = cursor.strip() or hdr
+        if raw and not raw.isdigit():
+            raise HTTPException(422, "cursor must be a non-negative integer id")
+        last = int(raw) if raw else 0
+
+        async def gen():
+            nonlocal last
+            yield "retry: 3000\n\n"
+            idle = 0
+            while True:
+                if await request.is_disconnected():
+                    break
+                with eng.connect() as c:
+                    rows = _events_after(c, mine, last, limit)
+                for r in rows:
+                    last = r["id"]
+                    yield _sse_frame(r["id"], r["type"], r["tenant"], r["project"],
+                                     r["task_id"], r["created_at"], json.loads(r["body"]))
+                if not live:
+                    break
+                idle = 0 if rows else idle + 1
+                if idle and idle % 30 == 0:
+                    yield ": ping\n\n"
+                await asyncio.sleep(0.5)
+
+        return StreamingResponse(gen(), media_type="text/event-stream",
+                                 headers={"Cache-Control": "no-cache",
+                                          "Connection": "keep-alive",
+                                          "X-Accel-Buffering": "no"})
 
     # FL-A3: Lite /api/v1 aliases wrap the handlers above (same endpoint
     # objects, no duplicated bodies).

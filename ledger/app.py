@@ -1715,6 +1715,13 @@ def make_app(db_url: str = DB_URL) -> FastAPI:
                                      "by": ident, "tn": tenant, "p": project}).lastrowid
                     _emit(c, tenant, project, "task.created", kid,
                           {"task_id": kid, "title": t["title"], "state": "open"})
+                    # Every child carries the slice acceptance criteria as its
+                    # own contract: the approve guard requires a contract per
+                    # task, and chat must not leave that to the supervisor.
+                    s, h = _canon({"acceptance_criteria": spec["acceptance_criteria"],
+                                   "slice_id": sid, "task": t["title"]})
+                    c.execute(text("INSERT INTO contracts(task_id,body,sha256,created_at)"
+                                   " VALUES(:i,:b,:h,:n)"), {"i": kid, "b": s, "h": h, "n": n})
                     kids.append(kid)
                 for kid in kids:
                     s, h = _canon({"slice_id": sid, "source": message_id})

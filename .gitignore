@@ -35,3 +35,4 @@ lane/tools/canary_lane_config.py
 .secrets/
 
 .cache/
+e2e/recordings/*.webm

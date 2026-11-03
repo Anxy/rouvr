@@ -121,6 +121,21 @@ def test_chat_plan_creates_slice_tasks_receipts_and_cards(session_client):
     assert {c["task_id"] for c in created} >= {sid, *tids}
 
 
+def test_chat_plan_attaches_contract_to_every_child_task(session_client):
+    r = _chat(session_client, json.dumps(PLAN), message_id="plan-kids-1")
+    assert r.status_code == 200, r.text
+    res = [d for e, d in _frames(r.text) if e == "result"][0]
+    sid = res["slice"]["id"]
+    tids = [t["id"] for t in res["tasks"]]
+    assert tids, res
+    for tid in tids:  # approve guard needs a contract on each child, not just the slice
+        got = session_client.get(f"/api/v1/tasks/{tid}").json()
+        assert got["contracts"], f"child task {tid} has no contract"
+        criteria = json.loads(got["contracts"][0]["body"])["acceptance_criteria"]
+        assert criteria == PLAN["slice"]["acceptance_criteria"], got["contracts"][0]
+        assert json.loads(got["contracts"][0]["body"])["slice_id"] == sid
+
+
 def test_chat_question_wins_over_tasks(session_client):
     before = len(session_client.get("/api/v1/tasks").json()["items"])
     msg = {"question": "Ship it as one task or three?", "slice": PLAN["slice"], "tasks": PLAN["tasks"]}

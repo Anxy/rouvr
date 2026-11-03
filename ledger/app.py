@@ -356,7 +356,15 @@ def make_app(db_url: str = DB_URL) -> FastAPI:
         request.state.session_tenant = None
         request.state.hyeve_claims = None
         path = request.url.path
-        if path.startswith("/v1") and path not in _ONBOARD_OPEN:
+        # FL-A3: Lite aliases share ledger auth exactly — canonicalize
+        # /api/v1/* back to its ledger path before the guard below, so
+        # open/guarded parity holds without a second allowlist.
+        guard = path
+        if guard == "/api/v1/health":
+            guard = "/health"
+        elif guard.startswith("/api/v1/"):
+            guard = "/v1/" + guard[len("/api/v1/"):]
+        if guard.startswith("/v1") and guard not in _ONBOARD_OPEN:
             from fastapi.responses import JSONResponse
             authz = request.headers.get("authorization", "")
             if authz.casefold().startswith("bearer "):
@@ -1788,6 +1796,14 @@ def make_app(db_url: str = DB_URL) -> FastAPI:
             r = row(c, "SELECT * FROM results WHERE task_id=:i AND attempt_id=:a", i=tid, a=attempt_id)
             _remember(c, tid, key, "result", r)
             return {"replayed": False, "result": r}
+
+    # FL-A3: Lite /api/v1 aliases wrap the handlers above (same endpoint
+    # objects, no duplicated bodies).
+    try:
+        from ledger.lite import mount_lite_routes as _mount_lite
+    except ImportError:  # run as a bare module (python ledger/app.py)
+        from lite import mount_lite_routes as _mount_lite  # type: ignore[no-redef]
+    _mount_lite(app)
 
     return app
 

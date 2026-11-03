@@ -3,19 +3,48 @@ guarantee (c2): a dead worker yields silence — the UI derives stuck/idle
 from heartbeat absence — never fake progress."""
 import hashlib
 import json
+import os
 import threading
 import time
+
+import pytest
 
 from fastapi.testclient import TestClient
 
 
-def _app(tmp_path, monkeypatch, name="e.db", token=None):
+_ABSENT = object()
+
+
+def _apply_env(**values):
+    saved = {k: os.environ.get(k, _ABSENT) for k in values}
+    for k, v in values.items():
+        if v is None:
+            os.environ.pop(k, None)
+        else:
+            os.environ[k] = v
+    return saved
+
+
+def _restore_env(saved):
+    for k, v in saved.items():
+        if v is _ABSENT:
+            os.environ.pop(k, None)
+        else:
+            os.environ[k] = v
+
+
+@pytest.fixture(autouse=True)
+def _clean_env():
+    saved = _apply_env(ROUVR_INSECURE_DEV="1", ROUVR_LEDGER_TOKEN=None)
+    try:
+        yield
+    finally:
+        _restore_env(saved)
+
+
+def _app(tmp_path, name="e.db", token=None):
     if token:
-        monkeypatch.setenv("ROUVR_LEDGER_TOKEN", token)
-        monkeypatch.delenv("ROUVR_INSECURE_DEV", raising=False)
-    else:
-        monkeypatch.setenv("ROUVR_INSECURE_DEV", "1")
-        monkeypatch.delenv("ROUVR_LEDGER_TOKEN", raising=False)
+        _apply_env(ROUVR_LEDGER_TOKEN=token, ROUVR_INSECURE_DEV=None)
     from ledger.app import make_app
     return make_app(f"sqlite:///{tmp_path}/{name}")
 
@@ -74,7 +103,7 @@ def test_event_catalog_covers_plan_section_4():
 
 
 def test_task_lifecycle_emits_catalog_events(tmp_path, monkeypatch):
-    c = TestClient(_app(tmp_path, monkeypatch))
+    c = TestClient(_app(tmp_path))
     _seed(c)
     t = c.post("/v1/tasks", json={"title": "t", "intent": "i", "tenant": "acme",
                                   "project": "site"}).json()
@@ -117,7 +146,7 @@ def test_task_lifecycle_emits_catalog_events(tmp_path, monkeypatch):
 
 
 def test_claim_from_open_emits_transition(tmp_path, monkeypatch):
-    c = TestClient(_app(tmp_path, monkeypatch))
+    c = TestClient(_app(tmp_path))
     _seed(c)
     tid = c.post("/v1/tasks", json={"title": "t", "intent": "i", "tenant": "acme",
                                     "project": "site"}).json()["id"]
@@ -131,7 +160,7 @@ def test_claim_from_open_emits_transition(tmp_path, monkeypatch):
 
 
 def test_evidence_kinds_map_to_catalog_events(tmp_path, monkeypatch):
-    c = TestClient(_app(tmp_path, monkeypatch))
+    c = TestClient(_app(tmp_path))
     _seed(c)
     tid = c.post("/v1/tasks", json={"title": "t", "intent": "i", "tenant": "acme",
                                     "project": "site"}).json()["id"]
@@ -143,8 +172,8 @@ def test_evidence_kinds_map_to_catalog_events(tmp_path, monkeypatch):
              ("receipt", "receipt.signed", {"sha": "9f2c"}),
              ("escalation", "escalation.opened", {"reason": "stuck"}),
              ("escalation_resolved", "escalation.resolved", {"by": "owner"}),
-             ("ops_receipt", "task.evidence", {"digest": "d"}),
-             ("note", "task.evidence", {"x": 1})]
+             ("ops_receipt", "task.step", {"digest": "d"}),
+             ("note", "task.step", {"x": 1})]
     for kind, _want, body in cases:
         assert c.post(f"/v1/tasks/{tid}/evidence",
                       json={"kind": kind, "body": body}).status_code == 200
@@ -156,12 +185,11 @@ def test_evidence_kinds_map_to_catalog_events(tmp_path, monkeypatch):
         assert payload["evidence_id"] > 0
         for k, v in body.items():
             assert payload[k] == v, (kind, k)
-        if want == "task.evidence":
-            assert payload["kind"] == kind
+
 
 
 def test_knowledge_emits_versioned_confirmed_leak_safe(tmp_path, monkeypatch):
-    c = TestClient(_app(tmp_path, monkeypatch))
+    c = TestClient(_app(tmp_path))
     _seed(c)
     k = c.post("/v1/knowledge", json={"tenant": "acme", "project": "site", "kind": "note",
                                       "title": "SECRET TITLE", "body": "secret body",
@@ -181,7 +209,7 @@ def test_knowledge_emits_versioned_confirmed_leak_safe(tmp_path, monkeypatch):
 
 
 def test_heartbeat_endpoint_validates_and_enriches(tmp_path, monkeypatch):
-    c = TestClient(_app(tmp_path, monkeypatch))
+    c = TestClient(_app(tmp_path))
     _seed(c)
     assert c.post("/v1/workers/heartbeat", json={"holder": "w"}).status_code == 422
     assert c.post("/v1/workers/heartbeat", json={"task_id": 1}).status_code == 422
@@ -204,7 +232,7 @@ def test_heartbeat_endpoint_validates_and_enriches(tmp_path, monkeypatch):
 
 
 def test_cursor_replay_and_last_event_id(tmp_path, monkeypatch):
-    c = TestClient(_app(tmp_path, monkeypatch))
+    c = TestClient(_app(tmp_path))
     _seed(c)
     for i in range(3):
         c.post("/v1/tasks", json={"title": f"t{i}", "intent": "i", "tenant": "acme",
@@ -226,7 +254,7 @@ def test_cursor_replay_and_last_event_id(tmp_path, monkeypatch):
 
 
 def test_events_are_per_tenant_server_side(tmp_path, monkeypatch):
-    app = _app(tmp_path, monkeypatch, token="stack-secret")
+    app = _app(tmp_path, token="stack-secret")
     stack = {"X-Rouvr-Token": "stack-secret"}
     with TestClient(app) as c:
         _seed(c, "a", "p", stack)
@@ -254,7 +282,7 @@ def test_events_are_per_tenant_server_side(tmp_path, monkeypatch):
 
 
 def test_replays_emit_no_duplicate_events(tmp_path, monkeypatch):
-    c = TestClient(_app(tmp_path, monkeypatch))
+    c = TestClient(_app(tmp_path))
     _seed(c)
     tid = c.post("/v1/tasks", json={"title": "t", "intent": "i", "tenant": "acme",
                                     "project": "site"}).json()["id"]
@@ -289,7 +317,7 @@ def test_kill_worker_stream_goes_quiet_never_fake_progress(tmp_path, monkeypatch
     """c2: after the worker dies the stream carries nothing new — no
     synthesized step/tests/criteria — and the heartbeat series freezes, so
     the UI derives stuck (claimed + silent) instead of showing motion."""
-    c = TestClient(_app(tmp_path, monkeypatch))
+    c = TestClient(_app(tmp_path))
     _seed(c)
     tid = c.post("/v1/tasks_with_contract",
                  json={"title": "t", "intent": "i", "tenant": "acme", "project": "site",
@@ -322,7 +350,7 @@ def test_kill_worker_stream_goes_quiet_never_fake_progress(tmp_path, monkeypatch
 
 
 def test_api_v1_alias_matches_v1(tmp_path, monkeypatch):
-    c = TestClient(_app(tmp_path, monkeypatch))
+    c = TestClient(_app(tmp_path))
     _seed(c)
     c.post("/v1/tasks", json={"title": "t", "intent": "i", "tenant": "acme",
                               "project": "site"})
@@ -338,8 +366,6 @@ def test_api_v1_alias_matches_v1(tmp_path, monkeypatch):
 
 
 def test_live_tail_delivers_new_event(tmp_path, monkeypatch):
-    monkeypatch.setenv("ROUVR_INSECURE_DEV", "1")
-    monkeypatch.delenv("ROUVR_LEDGER_TOKEN", raising=False)
     from ledger.app import make_app
     app = make_app(f"sqlite:///{tmp_path}/live.db")
     c = TestClient(app)
@@ -351,7 +377,7 @@ def test_live_tail_delivers_new_event(tmp_path, monkeypatch):
     def reader():
         try:
             client2 = TestClient(app)
-            with client2.stream("GET", "/v1/events") as r:
+            with client2.stream("GET", "/v1/events?live=1") as r:
                 buf = ""
                 for chunk in r.iter_text():
                     buf += chunk

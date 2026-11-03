@@ -1568,12 +1568,12 @@ def make_app(db_url: str = DB_URL) -> FastAPI:
             rid = c.execute(text("INSERT INTO evidence(task_id,kind,body,sha256,created_at) VALUES(:i,:k,:b,:h,:n)"),
                             {"i": tid, "k": kind, "b": s, "h": h, "n": _now()}).lastrowid
             parsed = json.loads(s)
-            payload = {"evidence_id": rid}
+            payload = {"evidence_id": rid, "task_id": tid}
             if isinstance(parsed, dict):
                 payload.update(parsed)  # worker-provided progress, forwarded verbatim
             else:
                 payload["body"] = parsed
-            etype = EVIDENCE_EVENT_KINDS.get(kind, "task.evidence")
+            etype = EVIDENCE_EVENT_KINDS.get(kind, "task.step")
             if etype == "task.evidence":
                 payload["kind"] = kind
             _emit(c, t["tenant"], t["project"], etype, tid, payload)
@@ -1903,7 +1903,8 @@ def make_app(db_url: str = DB_URL) -> FastAPI:
 
     @app.get("/v1/events")
     @app.get("/api/v1/events")
-    async def events(request: Request, cursor: str = "", live: int = 1):
+    async def events(request: Request, cursor: str = "", live: int = 0,
+                       limit: int = 100):
         """SSE: the only live channel. Tenant comes from the session
         server-side, never from args. Omit cursor to replay full tenant
         history; pass the last seen id (explicit cursor wins, else
@@ -1929,7 +1930,7 @@ def make_app(db_url: str = DB_URL) -> FastAPI:
                 if await request.is_disconnected():
                     break
                 with eng.connect() as c:
-                    rows = _events_after(c, mine, last)
+                    rows = _events_after(c, mine, last, limit)
                 for r in rows:
                     last = r["id"]
                     yield _sse_frame(r["id"], r["type"], r["tenant"], r["project"],

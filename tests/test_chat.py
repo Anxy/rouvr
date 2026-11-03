@@ -184,6 +184,63 @@ def test_chat_http_stream_parses_sse_chunks(session_client, monkeypatch):
     assert res["question"] == "Which project?" and res["created"] == 0
 
 
+def test_chat_retries_empty_turn_then_succeeds(session_client, monkeypatch):
+    import ledger.chat as chatmod
+
+    plan_text = json.dumps(PLAN)
+    calls = {"n": 0}
+
+    def fake_stream(messages, provider):
+        calls["n"] += 1
+        if calls["n"] < 3:
+            return iter(())
+        return iter([plan_text[:30], plan_text[30:]])
+
+    monkeypatch.setattr(chatmod, "stream_completion", fake_stream)
+    r = _chat(session_client, "anything", message_id="retry-1")
+    assert r.status_code == 200, r.text
+    frames = _frames(r.text)
+    attempts = [d["attempt"] for e, d in frames if e == "retrying"]
+    assert attempts == [1, 2], frames
+    res = [d for e, d in frames if e == "result"][0]
+    assert res["created"] == 3 and res["message_id"] == "retry-1"
+    got = session_client.get(f"/api/v1/tasks/{res['slice']['id']}").json()
+    body = json.loads([x for x in got["receipts"] if x["action"] == "chat:create"][0]["body"])
+    assert body["source"] == "retry-1" and body["retries"] == 2 and body["fallback"] is False
+
+
+def test_chat_falls_back_to_nonstreaming(session_client, monkeypatch):
+    import ledger.chat as chatmod
+
+    monkeypatch.setattr(chatmod, "stream_completion", lambda messages, provider: iter(()))
+    monkeypatch.setattr(chatmod, "complete_once",
+                         lambda messages, provider: json.dumps(PLAN))
+    r = _chat(session_client, "anything", message_id="retry-2")
+    assert r.status_code == 200, r.text
+    frames = _frames(r.text)
+    attempts = [d["attempt"] for e, d in frames if e == "retrying"]
+    assert attempts == [1, 2, "fallback"], frames
+    res = [d for e, d in frames if e == "result"][0]
+    assert res["created"] == 3
+    got = session_client.get(f"/api/v1/tasks/{res['tasks'][0]['id']}").json()
+    body = json.loads([x for x in got["receipts"] if x["action"] == "chat:create"][0]["body"])
+    assert body["retries"] == 2 and body["fallback"] is True
+
+
+def test_chat_gives_up_when_everything_empty(session_client, monkeypatch):
+    import ledger.chat as chatmod
+
+    before = len(session_client.get("/api/v1/tasks").json()["items"])
+    monkeypatch.setattr(chatmod, "stream_completion", lambda messages, provider: iter(()))
+    monkeypatch.setattr(chatmod, "complete_once", lambda messages, provider: "")
+    r = _chat(session_client, "anything", message_id="retry-3")
+    assert r.status_code == 200, r.text
+    frames = _frames(r.text)
+    assert [d for e, d in frames if e == "result"] == []
+    assert any(e == "error" for e, _ in frames)
+    assert len(session_client.get("/api/v1/tasks").json()["items"]) == before
+
+
 LIVE = pytest.mark.skipif(not (os.environ.get("META_API_KEY")
                                 and os.environ.get("META_MODEL_API_BASE_URL")),
                           reason="live Meta check needs META_API_KEY + META_MODEL_API_BASE_URL")

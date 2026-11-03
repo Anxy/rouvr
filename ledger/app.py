@@ -1658,19 +1658,44 @@ def make_app(db_url: str = DB_URL) -> FastAPI:
             return f"event: {event}\ndata: {json.dumps(payload)}\n\n"
 
         def _events():
+            import time as _time
+            turn_messages = [
+                {"role": "system", "content": _chatmod.SYSTEM_PROMPT},
+                {"role": "user", "content": message.strip()}]
             chunks: list[str] = []
+            retries = 0
+            fallback = False
+            for attempt in range(1 + _chatmod.MAX_RETRIES):
+                if attempt > 0:  # the previous attempt streamed zero content
+                    retries = attempt
+                    yield _frame("retrying", {"attempt": attempt,
+                                              "reason": "empty model turn, retrying"})
+                    _time.sleep(_chatmod.RETRY_BACKOFF_S[attempt - 1])
+                    chunks = []
+                try:
+                    for piece in _chatmod.stream_completion(turn_messages, provider):
+                        chunks.append(piece)
+                        yield _frame("token", {"text": piece})
+                except RuntimeError as e:
+                    yield _frame("error", {"detail": f"model request failed: {e}"})
+                    return
+                if "".join(chunks).strip():
+                    break
+            turn_text = "".join(chunks)
+            if not turn_text.strip():
+                # Streaming came back empty every time: one non-streaming call.
+                yield _frame("retrying", {"attempt": "fallback",
+                                          "reason": "streaming empty, trying one non-streaming call"})
+                try:
+                    turn_text = _chatmod.complete_once(turn_messages, provider)
+                except RuntimeError as e:
+                    yield _frame("error", {"detail": f"model request failed: {e}"})
+                    return
+                if turn_text.strip():
+                    fallback = True
+                    yield _frame("token", {"text": turn_text})
             try:
-                stream = _chatmod.stream_completion(
-                    [{"role": "system", "content": _chatmod.SYSTEM_PROMPT},
-                     {"role": "user", "content": message.strip()}], provider)
-                for piece in stream:
-                    chunks.append(piece)
-                    yield _frame("token", {"text": piece})
-            except RuntimeError as e:
-                yield _frame("error", {"detail": f"model request failed: {e}"})
-                return
-            try:
-                plan = _chatmod.parse_chat_plan("".join(chunks))
+                plan = _chatmod.parse_chat_plan(turn_text)
             except ValueError as e:
                 yield _frame("error", {"detail": f"unusable model turn: {e}"})
                 return
@@ -1709,7 +1734,8 @@ def make_app(db_url: str = DB_URL) -> FastAPI:
                               {"i": kid, "b": s, "h": h, "n": n})
                 for tid, role in [(sid, "slice")] + [(k, "task") for k in kids]:
                     s, _ = _canon({"source": message_id, "role": role,
-                                   "slice_id": sid, "model": provider["model"]})
+                                   "slice_id": sid, "model": provider["model"],
+                                   "retries": retries, "fallback": fallback})
                     c.execute(text("INSERT INTO receipts(task_id,idempotency_key,action,body,created_at)"
                                    " VALUES(:i,:k,'chat:create',:b,:n)"),
                               {"i": tid, "k": message_id, "b": s, "n": n})

@@ -31,6 +31,8 @@ MAX_TOKENS = 1024
 MESSAGE_LIMIT = 4000
 MAX_TASKS = 8
 PROVIDER_TIMEOUT = 60.0
+MAX_RETRIES = 2  # streaming attempts beyond the first when a turn comes back empty
+RETRY_BACKOFF_S = (0.5, 1.0)  # short pauses between retries
 
 SYSTEM_PROMPT = """You are the Rouvr supervisor. Either ask exactly one \
 clarifying question or propose a work slice. Reply with STRICT JSON only, no \
@@ -137,6 +139,29 @@ def _sse_content(line: str) -> str | None:
     except (ValueError, KeyError, IndexError):
         return None
     return delta.get("content") or None
+
+
+def complete_once(messages: list[dict], provider: dict, max_tokens: int = MAX_TOKENS,
+                  timeout: float = PROVIDER_TIMEOUT) -> str:
+    """One non-streaming turn. Last resort when streaming comes back empty."""
+    if provider["name"] == "stub":
+        return _stub_response(messages[-1].get("content", "") if messages else "")
+    payload = json.dumps({"model": provider["model"], "messages": messages,
+                          "max_tokens": max_tokens, "stream": False}).encode()
+    headers = {"Content-Type": "application/json"}
+    if provider.get("api_key"):
+        headers["Authorization"] = f"Bearer {provider['api_key']}"
+    req = urllib.request.Request(provider["base_url"].rstrip("/") + "/chat/completions",
+                                 data=payload, headers=headers, method="POST")
+    try:
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
+            data = json.load(resp)
+    except Exception as e:
+        raise RuntimeError(f"model request failed: {e}")
+    try:
+        return data["choices"][0]["message"].get("content") or ""
+    except (KeyError, IndexError, AttributeError):
+        return ""
 
 
 def parse_chat_plan(text: str) -> dict:

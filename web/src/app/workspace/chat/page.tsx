@@ -20,6 +20,7 @@ export default function ChatPage() {
   const [project, setProject] = useState("demo");
   const [message, setMessage] = useState("");
   const [draft, setDraft] = useState("");
+  const [retryNote, setRetryNote] = useState("");
   const [result, setResult] = useState<ChatResult | null>(null);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
@@ -30,6 +31,7 @@ export default function ChatPage() {
     setError("");
     setResult(null);
     setDraft("");
+    setRetryNote("");
     setBusy(true);
     const outgoing = message;
     setMessage("");
@@ -48,11 +50,24 @@ export default function ChatPage() {
         setError(detail || `chat failed (${response.status})`);
         return;
       }
+      const noteFor = (frames: { event: string; data: string }[]): string => {
+        const retries = frames.filter((f) => f.event === "retrying");
+        if (retries.length === 0) return "";
+        try {
+          const last = JSON.parse(retries[retries.length - 1].data) as {
+            attempt?: string | number;
+          };
+          return `retrying (attempt ${String(last.attempt ?? "?")}) — the model turn came back empty`;
+        } catch {
+          return "retrying — the model turn came back empty";
+        }
+      };
       let all = "";
       let seen = "";
       await pumpStream(response, (text) => {
         all += text;
-        const tokens = parseSseFrames(all)
+        const frames = parseSseFrames(all);
+        const tokens = frames
           .filter((f) => f.event === "token")
           .map((f) => {
             try {
@@ -66,6 +81,8 @@ export default function ChatPage() {
           seen = tokens;
           setDraft(tokens);
         }
+        const note = noteFor(frames);
+        if (note) setRetryNote(note);
       });
       const frames = parseSseFrames(all);
       const errors = frames.filter((f) => f.event === "error");
@@ -123,11 +140,12 @@ export default function ChatPage() {
           {busy ? "Working…" : "Send"}
         </Button>
       </form>
-      {busy || draft ? (
+      {busy || draft || retryNote ? (
         <div className="mt-6 rounded-2xl border border-steel/40 bg-abyss/60 p-4">
           <p className="mb-2 font-mono text-xs uppercase tracking-wider text-muted">
             {busy ? "streaming" : "stream"}
           </p>
+          {retryNote ? <p className="mb-2 font-mono text-xs text-warning">{retryNote}</p> : null}
           <p className="whitespace-pre-wrap font-mono text-sm text-cloud">
             {draft}
             {busy ? <span className="animate-blink">_</span> : null}

@@ -210,11 +210,13 @@ def test_registry_sessions_subdir_is_0700(tmp_path):
 
 def test_xdg_data_home_is_stable_0700_outside_tree(tmp_path):
     import stat
+    import tempfile
     from rouvr.muse import muse_xdg_data_home
     ws = tmp_path / "ws"
     ws.mkdir()
     first, second = muse_xdg_data_home(ws), muse_xdg_data_home(ws)
-    assert first == second and str(first).startswith("/tmp/rouvr-muse-xdg-")
+    assert first == second and str(first).startswith(
+        str(Path(tempfile.gettempdir()) / "rouvr-muse-xdg-"))
     assert stat.S_IMODE(first.stat().st_mode) == 0o700
     other = muse_xdg_data_home(tmp_path / "other")
     other.mkdir(parents=True, exist_ok=True)
@@ -229,10 +231,11 @@ async def test_headless_turn_exports_xdg_data_home(tmp_path):
     script.chmod(0o755)
     ws = tmp_path / "ws"
     ws.mkdir()
+    import tempfile
     from rouvr.muse import MuseLauncher
     await MuseLauncher(str(script)).run(prompt="hi", model="", cwd=ws, env={}, timeout_s=30)
     marker = (ws / "xdg-marker").read_text().strip()
-    assert marker.startswith("/tmp/rouvr-muse-xdg-")
+    assert marker.startswith(str(Path(tempfile.gettempdir()) / "rouvr-muse-xdg-"))
 
 
 async def test_kill_tolerates_already_exited_process():

@@ -186,6 +186,11 @@ uvicorn.run(make_app(os.environ['ROUVR_LEDGER_DATABASE_URL']), host='127.0.0.1',
   fi
   muse plugins approve rouvr-workhub --json >/dev/null 2>&1 || true
   echo "[rouvr] workers + MCP (8231)..."
+  # Verify/review clones are ~1G and /tmp is a small shared tmpfs that hits
+  # quota spikes (E_DOWNSTREAM git checkout/clone failures). Keep temp on the
+  # big disk; workers inherit it (tempfile honors TMPDIR per-process).
+  mkdir -p "$ROOT/.data/tmp"
+  export TMPDIR="${TMPDIR:-$ROOT/.data/tmp}"
   for q in orch build test verify; do
     _pid_alive "worker-$q" || _adopt "worker-$q" "rouvr[.]worker $q" || \
       _start "worker-$q" "$OPS/logs/$q.log" .venv/bin/python -m rouvr.worker "$q"

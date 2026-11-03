@@ -65,6 +65,7 @@ class TestResult:
     passed: bool
     summary: str
     evidence_id: str
+    failed_output: str = ""
 
 
 @dataclass

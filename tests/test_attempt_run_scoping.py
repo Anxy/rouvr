@@ -142,6 +142,18 @@ async def test_fresh_claim_releases_then_claims(tmp_path):
     await wh.aclose()
 
 
+async def test_fresh_claim_same_run_rework_with_live_lease(tmp_path):
+    # Same-run rework: the previous attempt just finished, its lease is still
+    # within TTL, but no one else can hold it — the new attempt number has no
+    # leftover, so the claim must succeed without waiting out the TTL.
+    # (Reclaim-first refused this with E_MOVED and blocked every rework.)
+    wh, tid = await _wh(tmp_path)
+    first, _ = await fresh_claim(wh, tid, "coder-1", 4, 120, run_id="run-A")
+    second, _ = await fresh_claim(wh, tid, "coder-1", 5, 120, run_id="run-A")
+    assert second.lease_epoch == first.lease_epoch + 1
+    await wh.aclose()
+
+
 async def test_fresh_claim_refuses_live_lease(tmp_path):
     wh, tid = await _wh(tmp_path)
     await fresh_claim(wh, tid, "coder-1", 1, 120, run_id="run-A")

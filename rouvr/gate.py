@@ -2,7 +2,8 @@
 
 The only way to finish: the coder submits {pr_url, claims}; the gate checks
 system-observable facts only and returns PASS or exactly one line of
-machine-readable feedback. Three judged rejects across the task => blocked.
+machine-readable feedback. Three judged rejects on the current head => blocked;
+stale-head rejects never consume the budget.
 
 Transport: the roadmap names an MCP tool `submit_result(pr_url, claims)`, but R2
 found no exec-time MCP surface in `muse exec`, so the submission travels as
@@ -17,8 +18,10 @@ The coder claims criteria; the R8 evidence refs are system-known (the
 coder writes submit.json before tests run, so it cannot cite them).
 
 Round counting is evidence-backed: each judged submission is recorded as a
-`submit_attempt` evidence row by the caller; count_prior_submits() reads them
-task-wide (the per-attempt submit fence only dedupes Temporal retries).
+`submit_attempt` evidence row by the caller, stamped with the judged head_sha;
+count_prior_submits() counts only rows for the head under review, plus rows
+with unknown head (fail closed). The per-attempt submit fence only dedupes
+Temporal retries.
 """
 from __future__ import annotations
 
@@ -77,10 +80,38 @@ def read_submission_file(workspace: Path) -> dict | None:
     return data if isinstance(data, dict) else {"__malformed__": True}
 
 
-def count_prior_submits(evidence_rows: list[dict], attempt_id: str | None = None) -> int:
+def _submit_head(row: dict) -> str | None:
+    """Head a submit_attempt judged, or None when the row predates head stamping."""
+    payload = row.get("payload")
+    if isinstance(payload, str):
+        try:
+            payload = json.loads(payload)
+        except ValueError:
+            return None
+    if isinstance(payload, dict):
+        head = payload.get("head_sha")
+        if isinstance(head, str) and head:
+            return head
+    return None
+
+
+def count_prior_submits(evidence_rows: list[dict], attempt_id: str | None = None,
+                        head_sha: str | None = None) -> int:
     prefix = f"{attempt_id}:verify" if attempt_id else None
-    return sum(1 for r in evidence_rows if r.get("type") == SUBMIT_ATTEMPT_TYPE
-               and (prefix is None or str(r.get("fence") or "").startswith(prefix)))
+    head = head_sha if isinstance(head_sha, str) and head_sha else None
+    total = 0
+    for r in evidence_rows:
+        if r.get("type") != SUBMIT_ATTEMPT_TYPE:
+            continue
+        if prefix is not None and not str(r.get("fence") or "").startswith(prefix):
+            continue
+        if head is not None:
+            row_head = _submit_head(r)
+            if row_head is not None and row_head != head:
+                continue  # stale head: never consumes the budget
+            # unknown head: fail closed, counts
+        total += 1
+    return total
 
 
 def evaluate(submission: dict | None, facts: GateEvidence) -> GateVerdict:

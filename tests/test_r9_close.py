@@ -152,10 +152,14 @@ async def test_escalate_attaches_evidence_and_returns_true():
     fake = EscalateWH()
     acts = Activities(SimpleNamespace(workhub_for=lambda p: fake))
     from rouvr.contracts import TaskWorkflowInput
-    assert await acts.escalate(TaskWorkflowInput("t", "p", "task1", "3", "dev"),
-                               "rework_exhausted", "att1") is True
-    assert fake.rows == [("escalation", "escalate:att1:rework_exhausted",
-                          {"reason": "rework_exhausted", "attempt_id": "att1"})]
+    from unittest.mock import patch
+    with patch("rouvr.activities.activity") as act:
+        act.info.return_value.workflow_run_id = "run-9"
+        assert await acts.escalate(TaskWorkflowInput("t", "p", "task1", "3", "dev"),
+                                   "rework_exhausted", "att1") is True
+    assert fake.rows == [("escalation", "escalate:att1:rework_exhausted:run-9",
+                          {"reason": "rework_exhausted", "attempt_id": "att1",
+                           "run_id": "run-9"})]
 
 
 async def test_verify_writes_submit_after_reviewer_and_clears_stale_verdict(tmp_path, monkeypatch):
@@ -224,7 +228,8 @@ async def test_verify_writes_submit_after_reviewer_and_clears_stale_verdict(tmp_
     assert r.verdict == "request_changes"
     assert order.index("submit_attempt") > order.index("muse")
     # submit_attempt records the reviewer's real verdict, not a hardcoded approve
-    assert ("submit_attempt", {"verdict": "request_changes"}) in order
+    # (plus the head sha the verdict was computed against)
+    assert ("submit_attempt", {"verdict": "request_changes", "head_sha": "sha1"}) in order
 
 
 async def test_verify_retry_reuses_submit_fence(tmp_path, monkeypatch):

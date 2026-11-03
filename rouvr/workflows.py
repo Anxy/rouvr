@@ -80,7 +80,7 @@ class TaskWorkflow:
                 if self.cancel_requested:
                     return await self._block(wf, "E_CANCELLED", built.attempt_id)
                 if not tests.passed:
-                    notes = f"Tests failed:\n{tests.summary}"
+                    notes = f"Tests failed:\n{tests.summary}\n{tests.failed_output[:4000]}"
                     resume = built.muse_session_id
                     continue
                 self.phase = "verify"

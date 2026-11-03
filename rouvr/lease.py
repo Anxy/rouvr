@@ -60,9 +60,18 @@ async def open_or_reuse_attempt(wh: WorkHubPort, lease: Lease, run_id: str = "")
 
 async def fresh_claim(wh: WorkHubPort, task_id: str, principal: str,
                       attempt_no: int, ttl_s: int, run_id: str = "") -> tuple[Lease, str]:
-    """First claim of an attempt: release any leftover assignment from a
-    previous run, then claim. A live lease refuses (E_MOVED): never steal
-    another run's work."""
+    """First claim of an attempt: claim, releasing any leftover assignment
+    first only when the claim 409s on it. A live lease refuses (E_MOVED):
+    never steal another run's work. Reclaim-first would refuse a same-run
+    rework whose previous attempt just finished (lease still within TTL).
+    """
+    try:
+        return await claim_assignment_and_lease(wh, task_id, principal, attempt_no, ttl_s, run_id=run_id)
+    except RouvrError as e:
+        if e.code is not Code.MOVED:
+            raise
+    # Occupied by a dead leftover: release it, then claim for real. A live
+    # lease 409s here again, which correctly refuses the steal.
     await wh.reclaim_dead(task_id, attempt_no, principal)
     return await claim_assignment_and_lease(wh, task_id, principal, attempt_no, ttl_s, run_id=run_id)
 

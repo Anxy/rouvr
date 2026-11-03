@@ -10,6 +10,7 @@ import asyncio
 import json
 import os
 import signal
+import tempfile
 import uuid
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -68,11 +69,12 @@ def muse_xdg_data_home(cwd: Path) -> Path:
     subdir, lock files, index db...), so no in-workspace location passes on
     a checkout with a group-writable default ACL. Point XDG at an
     explicit-0700 dir outside the tree instead. Per-workspace (not
-    per-turn) so --session-id resume finds prior turn state; /tmp is
-    OS-scrubbed and never ledger state."""
+    per-turn) so --session-id resume finds prior turn state. The base
+    follows TMPDIR (workers set it to the big disk; /tmp is a small shared
+    tmpfs that hits quota spikes) and is never ledger state."""
     import hashlib
     digest = hashlib.sha256(str(cwd).encode()).hexdigest()[:16]
-    d = Path("/tmp") / f"rouvr-muse-xdg-{digest}"
+    d = Path(tempfile.gettempdir()) / f"rouvr-muse-xdg-{digest}"
     d.mkdir(parents=True, exist_ok=True)
     os.chmod(d, 0o700)
     return d

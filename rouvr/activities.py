@@ -307,7 +307,9 @@ class Activities:
         await wh.record_result(wf.task_id, built.attempt_id, built.lease_epoch,
                                {"status": "tested", "passed": passed, "summary": summary})
         return TestResult(run_id=f"{repo_run.run_id}+{hidden_run.run_id}", passed=passed,
-                          summary=summary, evidence_id=ev)
+                          summary=summary, evidence_id=ev,
+                          failed_output=(repo_run.output_full + hidden_run.output_full)
+                          if not passed else "")
 
     @activity.defn(name="verify")
     @_wrap
@@ -328,7 +330,7 @@ class Activities:
             criteria=tuple(c["id"] if isinstance(c, dict) else str(c)
                            for c in task.get("acceptance_criteria") or []),
             evidence_refs=frozenset({tests.evidence_id, f"testrun:{tests.run_id}"}),
-            prior_submits=count_prior_submits(rows))  # task-wide: 3 judged rejects block (gate.py)
+            prior_submits=count_prior_submits(rows, head_sha=built.head_sha))  # current head only (gate.py)
         submission = read_submission_file(ws)
         if submission and not submission.get("__malformed__"):
             # The system creates the PR after the coder turn (supervisor grant
@@ -346,7 +348,8 @@ class Activities:
             # fence and attach_evidence_exact dedups, instead of minting
             # submit-{n+1} and burning another of the 3 submit rounds.
             await wh.attach_evidence_exact(wf.task_id, SUBMIT_ATTEMPT_TYPE, f"{fence}:submit",
-                                           {"verdict": "request_changes", "feedback": gv.feedback})
+                                           {"verdict": "request_changes", "feedback": gv.feedback,
+                                            "head_sha": built.head_sha})
             ev = await wh.attach_evidence_exact(wf.task_id, "reviewer_report", fence,
                                                 {"verdict": "request_changes", "feedback": gv.feedback})
             return VerifyResult("request_changes", gv.feedback or "gate rejected", reviewer.principal, ev)
@@ -381,7 +384,7 @@ class Activities:
                                                 {"verdict": "reject", "verdict_error": str(e)})
             return VerifyResult("reject", f"reviewer output unusable: {e}", reviewer.principal, ev)
         await wh.attach_evidence_exact(wf.task_id, SUBMIT_ATTEMPT_TYPE, f"{fence}:submit",
-                                       {"verdict": verdict})
+                                       {"verdict": verdict, "head_sha": built.head_sha})
         ev = await wh.attach_evidence_exact(wf.task_id, "reviewer_report", fence,
                                             {"verdict": verdict, "notes": notes})
         return VerifyResult(verdict, notes, reviewer.principal, ev)  # verdict in VERDICTS by read_verdict
@@ -462,8 +465,9 @@ class Activities:
     @_wrap
     async def escalate(self, wf: TaskWorkflowInput, reason: str, attempt_id: str) -> bool:
         wh = self.h.workhub_for(None)
-        await wh.attach_evidence_exact(wf.task_id, "escalation", f"escalate:{attempt_id}:{reason}",
-                                       {"reason": reason, "attempt_id": attempt_id})
+        run_id = activity.info().workflow_run_id
+        await wh.attach_evidence_exact(wf.task_id, "escalation", f"escalate:{attempt_id}:{reason}:{run_id}",
+                                       {"reason": reason, "attempt_id": attempt_id, "run_id": run_id})
         return True
 
     @activity.defn(name="sign_receipt")

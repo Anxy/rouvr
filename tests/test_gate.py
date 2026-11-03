@@ -62,7 +62,31 @@ def test_prior_submits_counted_per_attempt():
             {"type": "submit_attempt", "fence": "a10:verify:submit"}]
     assert count_prior_submits(rows, "a1") == 2
     assert count_prior_submits(rows, "a2") == 1
-    assert count_prior_submits(rows) == 4  # task-wide count used by verify: rejects accumulate across attempts
+    assert count_prior_submits(rows) == 4  # unscoped: task-wide; verify passes head_sha to scope by head
+
+
+def test_prior_submits_scoped_to_current_head():
+    rows = [{"type": "submit_attempt", "fence": "a1:verify:submit",
+             "payload": {"verdict": "request_changes", "head_sha": "aaa"}},
+            {"type": "submit_attempt", "fence": "a2:verify:submit",
+             "payload": {"verdict": "request_changes", "head_sha": "aaa"}},
+            {"type": "submit_attempt", "fence": "a3:verify:submit",
+             "payload": {"verdict": "request_changes", "head_sha": "bbb"}},
+            {"type": "submit_attempt", "fence": "a4:verify:submit",
+             "payload": {"verdict": "request_changes", "head_sha": "bbb"}},
+            {"type": "submit_attempt", "fence": "a5:verify:submit",
+             "payload": {"verdict": "request_changes"}},  # unstamped: fail closed
+            {"type": "submit_attempt", "fence": "a6:verify:submit"},  # no payload: fail closed
+            {"type": "pr_record", "fence": "x",
+             "payload": {"head_sha": "bbb"}}]
+    assert count_prior_submits(rows, head_sha="aaa") == 4  # 2 current + 2 unknown
+    assert count_prior_submits(rows, head_sha="bbb") == 4  # 2 current + 2 unknown
+    assert count_prior_submits(rows, head_sha="ccc") == 2  # unknown only
+    assert count_prior_submits(rows) == 6  # unscoped: task-wide as before
+    assert count_prior_submits(rows, "a1", head_sha="aaa") == 1  # attempt + head combine
+    assert count_prior_submits(rows, "a3", head_sha="aaa") == 0  # stale head excluded
+    assert evaluate(sub(), facts(prior_submits=2)).verdict != "blocked"  # budget left
+    assert evaluate(sub(), facts(prior_submits=3)).verdict == "blocked"  # budget spent
 
 
 def test_fail_closed_on_garbage():

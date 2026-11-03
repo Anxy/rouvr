@@ -26,7 +26,12 @@ import httpx
 
 ROOT = Path(__file__).resolve().parents[2]
 LEDGER = os.environ.get("ROUVR_LEDGER_URL", "http://127.0.0.1:8221")
-H = {"X-Rouvr-Token": (ROOT / ".data" / "api-token").read_text().strip()}
+
+
+def _headers() -> dict:
+    # Read lazily: pure helpers (kind mapping, corpus) must import without a
+    # stack token present (bare checkouts, CI, clean-room test runs).
+    return {"X-Rouvr-Token": (ROOT / ".data" / "api-token").read_text().strip()}
 SCOPE = {"tenant": "supervisor", "project": "liveproof"}
 CANARY = "rouvr-lite-corpus-2026-11"
 
@@ -103,7 +108,7 @@ def corpus() -> list[dict]:
 
 def search(q: str) -> list[dict]:
     r = httpx.get(f"{LEDGER}/v1/knowledge/search",
-                  params={"q": q, "full": "true", "n": 100}, headers=H, timeout=20)
+                  params={"q": q, "full": "true", "n": 100}, headers=_headers(), timeout=20)
     r.raise_for_status()
     return r.json()["items"]
 
@@ -130,7 +135,7 @@ def seed() -> int:
     for e in items:
         if _title_present(e["title"]):
             continue  # backfill after a partial first seed
-        r = httpx.post(f"{LEDGER}/v1/knowledge", json={**SCOPE, **e}, headers=H, timeout=15)
+        r = httpx.post(f"{LEDGER}/v1/knowledge", json={**SCOPE, **e}, headers=_headers(), timeout=15)
         r.raise_for_status()
         n += 1
     print(f"seeded {n} rouvr-lite entries on supervisor/liveproof "

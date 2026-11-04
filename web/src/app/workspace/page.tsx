@@ -1,18 +1,21 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { ChevronDown } from "lucide-react";
+import { Combobox } from "@/components/ui/Select";
 import { TaskStatePill } from "@/components/ui/StatusPill";
 import { PipelineStrip } from "@/components/workspace/PipelineStrip";
 import { Button } from "@/components/ui/Button";
 import { useSession } from "@/components/workspace/session";
 import { parseSseFrames, ws, type TaskRow } from "@/lib/api/workspace";
+import { cn } from "@/lib/utils";
 
 const NEEDS_ATTENTION = new Set(["blocked", "failed", "needs_review"]);
 const IN_PROGRESS = new Set(["open", "claimed"]);
 
-const DONE_PREVIEW_LIMIT = 10;
+const PAGE_SIZE = 10;
 const ACTIVITY_LIMIT = 8;
 // Board activity reads the same ledger outbox snapshot as the task page's
 // live tail (GET /api/events -> /v1/events, SSE frames). The ledger replays
@@ -125,6 +128,100 @@ function TaskCard({ task, showAttention }: { task: TaskRow; showAttention: boole
   );
 }
 
+// One client-side pager per list: 10 rows per page with prev/next and a
+// single "Showing x–y of n" line per section (metadata rendered once per
+// section, never repeated per row).
+function Pager({
+  page,
+  total,
+  onPage,
+  label,
+}: {
+  page: number;
+  total: number;
+  onPage: (page: number) => void;
+  label: string;
+}) {
+  const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+  if (totalPages <= 1) return null;
+  const safePage = Math.min(Math.max(1, page), totalPages);
+  const start = (safePage - 1) * PAGE_SIZE + 1;
+  const end = Math.min(safePage * PAGE_SIZE, total);
+  return (
+    <div className="mt-2 flex items-center gap-2" role="group" aria-label={label}>
+      <button
+        type="button"
+        onClick={() => onPage(safePage - 1)}
+        disabled={safePage <= 1}
+        aria-label={`${label}: previous page`}
+        className="rounded-lg border border-steel/40 px-2.5 py-1 font-mono text-[11px] text-muted transition-colors hover:border-brand/50 hover:text-cloud disabled:opacity-40 disabled:hover:border-steel/40 disabled:hover:text-muted"
+      >
+        Prev
+      </button>
+      <span className="font-mono text-[11px] text-muted">
+        Showing {start}–{end} of {total}
+      </span>
+      <button
+        type="button"
+        onClick={() => onPage(safePage + 1)}
+        disabled={safePage >= totalPages}
+        aria-label={`${label}: next page`}
+        className="rounded-lg border border-steel/40 px-2.5 py-1 font-mono text-[11px] text-muted transition-colors hover:border-brand/50 hover:text-cloud disabled:opacity-40 disabled:hover:border-steel/40 disabled:hover:text-muted"
+      >
+        Next
+      </button>
+    </div>
+  );
+}
+
+// Collapsible board section: the header toggle carries the count + scope
+// metadata once; the list scrolls internally so long queues stay bounded.
+function BoardSection({
+  id,
+  title,
+  count,
+  scope,
+  collapsed,
+  onToggle,
+  children,
+}: {
+  id: string;
+  title: string;
+  count: number;
+  scope: string | null;
+  collapsed: boolean;
+  onToggle: () => void;
+  children: ReactNode;
+}) {
+  return (
+    <section aria-label={title}>
+      <header className="mb-2 flex items-baseline justify-between gap-3">
+        <h2 className="font-mono text-xs uppercase tracking-wider text-muted">
+          <button
+            type="button"
+            onClick={onToggle}
+            aria-expanded={!collapsed}
+            aria-controls={id}
+            title={collapsed ? `Expand ${title}` : `Collapse ${title}`}
+            className="flex items-center gap-1.5 transition-colors hover:text-cloud"
+          >
+            <ChevronDown
+              className={cn("size-3.5 transition-transform duration-200", collapsed && "-rotate-90")}
+              aria-hidden
+            />
+            {title}
+          </button>
+        </h2>
+        <span className="font-mono text-xs text-muted">
+          {count}
+          {scope ? ` · ${scope}` : ""}
+        </span>
+      </header>
+      {collapsed ? null : children}
+    </section>
+  );
+}
+
 export default function BoardPage() {
   const router = useRouter();
   const { projects } = useSession();
@@ -138,7 +235,16 @@ export default function BoardPage() {
     "all" | "open" | "claimed" | "needs_review" | "stuck" | "done"
   >("all");
   const [sortDirection, setSortDirection] = useState<"newest" | "oldest">("newest");
-  const [showAllDone, setShowAllDone] = useState(false);
+  // Done starts collapsed; every section toggles open/closed from its header.
+  const [collapsed, setCollapsed] = useState({
+    attention: false,
+    progress: false,
+    done: true,
+    activity: false,
+  });
+  // Client-side 10/page slices; page numbers clamp to the filtered length
+  // so narrowing the filters can never strand a section on an empty page.
+  const [pages, setPages] = useState({ attention: 1, progress: 1, done: 1, activity: 1 });
   const [activity, setActivity] = useState<BoardEvent[]>([]);
   const [activityError, setActivityError] = useState("");
   const [activityLoading, setActivityLoading] = useState(true);
@@ -324,11 +430,25 @@ export default function BoardPage() {
       visible.filter((t) => t.state === "done").sort(byUpdatedAt("newest")),
     [visible],
   );
-  const doneShown = showAllDone ? doneTasks : doneTasks.slice(0, DONE_PREVIEW_LIMIT);
+  const pageOf = <T,>(list: T[], page: number): { rows: T[]; safePage: number } => {
+    const totalPages = Math.max(1, Math.ceil(list.length / PAGE_SIZE));
+    const safePage = Math.min(Math.max(1, page), totalPages);
+    return { rows: list.slice((safePage - 1) * PAGE_SIZE, safePage * PAGE_SIZE), safePage };
+  };
+
+  const attentionPage = pageOf(needsAttention, pages.attention);
+  const progressPage = pageOf(inProgress, pages.progress);
+  const donePage = pageOf(doneTasks, pages.done);
+  const activityPage = pageOf(activity, pages.activity);
 
   const attentionScope = scopeLabel(needsAttention);
   const progressScope = scopeLabel(inProgress);
   const doneScope = scopeLabel(doneTasks);
+
+  const projectDisplayOptions = useMemo(
+    () => projectOptions.map((name) => (name === "All" ? "All projects" : name)),
+    [projectOptions],
+  );
 
   return (
     <div>
@@ -400,10 +520,10 @@ export default function BoardPage() {
           aria-label="Search tasks by title or id"
           className="min-w-0 flex-1 rounded-xl border border-steel/40 bg-abyss/60 px-3 py-2 text-sm text-cloud placeholder:text-muted/60 focus:border-brand/60 focus:outline-none"
         />
-        <input
+        <Combobox
+          id="board-project-filter"
           value={projectInput}
-          onChange={(e) => {
-            const v = e.target.value;
+          onChange={(v) => {
             setProjectInput(v);
             if (v === "" || v === "All projects") setProjectFilter("All");
             else if (projectOptions.includes(v)) setProjectFilter(v);
@@ -414,16 +534,10 @@ export default function BoardPage() {
               setProjectFilter("All");
             }
           }}
-          list="board-project-options"
-          aria-label="Filter by project — type to filter"
+          options={projectDisplayOptions}
+          ariaLabel="Filter by project — type to filter"
           placeholder="All projects"
-          className="rounded-xl border border-steel/40 bg-abyss/60 px-3 py-2 text-sm text-cloud placeholder:text-muted/60 focus:border-brand/60 focus:outline-none"
         />
-        <datalist id="board-project-options">
-          {projectOptions.map((name) => (
-            <option key={name} value={name === "All" ? "All projects" : name} />
-          ))}
-        </datalist>
         <button
           type="button"
           onClick={() =>
@@ -446,93 +560,101 @@ export default function BoardPage() {
         </p>
       ) : (
         <div className="space-y-6">
-          <section aria-label="Needs attention">
-            <header className="mb-2 flex items-baseline justify-between gap-3">
-              <h2 className="font-mono text-xs uppercase tracking-wider text-muted">
-                Needs attention
-              </h2>
-              <span className="font-mono text-xs text-muted">
-                {needsAttention.length}
-                {attentionScope ? ` · ${attentionScope}` : ""}
-              </span>
-            </header>
+          <BoardSection
+            id="board-needs-attention"
+            title="Needs attention"
+            count={needsAttention.length}
+            scope={attentionScope}
+            collapsed={collapsed.attention}
+            onToggle={() => setCollapsed((c) => ({ ...c, attention: !c.attention }))}
+          >
             {needsAttention.length === 0 ? (
               <p className="rounded-xl border border-steel/30 bg-abyss/60 px-3 py-4 text-center font-mono text-xs text-muted/60">
                 empty
               </p>
             ) : (
-              <ul className="space-y-1.5">
-                {needsAttention.map((t) => (
-                  <TaskCard key={t.id} task={t} showAttention />
-                ))}
-              </ul>
+              <div id="board-needs-attention">
+                <ul className="max-h-[480px] space-y-1.5 overflow-y-auto pr-1">
+                  {attentionPage.rows.map((t) => (
+                    <TaskCard key={t.id} task={t} showAttention />
+                  ))}
+                </ul>
+                <Pager
+                  page={attentionPage.safePage}
+                  total={needsAttention.length}
+                  onPage={(p) => setPages((prev) => ({ ...prev, attention: p }))}
+                  label="Needs attention pages"
+                />
+              </div>
             )}
-          </section>
+          </BoardSection>
 
-          <section aria-label="In progress">
-            <header className="mb-2 flex items-baseline justify-between gap-3">
-              <h2 className="font-mono text-xs uppercase tracking-wider text-muted">
-                In progress
-              </h2>
-              <span className="font-mono text-xs text-muted">
-                {inProgress.length}
-                {progressScope ? ` · ${progressScope}` : ""}
-              </span>
-            </header>
+          <BoardSection
+            id="board-in-progress"
+            title="In progress"
+            count={inProgress.length}
+            scope={progressScope}
+            collapsed={collapsed.progress}
+            onToggle={() => setCollapsed((c) => ({ ...c, progress: !c.progress }))}
+          >
             {inProgress.length === 0 ? (
               <p className="rounded-xl border border-steel/30 bg-abyss/60 px-3 py-4 text-center font-mono text-xs text-muted/60">
                 empty
               </p>
             ) : (
-              <ul className="space-y-1.5">
-                {inProgress.map((t) => (
-                  <TaskCard key={t.id} task={t} showAttention={false} />
-                ))}
-              </ul>
+              <div id="board-in-progress">
+                <ul className="max-h-[480px] space-y-1.5 overflow-y-auto pr-1">
+                  {progressPage.rows.map((t) => (
+                    <TaskCard key={t.id} task={t} showAttention={false} />
+                  ))}
+                </ul>
+                <Pager
+                  page={progressPage.safePage}
+                  total={inProgress.length}
+                  onPage={(p) => setPages((prev) => ({ ...prev, progress: p }))}
+                  label="In progress pages"
+                />
+              </div>
             )}
-          </section>
+          </BoardSection>
 
-          <section aria-label="Done">
-            <header className="mb-2 flex items-baseline justify-between gap-3">
-              <h2 className="font-mono text-xs uppercase tracking-wider text-muted">Done</h2>
-              <span className="font-mono text-xs text-muted">
-                {doneTasks.length}
-                {doneScope ? ` · ${doneScope}` : ""}
-              </span>
-            </header>
+          <BoardSection
+            id="board-done"
+            title="Done"
+            count={doneTasks.length}
+            scope={doneScope}
+            collapsed={collapsed.done}
+            onToggle={() => setCollapsed((c) => ({ ...c, done: !c.done }))}
+          >
             {doneTasks.length === 0 ? (
               <p className="rounded-xl border border-steel/30 bg-abyss/60 px-3 py-4 text-center font-mono text-xs text-muted/60">
                 empty
               </p>
             ) : (
-              <>
-                <ul className="space-y-1.5">
-                  {doneShown.map((t) => (
+              <div id="board-done">
+                <ul className="max-h-[480px] space-y-1.5 overflow-y-auto pr-1">
+                  {donePage.rows.map((t) => (
                     <TaskCard key={t.id} task={t} showAttention={false} />
                   ))}
                 </ul>
-                {doneTasks.length > DONE_PREVIEW_LIMIT ? (
-                  <button
-                    type="button"
-                    onClick={() => setShowAllDone((v) => !v)}
-                    className="mt-2 font-mono text-xs text-muted transition-colors hover:text-cloud"
-                  >
-                    {showAllDone
-                      ? "Show less"
-                      : `Show more (${doneTasks.length - DONE_PREVIEW_LIMIT} more)`}
-                  </button>
-                ) : null}
-              </>
+                <Pager
+                  page={donePage.safePage}
+                  total={doneTasks.length}
+                  onPage={(p) => setPages((prev) => ({ ...prev, done: p }))}
+                  label="Done pages"
+                />
+              </div>
             )}
-          </section>
+          </BoardSection>
 
-          <section aria-label="Recent activity">
-            <header className="mb-2 flex items-baseline justify-between gap-3">
-              <h2 className="font-mono text-xs uppercase tracking-wider text-muted">
-                Recent activity
-              </h2>
-              <span className="font-mono text-xs text-muted">{activity.length}</span>
-            </header>
+          <BoardSection
+            id="board-activity"
+            title="Recent activity"
+            count={activity.length}
+            scope={null}
+            collapsed={collapsed.activity}
+            onToggle={() => setCollapsed((c) => ({ ...c, activity: !c.activity }))}
+          >
             {activityError ? (
               <p className="font-mono text-xs text-muted/60">{activityError}</p>
             ) : activityLoading ? (
@@ -540,21 +662,29 @@ export default function BoardPage() {
             ) : activity.length === 0 ? (
               <p className="font-mono text-xs text-muted/60">no events yet</p>
             ) : (
-              <ul className="space-y-1.5">
-                {activity.map((e) => (
-                  <li
-                    key={e.id}
-                    className="rounded-lg border border-steel/30 bg-abyss/60 px-3 py-2 font-mono text-xs"
-                  >
-                    <time dateTime={e.createdAt} className="text-muted">
-                      {formatWhen(e.createdAt)}
-                    </time>{" "}
-                    <span className="text-cloud">{e.label}</span>
-                  </li>
-                ))}
-              </ul>
+              <div id="board-activity">
+                <ul className="max-h-[480px] space-y-1.5 overflow-y-auto pr-1">
+                  {activityPage.rows.map((e) => (
+                    <li
+                      key={e.id}
+                      className="rounded-lg border border-steel/30 bg-abyss/60 px-3 py-2 font-mono text-xs"
+                    >
+                      <time dateTime={e.createdAt} className="text-muted">
+                        {formatWhen(e.createdAt)}
+                      </time>{" "}
+                      <span className="text-cloud">{e.label}</span>
+                    </li>
+                  ))}
+                </ul>
+                <Pager
+                  page={activityPage.safePage}
+                  total={activity.length}
+                  onPage={(p) => setPages((prev) => ({ ...prev, activity: p }))}
+                  label="Recent activity pages"
+                />
+              </div>
             )}
-          </section>
+          </BoardSection>
         </div>
       )}
     </div>

@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { TaskStatePill } from "@/components/ui/StatusPill";
 import { Button } from "@/components/ui/Button";
+import { Combobox } from "@/components/ui/Select";
 import { useSession } from "@/components/workspace/session";
 import { csrfHeaders, ws, type TaskRow } from "@/lib/api/workspace";
 
@@ -21,7 +22,7 @@ function newKey(): string {
 
 export default function TasksPage() {
   const router = useRouter();
-  const { projects } = useSession();
+  const { projects, username } = useSession();
   const [tasks, setTasks] = useState<TaskRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -168,6 +169,36 @@ export default function TasksPage() {
     }
   }
 
+  async function claimTask(id: number) {
+    if (!username) {
+      setRowError("sign in to claim this task");
+      return;
+    }
+    setRowBusy(true);
+    setRowError("");
+    try {
+      const { response } = await ws.POST("/api/tasks/{id}/claim", {
+        params: { path: { id: String(id) } },
+        body: { key: newKey(), principal: username },
+        headers: csrfHeaders(),
+      });
+      if (response.status === 401) {
+        router.push("/workspace/login");
+        return;
+      }
+      if (!response.ok) {
+        const detail = await response.text().catch(() => "");
+        setRowError(detail || `claim failed (${response.status})`);
+        return;
+      }
+      await load();
+    } catch (err) {
+      setRowError(err instanceof Error ? err.message : "claim failed");
+    } finally {
+      setRowBusy(false);
+    }
+  }
+
   async function confirmRetire(id: number) {
     if (!retireReason.trim()) return;
     setRowBusy(true);
@@ -246,13 +277,14 @@ export default function TasksPage() {
               <span className="mb-1 block font-mono text-[11px] uppercase tracking-wider text-muted">
                 Project (optional — defaults to your session project)
               </span>
-              <input
+              <Combobox
+                id="tasks-project-combobox"
                 value={cProject}
-                onChange={(e) => setCProject(e.target.value)}
-                list="tasks-project-options"
+                onChange={setCProject}
+                options={projectOptions.filter((n) => n !== "All")}
+                ariaLabel="New task project — type to filter"
                 placeholder="project name…"
-                aria-label="New task project — type to filter"
-                className="w-full rounded-xl border border-steel/40 bg-navy/60 px-3 py-2 text-sm text-cloud placeholder:text-muted/60 focus:border-brand/60 focus:outline-none"
+                inputClassName="w-full rounded-xl border border-steel/40 bg-navy/60 px-3 py-2 text-sm text-cloud placeholder:text-muted/60 focus:border-brand/60 focus:outline-none"
               />
             </label>
             <label className="block">
@@ -292,14 +324,6 @@ export default function TasksPage() {
           </div>
         </form>
       ) : null}
-      <datalist id="tasks-project-options">
-        {projectOptions
-          .filter((n) => n !== "All")
-          .map((name) => (
-            <option key={name} value={name} />
-          ))}
-      </datalist>
-
       <div className="mb-4 flex flex-wrap items-center gap-2">
         <input
           type="search"
@@ -309,10 +333,10 @@ export default function TasksPage() {
           aria-label="Search tasks by title or id"
           className="min-w-0 flex-1 rounded-xl border border-steel/40 bg-abyss/60 px-3 py-2 text-sm text-cloud placeholder:text-muted/60 focus:border-brand/60 focus:outline-none"
         />
-        <input
+        <Combobox
+          id="tasks-project-filter"
           value={projectInput}
-          onChange={(e) => {
-            const v = e.target.value;
+          onChange={(v) => {
             setProjectInput(v);
             if (v === "" || v === "All projects") setProjectFilter("All");
             else if (projectOptions.includes(v)) setProjectFilter(v);
@@ -323,16 +347,10 @@ export default function TasksPage() {
               setProjectFilter("All");
             }
           }}
-          list="tasks-filter-options"
-          aria-label="Filter by project — type to filter"
+          options={projectOptions.map((name) => (name === "All" ? "All projects" : name))}
+          ariaLabel="Filter by project — type to filter"
           placeholder="All projects"
-          className="rounded-xl border border-steel/40 bg-abyss/60 px-3 py-2 text-sm text-cloud placeholder:text-muted/60 focus:border-brand/60 focus:outline-none"
         />
-        <datalist id="tasks-filter-options">
-          {projectOptions.map((name) => (
-            <option key={name} value={name === "All" ? "All projects" : name} />
-          ))}
-        </datalist>
       </div>
 
       {error ? <p className="mb-4 text-sm text-danger">{error}</p> : null}
@@ -425,6 +443,15 @@ export default function TasksPage() {
                   </div>
                   <span className="flex shrink-0 items-center gap-2">
                     <TaskStatePill state={t.state} />
+                    {t.state === "open" ? (
+                      <button
+                        type="button"
+                        onClick={() => void claimTask(t.id)}
+                        className="rounded-lg border border-steel/40 px-2 py-1 font-mono text-[11px] text-muted transition-colors hover:border-brand/50 hover:text-cloud"
+                      >
+                        Claim
+                      </button>
+                    ) : null}
                     {t.state === "open" ? (
                       <button
                         type="button"

@@ -154,8 +154,23 @@ test("header shows the active project heading", () => {
   assert.ok(layout.includes("data-project-heading"), "header must mark the heading");
   assert.ok(layout.includes("Active project"), "heading must label itself");
   assert.ok(
+    layout.includes("setProject"),
+    "heading must switch the session project, never sit static",
+  );
+  assert.ok(
     layout.includes('project ?? "—"'),
     "heading must show the session project, em dash when missing",
+  );
+});
+
+test("user menu never disappears on a live session", () => {
+  const layout = read("src/app/workspace/layout.tsx");
+  const menuAt = layout.indexOf("data-user-menu");
+  assert.ok(menuAt > 0, "header avatar must open the user menu");
+  const gate = layout.slice(Math.max(0, menuAt - 400), menuAt);
+  assert.ok(
+    gate.includes("{authed ? (") && !gate.includes("username ? ("),
+    "user menu gate must key off the live session alone, never the cached username",
   );
 });
 

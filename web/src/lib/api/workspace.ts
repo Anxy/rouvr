@@ -132,6 +132,29 @@ export interface ProxyPaths {
       };
     };
   };
+  "/api/tasks/{id}/claim": {
+    post: {
+      parameters: { path: { id: string } };
+      requestBody: {
+        content: {
+          "application/json": {
+            key?: string;
+            principal: string;
+            attempt_no?: number;
+            ttl_s?: number;
+          };
+        };
+      };
+      responses: {
+        200: { content: { "application/json": unknown } };
+        401: { content: { "application/json": { detail: string } } };
+        403: { content: { "application/json": { detail: string } } };
+        404: { content: { "application/json": { detail: string } } };
+        409: { content: { "application/json": { detail: string } } };
+        422: { content: { "application/json": { detail: string } } };
+      };
+    };
+  };
   "/api/grants": {
     post: {
       requestBody: {
@@ -289,6 +312,36 @@ export interface ProxyPaths {
         200: { content: { "application/json": KnowledgeUsage } };
         401: { content: { "application/json": { detail: string } } };
         404: { content: { "application/json": { detail: string } } };
+      };
+    };
+  };
+  "/api/knowledge/{key}/confirm": {
+    post: {
+      parameters: { path: { key: string } };
+      responses: {
+        200: { content: { "application/json": KnowledgeEntry } };
+        401: { content: { "application/json": { detail: string } } };
+        403: { content: { "application/json": { detail: string } } };
+        404: { content: { "application/json": { detail: string } } };
+        422: { content: { "application/json": { detail: string } } };
+      };
+    };
+  };
+  "/api/knowledge/{key}/versions": {
+    post: {
+      parameters: { path: { key: string } };
+      requestBody: {
+        content: {
+          "application/json": { title: string; body: string; summary?: string };
+        };
+      };
+      responses: {
+        200: { content: { "application/json": KnowledgeEntry } };
+        401: { content: { "application/json": { detail: string } } };
+        403: { content: { "application/json": { detail: string } } };
+        404: { content: { "application/json": { detail: string } } };
+        409: { content: { "application/json": { detail: string } } };
+        422: { content: { "application/json": { detail: string } } };
       };
     };
   };

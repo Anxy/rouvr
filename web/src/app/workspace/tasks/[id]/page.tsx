@@ -35,6 +35,14 @@ interface LiveEvent {
 
 const APPROVABLE = new Set(["needs_review"]);
 const RETRYABLE = new Set(["failed", "blocked"]);
+const CLAIMABLE = new Set(["open", "needs_review"]);
+
+function newKey(): string {
+  if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
+    return crypto.randomUUID();
+  }
+  return `${Date.now()}-${Math.floor(Math.random() * 1e9)}`;
+}
 
 export default function TaskPage() {
   const params = useParams<{ id: string }>();
@@ -46,6 +54,13 @@ export default function TaskPage() {
   const [actionError, setActionError] = useState("");
   const [busy, setBusy] = useState(false);
   const [citeTitles, setCiteTitles] = useState<Record<string, string>>({});
+  const [principal, setPrincipal] = useState("");
+  const [editing, setEditing] = useState(false);
+  const [editTitle, setEditTitle] = useState("");
+  const [editIntent, setEditIntent] = useState("");
+  const [evKind, setEvKind] = useState("note");
+  const [evBody, setEvBody] = useState("");
+  const [retireInput, setRetireInput] = useState("");
   const abortRef = useRef<AbortController | null>(null);
 
   const load = useCallback(async () => {
@@ -230,6 +245,127 @@ export default function TaskPage() {
     }
   }
 
+  async function claim() {
+    if (!principal.trim()) {
+      setActionError("a worker principal is required to claim a task");
+      return;
+    }
+    setActionError("");
+    setBusy(true);
+    try {
+      const { response } = await ws.POST("/api/tasks/{id}/claim", {
+        params: { path: { id } },
+        body: { key: newKey(), principal: principal.trim() },
+        headers: csrfHeaders(),
+      });
+      if (response.status === 401) {
+        router.push("/workspace/login");
+        return;
+      }
+      if (!response.ok) {
+        const detail = await response.text().catch(() => "");
+        setActionError(detail || `claim failed (${response.status})`);
+        return;
+      }
+      await load();
+    } catch (err) {
+      setActionError(err instanceof Error ? err.message : "claim failed");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function saveEdit() {
+    if (!editTitle.trim()) return;
+    setActionError("");
+    setBusy(true);
+    try {
+      const { response } = await ws.PATCH("/api/tasks/{id}", {
+        params: { path: { id } },
+        body: {
+          title: editTitle.trim(),
+          intent: editIntent.trim() || undefined,
+          idempotency_key: newKey(),
+        },
+        headers: csrfHeaders(),
+      });
+      if (response.status === 401) {
+        router.push("/workspace/login");
+        return;
+      }
+      if (!response.ok) {
+        const detail = await response.text().catch(() => "");
+        setActionError(detail || `edit failed (${response.status})`);
+        return;
+      }
+      setEditing(false);
+      await load();
+    } catch (err) {
+      setActionError(err instanceof Error ? err.message : "edit failed");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function appendEvidence() {
+    if (!evBody.trim()) return;
+    setActionError("");
+    setBusy(true);
+    try {
+      const { response } = await ws.POST("/api/tasks/{id}/evidence", {
+        params: { path: { id } },
+        body: { kind: evKind.trim() || "note", body: evBody },
+        headers: csrfHeaders(),
+      });
+      if (response.status === 401) {
+        router.push("/workspace/login");
+        return;
+      }
+      if (!response.ok) {
+        const detail = await response.text().catch(() => "");
+        setActionError(detail || `evidence failed (${response.status})`);
+        return;
+      }
+      setEvBody("");
+      await load();
+    } catch (err) {
+      setActionError(err instanceof Error ? err.message : "evidence failed");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function retire() {
+    if (!retireInput.trim()) {
+      setActionError("a reason is required to retire a task");
+      return;
+    }
+    setActionError("");
+    setBusy(true);
+    try {
+      const { response } = await ws.POST("/api/tasks/{id}/retire", {
+        params: { path: { id } },
+        body: { reason: retireInput.trim(), idempotency_key: newKey() },
+        headers: csrfHeaders(),
+      });
+      if (response.status === 401) {
+        router.push("/workspace/login");
+        return;
+      }
+      if (!response.ok) {
+        const detail = await response.text().catch(() => "");
+        setActionError(detail || `retire failed (${response.status})`);
+        return;
+      }
+      setRetireInput("");
+      await load();
+    } catch (err) {
+      setActionError(err instanceof Error ? err.message : "retire failed");
+    } finally {
+      setBusy(false);
+    }
+  }
+
   useEffect(() => () => abortRef.current?.abort(), []);
 
   const stages = task
@@ -318,6 +454,140 @@ export default function TaskPage() {
             ) : null}
           </div>
           {actionError ? <p className="text-sm text-danger">{actionError}</p> : null}
+          {task.state !== "retired" ? (
+            <section
+              aria-label="Manage task"
+              className="space-y-4 rounded-2xl border border-steel/30 bg-abyss/60 px-4 py-3"
+            >
+              <h2 className="font-mono text-xs uppercase tracking-wider text-muted">
+                Manage
+              </h2>
+              {CLAIMABLE.has(task.state) ? (
+                <div className="space-y-2">
+                  <p className="text-sm text-cloud">
+                    Claim this task for a worker principal (assignment + lease).
+                  </p>
+                  <div className="flex flex-wrap gap-2">
+                    <input
+                      value={principal}
+                      onChange={(e) => setPrincipal(e.target.value)}
+                      placeholder="worker principal"
+                      aria-label={`Claim principal for task ${task.id}`}
+                      className="min-w-0 flex-1 rounded-xl border border-steel/40 bg-navy/60 px-3 py-2 text-sm text-cloud placeholder:text-muted/60 focus:border-brand/60 focus:outline-none"
+                    />
+                    <Button
+                      variant="secondary"
+                      disabled={busy || !principal.trim()}
+                      onClick={() => void claim()}
+                    >
+                      {busy ? "Working…" : "Claim"}
+                    </Button>
+                  </div>
+                </div>
+              ) : null}
+              {task.state === "open" ? (
+                <div className="space-y-2">
+                  {editing ? (
+                    <>
+                      <input
+                        value={editTitle}
+                        onChange={(e) => setEditTitle(e.target.value)}
+                        aria-label={`Edit title for task ${task.id}`}
+                        className="w-full rounded-xl border border-steel/40 bg-navy/60 px-3 py-2 text-sm text-cloud focus:border-brand/60 focus:outline-none"
+                      />
+                      <input
+                        value={editIntent}
+                        onChange={(e) => setEditIntent(e.target.value)}
+                        placeholder="Intent (optional)"
+                        aria-label={`Edit intent for task ${task.id}`}
+                        className="w-full rounded-xl border border-steel/40 bg-navy/60 px-3 py-2 text-sm text-cloud placeholder:text-muted/60 focus:border-brand/60 focus:outline-none"
+                      />
+                      <div className="flex gap-2">
+                        <Button
+                          onClick={() => void saveEdit()}
+                          disabled={busy || !editTitle.trim()}
+                        >
+                          {busy ? "Saving…" : "Save"}
+                        </Button>
+                        <Button
+                          variant="secondary"
+                          onClick={() => setEditing(false)}
+                          disabled={busy}
+                        >
+                          Cancel
+                        </Button>
+                      </div>
+                    </>
+                  ) : (
+                    <Button
+                      variant="secondary"
+                      disabled={busy}
+                      onClick={() => {
+                        setActionError("");
+                        setEditTitle(task.title);
+                        setEditIntent(task.intent);
+                        setEditing(true);
+                      }}
+                    >
+                      Edit title / intent
+                    </Button>
+                  )}
+                </div>
+              ) : null}
+              <div className="space-y-2">
+                <p className="text-sm text-cloud">
+                  Append an evidence note to this task.
+                </p>
+                <div className="flex flex-wrap gap-2">
+                  <input
+                    value={evKind}
+                    onChange={(e) => setEvKind(e.target.value)}
+                    placeholder="kind (note)"
+                    aria-label={`Evidence kind for task ${task.id}`}
+                    className="w-36 rounded-xl border border-steel/40 bg-navy/60 px-3 py-2 font-mono text-sm text-cloud placeholder:text-muted/60 focus:border-brand/60 focus:outline-none"
+                  />
+                  <input
+                    value={evBody}
+                    onChange={(e) => setEvBody(e.target.value)}
+                    placeholder="evidence body"
+                    aria-label={`Evidence body for task ${task.id}`}
+                    className="min-w-0 flex-1 rounded-xl border border-steel/40 bg-navy/60 px-3 py-2 text-sm text-cloud placeholder:text-muted/60 focus:border-brand/60 focus:outline-none"
+                  />
+                  <Button
+                    variant="secondary"
+                    disabled={busy || !evBody.trim()}
+                    onClick={() => void appendEvidence()}
+                  >
+                    {busy ? "Working…" : "Append"}
+                  </Button>
+                </div>
+              </div>
+              {task.state !== "done" ? (
+                <div className="space-y-2">
+                  <p className="text-sm text-cloud">
+                    Retire this task with a recorded reason. Done work can
+                    never be retired.
+                  </p>
+                  <div className="flex flex-wrap gap-2">
+                    <input
+                      value={retireInput}
+                      onChange={(e) => setRetireInput(e.target.value)}
+                      placeholder="Reason (required)"
+                      aria-label={`Retire reason for task ${task.id}`}
+                      className="min-w-0 flex-1 rounded-xl border border-steel/40 bg-navy/60 px-3 py-2 text-sm text-cloud placeholder:text-muted/60 focus:border-brand/60 focus:outline-none"
+                    />
+                    <Button
+                      variant="secondary"
+                      disabled={busy || !retireInput.trim()}
+                      onClick={() => void retire()}
+                    >
+                      {busy ? "Working…" : "Retire"}
+                    </Button>
+                  </div>
+                </div>
+              ) : null}
+            </section>
+          ) : null}
           {task.state === "retired" ? (
             <section
               data-retire-badge

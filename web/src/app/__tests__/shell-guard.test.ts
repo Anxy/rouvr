@@ -105,9 +105,9 @@ test("board is an attention-first list, not kanban columns", () => {
     !page.includes("grid-cols-5") && !page.includes("COLUMNS"),
     "board must not render a kanban column grid",
   );
-  const attentionAt = page.indexOf('aria-label="Needs attention"');
-  const progressAt = page.indexOf('aria-label="In progress"');
-  const doneAt = page.indexOf(">Done</h2>");
+  const attentionAt = page.indexOf('title="Needs attention"');
+  const progressAt = page.indexOf('title="In progress"');
+  const doneAt = page.indexOf('title="Done"');
   assert.ok(
     attentionAt !== -1 && progressAt !== -1 && doneAt !== -1,
     "board must render Needs attention, In progress and Done sections",
@@ -147,10 +147,19 @@ test("board has live counts, search, project filter and sort", () => {
     page.includes('type="search"'),
     "board must have a live search box",
   );
-  assert.ok(page.includes("<datalist"), "board must have a type-to-filter project list");
+  assert.ok(page.includes("Combobox"), "board must use the shared Combobox picker");
+  const select = read("src/components/ui/Select.tsx");
   assert.ok(
-    page.includes('list="board-project-options"'),
-    "project input must attach to the options datalist",
+    select.includes('role="combobox"') && select.includes("aria-activedescendant"),
+    "Combobox must be an accessible combobox with keyboard nav",
+  );
+  assert.ok(
+    select.includes('role="listbox"') && select.includes('role="option"'),
+    "Combobox must extend the Select hand-rolled listbox pattern",
+  );
+  assert.ok(
+    !page.includes("<datalist"),
+    "board must not fall back to a native datalist",
   );
   assert.ok(
     page.includes("aria-pressed") && page.includes("setStateFilter"),
@@ -166,15 +175,31 @@ test("board has live counts, search, project filter and sort", () => {
   );
 });
 
-test("board done section collapses to newest 10 with show more/less", () => {
+test("board sections page client-side with prev/next and collapse", () => {
   const page = read("src/app/workspace/page.tsx");
   assert.ok(
-    page.includes("slice(0,") && page.includes("updated_at"),
-    "done section must collapse to a preview sorted by updated_at",
+    page.includes("PAGE_SIZE") && page.includes("slice(") && page.includes("updated_at"),
+    "board sections must page client-side slices sorted by updated_at",
   );
   assert.ok(
-    page.includes("Show more") && page.includes("Show less"),
-    "done section must have a working Show more/less toggle",
+    page.includes("Prev") && page.includes("Next"),
+    "board sections must have working Prev/Next pagination",
+  );
+  assert.ok(
+    page.includes("aria-expanded"),
+    "board sections must be collapsible with an expand toggle",
+  );
+  assert.ok(
+    page.includes("done: true"),
+    "done section must start collapsed",
+  );
+  assert.ok(
+    page.includes("overflow-y-auto"),
+    "board lists must scroll internally",
+  );
+  assert.ok(
+    !page.includes("<datalist"),
+    "board must not fall back to a native datalist",
   );
 });
 
@@ -337,10 +362,10 @@ test("chat plan offers carry Convert/Edit/Just-keep-it buttons", () => {
 
 test("chat project picker is a type-to-filter combobox with no hard-coded default", () => {
   const chat = read("src/app/workspace/chat/page.tsx");
-  assert.ok(chat.includes("<datalist"), "chat project picker must be a filterable list");
+  assert.ok(chat.includes("Combobox"), "chat project picker must use the shared Combobox");
   assert.ok(
-    chat.includes('list="chat-project-options"'),
-    "chat project input must attach to the options datalist",
+    !chat.includes("<datalist"),
+    "chat must not fall back to a native datalist",
   );
   assert.ok(
     chat.includes("projects"),

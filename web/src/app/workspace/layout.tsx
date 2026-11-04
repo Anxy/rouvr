@@ -98,7 +98,7 @@ function Avatar({ name, size = 30 }: { name: string; size?: number }) {
 }
 
 function AppShell({ children }: { children: React.ReactNode }) {
-  const { status, tenant, project, projects, username, logout } = useSession();
+  const { status, tenant, project, projects, setProject, username, logout } = useSession();
   const pathname = usePathname();
   // The login page stands alone: no sidebar, no topbar — just the brand,
   // the fields, and remember-me. Everything else renders inside the shell.
@@ -193,21 +193,36 @@ function AppShell({ children }: { children: React.ReactNode }) {
               <p className="text-[9px] font-semibold uppercase tracking-widest text-dim">
                 Active project
               </p>
-              <p className="mt-0.5 max-w-56 truncate text-[15px] font-semibold leading-tight text-white">
-                {project ?? "—"}
-              </p>
+              {projects.length > 1 ? (
+                <select
+                  aria-label="Active project"
+                  value={project ?? ""}
+                  onChange={(e) => setProject(e.target.value)}
+                  className="mt-0.5 max-w-56 truncate rounded-lg border border-line bg-abyss px-1.5 py-0.5 text-right text-[15px] font-semibold leading-tight text-white outline-none transition-colors hover:border-brand/60 focus:border-brand/60"
+                >
+                  {projects.map((p) => (
+                    <option key={`${p.tenant}/${p.project}`} value={p.project}>
+                      {p.project}
+                    </option>
+                  ))}
+                </select>
+              ) : (
+                <p className="mt-0.5 max-w-56 truncate text-[15px] font-semibold leading-tight text-white">
+                  {project ?? "—"}
+                </p>
+              )}
             </div>
             <ThemeToggle />
-            {authed && username ? (
+            {authed ? (
               <>
                 <span aria-hidden className="h-[22px] w-px bg-line" />
                 <details className="relative" data-user-menu>
                   <summary
-                    aria-label={`Account menu for ${username}`}
+                    aria-label={`Account menu for ${username ?? tenant ?? "account"}`}
                     className="flex cursor-pointer list-none items-center gap-2 rounded-lg px-1 py-1 text-[11px] text-dim transition-colors hover:text-fog [&::-webkit-details-marker]:hidden"
                   >
-                    <Avatar name={username} size={26} />
-                    <span className="max-w-32 truncate">{username}</span>
+                    <Avatar name={username ?? tenant ?? "?"} size={26} />
+                    <span className="max-w-32 truncate">{username ?? tenant ?? "account"}</span>
                     <ChevronDown size={14} aria-hidden className="opacity-70" />
                   </summary>
                   <div className="absolute right-0 top-full z-30 mt-2 w-60 rounded-xl border border-line bg-panel p-2 shadow-xl">
@@ -215,7 +230,7 @@ function AppShell({ children }: { children: React.ReactNode }) {
                       <p className="text-[9px] font-semibold uppercase tracking-widest text-dim">
                         Profile
                       </p>
-                      <p className="mt-1 truncate text-xs font-semibold text-fog">{username}</p>
+                      <p className="mt-1 truncate text-xs font-semibold text-fog">{username ?? tenant ?? "account"}</p>
                       <p className="truncate font-mono text-[10px] text-dim">
                         {tenant ? `${tenant}${project ? ` / ${project}` : ""}` : "—"}
                       </p>

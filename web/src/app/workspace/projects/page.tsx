@@ -10,7 +10,8 @@ import { csrfHeaders, ws, type TaskRow } from "@/lib/api/workspace";
 // Projects index: real tenant projects from GET /api/projects, with
 // open/blocked/done counts and last activity derived from the real task
 // list (GET /api/tasks). No invented metrics; a project with no tasks
-// shows zeroes and "—".
+// shows zeroes and "—". The grid pages client-side at 10 per page.
+const PAGE_SIZE = 10;
 interface ProjectStats {
   open: number;
   stuck: number;
@@ -40,6 +41,8 @@ export default function ProjectsPage() {
   const [creating, setCreating] = useState(false);
   const [createError, setCreateError] = useState("");
   const [query, setQuery] = useState("");
+  const [page, setPage] = useState(1);
+  const [showCreate, setShowCreate] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -76,6 +79,16 @@ export default function ProjectsPage() {
     void load();
   }, [load]);
 
+  // Close the create modal on Escape.
+  useEffect(() => {
+    if (!showCreate) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setShowCreate(false);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [showCreate]);
+
   const stats = useMemo(() => {
     const byProject = new Map<string, ProjectStats>();
     for (const t of tasks) {
@@ -104,6 +117,12 @@ export default function ProjectsPage() {
     return all.filter((n) => n.toLowerCase().includes(q));
   }, [names, stats, query]);
 
+  // Client-side 10/page slice; the page clamps to the filtered length so
+  // narrowing the search can never strand the grid on an empty page.
+  const totalPages = Math.max(1, Math.ceil(visible.length / PAGE_SIZE));
+  const safePage = Math.min(Math.max(1, page), totalPages);
+  const pageRows = visible.slice((safePage - 1) * PAGE_SIZE, safePage * PAGE_SIZE);
+
   async function createProject(e: React.FormEvent) {
     e.preventDefault();
     const name = newName.trim();
@@ -124,6 +143,7 @@ export default function ProjectsPage() {
         return;
       }
       setNewName("");
+      setShowCreate(false);
       refresh();
       await load();
     } catch (err) {
@@ -143,37 +163,72 @@ export default function ProjectsPage() {
             attention, done, and last activity.
           </p>
         </div>
+        <div className="ml-auto">
+          <Button onClick={() => setShowCreate(true)}>Create project</Button>
+        </div>
       </div>
 
-      <form
-        onSubmit={createProject}
-        className="mb-6 flex flex-wrap items-end gap-2 rounded-2xl border border-steel/40 bg-abyss/60 p-4"
-      >
-        <label className="min-w-0 flex-1">
-          <span className="mb-1 block font-mono text-[11px] uppercase tracking-wider text-muted">
-            New project{tenant ? ` in ${tenant}` : ""}
-          </span>
-          <input
-            value={newName}
-            onChange={(e) => setNewName(e.target.value)}
-            placeholder="project name…"
-            aria-label="New project name"
-            className="w-full rounded-xl border border-steel/40 bg-navy/60 px-3 py-2 text-sm text-cloud placeholder:text-muted/60 focus:border-brand/60 focus:outline-none"
-          />
-        </label>
-        <Button type="submit" disabled={creating || !newName.trim()}>
-          {creating ? "Creating…" : "Create project"}
-        </Button>
-        {createError ? (
-          <p className="w-full text-sm text-danger">{createError}</p>
-        ) : null}
-      </form>
+      {showCreate ? (
+        <div
+          data-create-project-modal
+          className="fixed inset-0 z-50 flex items-center justify-center bg-abyss p-4"
+          onClick={() => setShowCreate(false)}
+        >
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-label="Create project"
+            className="w-full max-w-md rounded-2xl border border-steel/40 bg-navy p-5"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h2 className="text-base font-semibold text-white">
+              Create project
+            </h2>
+            <p className="mt-1 text-sm text-muted">
+              New project{tenant ? ` in ${tenant}` : ""}
+            </p>
+            <form onSubmit={createProject} className="mt-4 space-y-3">
+              <label className="block">
+                <span className="mb-1 block font-mono text-[11px] uppercase tracking-wider text-muted">
+                  Project name
+                </span>
+                <input
+                  value={newName}
+                  onChange={(e) => setNewName(e.target.value)}
+                  placeholder="project name…"
+                  aria-label="New project name"
+                  autoFocus
+                  className="w-full rounded-xl border border-steel/40 bg-abyss/60 px-3 py-2 text-sm text-cloud placeholder:text-muted/60 focus:border-brand/60 focus:outline-none"
+                />
+              </label>
+              {createError ? (
+                <p className="text-sm text-danger">{createError}</p>
+              ) : null}
+              <div className="flex justify-end gap-2">
+                <Button
+                  type="button"
+                  variant="secondary"
+                  onClick={() => setShowCreate(false)}
+                >
+                  Cancel
+                </Button>
+                <Button type="submit" disabled={creating || !newName.trim()}>
+                  {creating ? "Creating…" : "Create project"}
+                </Button>
+              </div>
+            </form>
+          </div>
+        </div>
+      ) : null}
 
       <div className="mb-4">
         <input
           type="search"
           value={query}
-          onChange={(e) => setQuery(e.target.value)}
+          onChange={(e) => {
+            setQuery(e.target.value);
+            setPage(1);
+          }}
           placeholder="Search projects…"
           aria-label="Search projects"
           className="w-full rounded-xl border border-steel/40 bg-abyss/60 px-3 py-2 text-sm text-cloud placeholder:text-muted/60 focus:border-brand/60 focus:outline-none sm:max-w-xs"
@@ -188,8 +243,9 @@ export default function ProjectsPage() {
           No projects yet — create one above.
         </p>
       ) : (
-        <ul className="grid gap-3 sm:grid-cols-2">
-          {visible.map((name) => {
+        <>
+          <ul className="grid gap-3 sm:grid-cols-2">
+            {pageRows.map((name) => {
             const s = stats.get(name) ?? emptyStats();
             return (
               <li
@@ -220,7 +276,38 @@ export default function ProjectsPage() {
               </li>
             );
           })}
-        </ul>
+          </ul>
+          {totalPages > 1 ? (
+            <div
+              className="mt-4 flex items-center gap-2"
+              role="group"
+              aria-label="Projects pages"
+            >
+              <button
+                type="button"
+                onClick={() => setPage(safePage - 1)}
+                disabled={safePage <= 1}
+                aria-label="Projects: previous page"
+                className="rounded-lg border border-steel/40 px-2.5 py-1 font-mono text-[11px] text-muted transition-colors hover:border-brand/50 hover:text-cloud disabled:opacity-40 disabled:hover:border-steel/40 disabled:hover:text-muted"
+              >
+                Prev
+              </button>
+              <span className="font-mono text-[11px] text-muted">
+                Showing {(safePage - 1) * PAGE_SIZE + 1}–
+                {Math.min(safePage * PAGE_SIZE, visible.length)} of {visible.length}
+              </span>
+              <button
+                type="button"
+                onClick={() => setPage(safePage + 1)}
+                disabled={safePage >= totalPages}
+                aria-label="Projects: next page"
+                className="rounded-lg border border-steel/40 px-2.5 py-1 font-mono text-[11px] text-muted transition-colors hover:border-brand/50 hover:text-cloud disabled:opacity-40 disabled:hover:border-steel/40 disabled:hover:text-muted"
+              >
+                Next
+              </button>
+            </div>
+          ) : null}
+        </>
       )}
 
       <p className="mt-6 font-mono text-[11px] text-muted/70">

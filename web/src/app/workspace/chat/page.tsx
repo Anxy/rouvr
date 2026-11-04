@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/Button";
+import { Combobox } from "@/components/ui/Select";
 import { TaskStatePill } from "@/components/ui/StatusPill";
 import { PipelineStrip } from "@/components/workspace/PipelineStrip";
 import { useSession } from "@/components/workspace/session";
@@ -53,6 +54,9 @@ interface Turn {
   id: number;
   role: "user" | "assistant";
   text: string;
+  // Client-side wall time: bubbles show when each turn landed. The ledger
+  // owns turn order; this is display-only and never sent anywhere.
+  at: number;
   status: "done" | "streaming" | "error";
   error: string;
   retryNote: string;
@@ -109,6 +113,7 @@ function ExampleRotator({ onPick }: { onPick: (prompt: string) => void }) {
         data-example-prompt
         onClick={() => onPick(prompt)}
         title="Click to use this example"
+        aria-label={`Use example prompt: ${prompt}`}
         className="truncate text-left transition-colors hover:text-fog"
       >
         {prompt}
@@ -148,6 +153,8 @@ export default function ChatPage() {
       id: nextId.current++,
       role,
       text,
+      // eslint-disable-next-line react-hooks/purity -- wall-clock stamp for bubble display only, set at turn creation
+      at: Date.now(),
       status: "done",
       error: "",
       retryNote: "",
@@ -197,6 +204,7 @@ export default function ChatPage() {
         id: userId,
         role: "user",
         text: outgoing,
+        at: Date.now(),
         status: "done",
         error: "",
         retryNote: "",
@@ -206,6 +214,7 @@ export default function ChatPage() {
         id: asstId,
         role: "assistant",
         text: "",
+        at: Date.now(),
         status: "streaming",
         error: "",
         retryNote: "",
@@ -310,43 +319,58 @@ export default function ChatPage() {
   }
 
   return (
-    <div className="mx-auto w-full max-w-3xl">
-      <h1 className="text-2xl font-semibold text-white">Supervisor chat</h1>
-      <p className="mt-1 text-sm text-muted">
-        Rouvr turns requests into tracked work: contract, build, review, evidence.
-      </p>
-      <label className="mt-6 block">
-        <span className="mb-1 block font-mono text-xs uppercase tracking-wider text-muted">
-          Project
-        </span>
-        <input
-          value={shownProject}
-          onChange={(e) => {
-            setProject(e.target.value);
-            setProjectTouched(true);
-          }}
-          list="chat-project-options"
-          aria-label="Filter chat by project — type to filter"
-          placeholder="project"
-          className="h-10 w-full rounded-xl border border-steel/60 bg-abyss px-4 font-mono text-sm text-cloud outline-none placeholder:text-muted/60 focus:border-brand/60"
-        />
-        <datalist id="chat-project-options">
-          {projects.map((p) => (
-            <option key={`${p.tenant}/${p.project}`} value={p.project} />
-          ))}
-        </datalist>
-      </label>
-      <div data-chat-thread className="mt-6 space-y-4">
+    <div className="mx-auto flex w-full max-w-3xl flex-col">
+      <div data-chat-header className="sticky top-0 z-10 bg-abyss pb-4">
+        <h1 className="text-2xl font-semibold text-white">Supervisor chat</h1>
+        <p className="mt-1 text-sm text-muted">
+          Rouvr turns requests into tracked work: contract, build, review, evidence.
+        </p>
+        <label className="mt-6 block">
+          <span className="mb-1 block font-mono text-xs uppercase tracking-wider text-muted">
+            Project
+          </span>
+          <Combobox
+            id="chat-project-filter"
+            value={shownProject}
+            onChange={(v) => {
+              setProject(v);
+              setProjectTouched(true);
+            }}
+            options={projects.map((p) => p.project)}
+            ariaLabel="Filter chat by project — type to filter"
+            placeholder="project"
+            inputClassName="h-10 w-full rounded-xl border border-steel/60 bg-abyss px-4 font-mono text-sm text-cloud outline-none placeholder:text-muted/60 focus:border-brand/60"
+          />
+        </label>
+      </div>
+      <div
+        data-chat-thread
+        className="mt-2 max-h-[55vh] space-y-4 overflow-y-auto pr-1"
+      >
         {turns.map((turn) =>
           turn.role === "user" ? (
             <div key={turn.id} data-turn="user" className="flex justify-end">
-              <p className="max-w-[80%] whitespace-pre-wrap rounded-2xl rounded-br-md bg-brand px-4 py-2 text-sm text-abyss">
-                {turn.text}
-              </p>
+              <div className="max-w-[80%] rounded-2xl rounded-br-md bg-brand px-4 py-2">
+                <p className="whitespace-pre-wrap text-sm text-abyss">
+                  {turn.text}
+                </p>
+                <time
+                  dateTime={new Date(turn.at).toISOString()}
+                  className="mt-1 block text-right font-mono text-[10px] text-abyss/70"
+                >
+                  {new Date(turn.at).toLocaleTimeString()}
+                </time>
+              </div>
             </div>
           ) : (
             <div key={turn.id} data-turn="assistant" className="flex justify-start">
               <div className="max-w-[85%] rounded-2xl rounded-bl-md border border-steel/40 bg-abyss/60 p-4">
+                <time
+                  dateTime={new Date(turn.at).toISOString()}
+                  className="mb-1 block font-mono text-[10px] text-dim"
+                >
+                  {new Date(turn.at).toLocaleTimeString()}
+                </time>
                 {turn.retryNote ? (
                   <p className="mb-2 font-mono text-xs text-warning">{turn.retryNote}</p>
                 ) : null}
@@ -495,7 +519,11 @@ export default function ChatPage() {
         )}
         <div ref={bottomRef} />
       </div>
-      <form onSubmit={(e) => void send(e)} className="mt-6 space-y-3">
+      <form
+        onSubmit={(e) => void send(e)}
+        data-chat-composer
+        className="sticky bottom-0 z-10 space-y-3 bg-abyss pb-2 pt-3"
+      >
         <label className="block">
           <span className="mb-1 block font-mono text-xs uppercase tracking-wider text-muted">
             Message

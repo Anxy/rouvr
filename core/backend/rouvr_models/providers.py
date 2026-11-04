@@ -29,6 +29,13 @@ class ModelProvider:
     def chat(self, messages: list[dict], *, timeout: float = 60.0, **params) -> str:
         if self.name == "stub":
             return json.dumps({"stub": True, "echo": messages[-1].get("content", "")})
+        return self.chat_complete(messages, timeout=timeout, **params)["content"]
+
+    def chat_complete(self, messages: list[dict], *, timeout: float = 60.0, **params) -> dict:
+        """Full response envelope: content + finish_reason + usage.
+
+        chat() stays the content-only shorthand; existing callers unchanged.
+        """
         body = json.dumps({"model": self.model, "messages": messages, **params}).encode()
         headers = {"Content-Type": "application/json"}
         if self.api_key:
@@ -36,7 +43,10 @@ class ModelProvider:
         req = urllib.request.Request(self.base_url.rstrip("/") + "/chat/completions", data=body, headers=headers, method="POST")
         with urllib.request.urlopen(req, timeout=timeout) as resp:
             data = json.load(resp)
-        return data["choices"][0]["message"]["content"]
+        choice = data["choices"][0]
+        return {"content": choice["message"].get("content") or "",
+                "finish_reason": choice.get("finish_reason"),
+                "usage": data.get("usage")}
 
 
 def get_provider(name: str | None = None, env: dict | None = None) -> ModelProvider:

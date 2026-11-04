@@ -86,6 +86,37 @@ const EXAMPLE_PROMPTS = [
   "Which tasks are waiting for review?",
 ];
 
+// Rotating help text under the composer: one labelled example at a time,
+// cycling every few seconds. Clicking prefills the composer; nothing is
+// sent until the user presses Send.
+function ExampleRotator({ onPick }: { onPick: (prompt: string) => void }) {
+  const [index, setIndex] = useState(0);
+  useEffect(() => {
+    const t = setInterval(() => setIndex((i) => (i + 1) % EXAMPLE_PROMPTS.length), 4000);
+    return () => clearInterval(t);
+  }, []);
+  const prompt = EXAMPLE_PROMPTS[index % EXAMPLE_PROMPTS.length];
+  return (
+    <div
+      data-chat-examples
+      className="mt-2 flex min-w-0 items-center gap-2 text-[13px] text-dim"
+    >
+      <span className="shrink-0 rounded-md border border-brand/40 bg-brand/10 px-2 py-0.5 font-mono text-[10px] uppercase tracking-widest text-brand-300">
+        Example
+      </span>
+      <button
+        type="button"
+        data-example-prompt
+        onClick={() => onPick(prompt)}
+        title="Click to use this example"
+        className="truncate text-left transition-colors hover:text-fog"
+      >
+        {prompt}
+      </button>
+    </div>
+  );
+}
+
 type PlanAction = "convert" | "edit" | "keep";
 
 export default function ChatPage() {
@@ -100,7 +131,6 @@ export default function ChatPage() {
   const [message, setMessage] = useState("");
   const [turns, setTurns] = useState<Turn[]>([]);
   const [busy, setBusy] = useState(false);
-  const [autonomy, setAutonomy] = useState("ask-for-everything");
   const nextId = useRef(1);
   const bottomRef = useRef<HTMLDivElement | null>(null);
 
@@ -111,37 +141,6 @@ export default function ChatPage() {
 
   function patchTurn(id: number, patch: Partial<Turn>) {
     setTurns((prev) => prev.map((t) => (t.id === id ? { ...t, ...patch } : t)));
-  }
-
-  // Plan-gate autonomy for the session project (server default applies
-  // until the stored setting loads).
-  useEffect(() => {
-    const project = shownProject.trim() || sessionProject || "";
-    if (!project) return;
-    let cancelled = false;
-    ws.GET("/api/chat/autonomy", { params: { query: { project } } })
-      .then(({ data }) => {
-        if (!cancelled && data && typeof data.autonomy === "string")
-          setAutonomy(data.autonomy);
-      })
-      .catch(() => {});
-    return () => {
-      cancelled = true;
-    };
-  }, [shownProject, sessionProject]);
-
-  async function saveAutonomy(level: string) {
-    const effectiveProject = shownProject.trim() || sessionProject || "";
-    if (!effectiveProject) return;
-    setAutonomy(level);
-    try {
-      await ws.POST("/api/chat/autonomy", {
-        body: { project: effectiveProject, autonomy: level },
-        headers: csrfHeaders(),
-      });
-    } catch {
-      // The per-turn autonomy override below still applies.
-    }
   }
 
   function blankTurn(role: "user" | "assistant", text: string): Turn {
@@ -216,7 +215,7 @@ export default function ChatPage() {
     try {
       const { response } = await ws.POST("/api/chat", {
         parseAs: "stream",
-        body: { message: outgoing, project: effectiveProject, autonomy, ...extra },
+        body: { message: outgoing, project: effectiveProject, ...extra },
         headers: csrfHeaders(),
       });
       if (response.status === 401) {
@@ -320,65 +319,24 @@ export default function ChatPage() {
         <span className="mb-1 block font-mono text-xs uppercase tracking-wider text-muted">
           Project
         </span>
-        <select
+        <input
           value={shownProject}
           onChange={(e) => {
             setProject(e.target.value);
             setProjectTouched(true);
           }}
-          className="h-10 w-full rounded-xl border border-steel/60 bg-abyss px-4 font-mono text-sm text-cloud outline-none focus:border-brand/60"
-        >
-          {shownProject ? null : <option value="">project</option>}
+          list="chat-project-options"
+          aria-label="Filter chat by project — type to filter"
+          placeholder="project"
+          className="h-10 w-full rounded-xl border border-steel/60 bg-abyss px-4 font-mono text-sm text-cloud outline-none placeholder:text-muted/60 focus:border-brand/60"
+        />
+        <datalist id="chat-project-options">
           {projects.map((p) => (
-            <option key={`${p.tenant}/${p.project}`} value={p.project}>
-              {p.project}
-            </option>
+            <option key={`${p.tenant}/${p.project}`} value={p.project} />
           ))}
-        </select>
-      </label>
-      <label className="mt-4 block">
-        <span className="mb-1 block font-mono text-xs uppercase tracking-wider text-muted">
-          Autonomy
-        </span>
-        <select
-          value={autonomy}
-          onChange={(e) => void saveAutonomy(e.target.value)}
-          data-autonomy
-          className="h-10 w-full rounded-xl border border-steel/60 bg-abyss px-4 font-mono text-sm text-cloud outline-none focus:border-brand/60"
-        >
-          <option value="ask-for-everything">Ask for everything</option>
-          <option value="only-important">Only important</option>
-          <option value="free">Free</option>
-        </select>
+        </datalist>
       </label>
       <div data-chat-thread className="mt-6 space-y-4">
-        {turns.length === 0 ? (
-          <div
-            data-chat-examples
-            className="rounded-2xl border border-steel/40 bg-abyss/60 p-4"
-          >
-            <p className="font-mono text-xs uppercase tracking-wider text-muted">
-              No turns yet — try an example
-            </p>
-            <ul className="mt-3 space-y-2">
-              {EXAMPLE_PROMPTS.map((prompt) => (
-                <li key={prompt}>
-                  <button
-                    type="button"
-                    data-example-prompt
-                    onClick={() => setMessage(prompt)}
-                    className="flex w-full items-center gap-3 rounded-xl border border-steel/30 bg-navy/60 p-3 text-left text-sm text-cloud transition-colors hover:border-brand/50"
-                  >
-                    <span className="shrink-0 rounded-md border border-brand/40 bg-brand/10 px-2 py-0.5 font-mono text-[10px] uppercase tracking-widest text-brand-300">
-                      Example
-                    </span>
-                    <span>{prompt}</span>
-                  </button>
-                </li>
-              ))}
-            </ul>
-          </div>
-        ) : null}
         {turns.map((turn) =>
           turn.role === "user" ? (
             <div key={turn.id} data-turn="user" className="flex justify-end">
@@ -559,6 +517,7 @@ export default function ChatPage() {
         <Button type="submit" variant="primary" disabled={busy || !message.trim()}>
           {busy ? "Working…" : "Send"}
         </Button>
+        <ExampleRotator onPick={(prompt) => setMessage(prompt)} />
       </form>
     </div>
   );

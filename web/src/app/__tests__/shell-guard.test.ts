@@ -323,17 +323,21 @@ test("chat plan offers carry Convert/Edit/Just-keep-it buttons", () => {
     );
   }
   assert.ok(
-    chat.includes("data-autonomy"),
-    "chat must keep the session autonomy picker (plan confirm gate setting)",
+    !chat.includes("data-autonomy"),
+    "chat carries no autonomy picker (autonomy belongs to task execution, server default applies)",
   );
 });
 
-test("chat project picker is a session dropdown with no hard-coded default", () => {
+test("chat project picker is a type-to-filter combobox with no hard-coded default", () => {
   const chat = read("src/app/workspace/chat/page.tsx");
-  assert.ok(chat.includes("<select"), "chat project picker must be a dropdown");
+  assert.ok(chat.includes("<datalist"), "chat project picker must be a filterable list");
+  assert.ok(
+    chat.includes('list="chat-project-options"'),
+    "chat project input must attach to the options datalist",
+  );
   assert.ok(
     chat.includes("projects"),
-    "chat project dropdown must list the session projects",
+    "chat project combobox must list the session projects",
   );
   assert.ok(
     !chat.includes('"demo"') && !chat.includes("'demo'"),

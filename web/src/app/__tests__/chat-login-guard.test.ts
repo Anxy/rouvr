@@ -30,11 +30,11 @@ test("chat helper text states the value prop in one line", () => {
   );
 });
 
-test("chat empty state shows four clickable examples, each labelled Example", () => {
+test("chat examples rotate as help text under the composer", () => {
   const chat = read("src/app/workspace/chat/page.tsx");
   assert.ok(
     chat.includes("data-chat-examples"),
-    "empty state must render a container marked with data-chat-examples",
+    "rotator must render a container marked with data-chat-examples",
   );
   assert.ok(
     chat.includes("EXAMPLE_PROMPTS"),
@@ -47,23 +47,25 @@ test("chat empty state shows four clickable examples, each labelled Example", ()
   );
   assert.ok(
     chat.includes("data-example-prompt"),
-    "every example must be clickable (data-example-prompt)",
+    "the rotating example must be clickable (data-example-prompt)",
   );
   // JSX text is split across lines; collapse whitespace before matching.
-  // (The label appears once in source inside the EXAMPLE_PROMPTS map, so it
-  // renders once per example at runtime.)
   const flat = chat.replace(/\s+/g, " ");
   assert.ok(
     flat.includes("> Example <"),
-    "every example must visibly carry the 'Example' label",
+    "the rotator must visibly carry the 'Example' label",
   );
   assert.ok(
-    chat.includes("turns.length === 0"),
-    "examples must render only when there are no turns yet",
+    chat.includes("ExampleRotator") && chat.includes("setInterval"),
+    "examples must rotate on a timer under the composer",
   );
   assert.ok(
-    chat.includes("onClick={() => setMessage(prompt)}"),
-    "clicking an example must prefill the composer (no send)",
+    !chat.includes("No turns yet"),
+    "the old empty-state header is gone (rotator is always-on help text)",
+  );
+  assert.ok(
+    chat.includes("onPick"),
+    "clicking the example must prefill the composer (no send)",
   );
 });
 

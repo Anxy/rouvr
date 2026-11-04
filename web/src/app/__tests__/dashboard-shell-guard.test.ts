@@ -219,3 +219,21 @@ test("shell slice keeps theme tokens, no hard-coded colour, no hand fetch", () =
     "shell reads auth state from the session, never fetches itself",
   );
 });
+
+test("planner opens a thread from the real plan entry, hands off to chat", () => {
+  const page = read("src/app/workspace/planner/page.tsx");
+  assert.ok(page.includes("data-plan-list"), "planner must mark its plan list");
+  assert.ok(page.includes("data-plan-thread"), "open plan must mark its thread");
+  assert.ok(
+    page.includes("parsePlanThread") && page.includes("/api/knowledge/{key}"),
+    "thread must parse the real entry body, never invent steps",
+  );
+  assert.ok(
+    page.includes("Open in chat"),
+    "every plan must hand off to the chat thread",
+  );
+  assert.ok(
+    !page.includes("fet" + "ch(") && !page.includes("XMLHttp" + "Request"),
+    "planner must not hand-write fetch",
+  );
+});

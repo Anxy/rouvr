@@ -44,9 +44,11 @@ export default function WorkspaceLoginPage() {
 
   return (
     <div className="mx-auto flex min-h-[70vh] w-full max-w-sm flex-col items-center justify-center text-center">
-      <img src="/rouvr-logo.svg" alt="" width={64} height={64} aria-hidden />
+      <img src="/rouvr-logo.svg" alt="" width={70} height={70} aria-hidden />
       <h1 className="sr-only">Sign in to Rouvr</h1>
-      <p className="mt-4 text-xl font-semibold text-white">Rouvr.</p>
+      <p className="mt-4 text-xl font-semibold tracking-tight text-white">
+        rouvr<span className="text-brand">.</span>
+      </p>
       <form onSubmit={submit} className="mt-8 w-full space-y-4 text-left">
         <label className="block">
           <span className="mb-1 block font-mono text-xs uppercase tracking-wider text-muted">

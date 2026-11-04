@@ -165,8 +165,8 @@ test("login shows the official mark and wordmark only", () => {
     "login must use the official rouvr.ai brand mark",
   );
   assert.ok(
-    login.includes("Rouvr."),
-    "login must carry the Rouvr. wordmark",
+    login.includes("rouvr") && login.includes("text-brand"),
+    "login must carry the marketing wordmark with brand dot",
   );
   assert.ok(
     !login.includes("RouvrMark") &&
@@ -175,7 +175,7 @@ test("login shows the official mark and wordmark only", () => {
   );
   const formAt = login.indexOf("<form");
   assert.ok(
-    formAt !== -1 && login.indexOf("Rouvr.") < formAt,
+    formAt !== -1 && login.indexOf("rouvr<span") !== -1 && login.indexOf("rouvr<span") < formAt,
     "wordmark must sit above the form",
   );
   assert.ok(

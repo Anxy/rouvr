@@ -77,6 +77,16 @@
   everything (tasks/evidence/retire/knowledge). Do NOT kill run.sh itself.
   Also fixed in the same batch: import-time HIDDEN_TESTS_ROOT default
   (probe #181 proved authoring+create, disk write failed without it).
+- **FREEZE PLAN 15:45 IST (knowledge:1215)**: `40945a9` pushed. Session
+  restart REQUIRED (my kills deafened the MCP stdio children; all MCP calls
+  -32602) — post-restart first action: `workhub_health`. P0 #178 PARKED
+  (never started; no 16:30 path) — demo plan lifecycle via chat Convert.
+  Worker redirected (evidence on #171): #172-177 in priority order,
+  #179/#180 = labelled placeholders, 16:30 hard stop on new tasks.
+  16:45: merge worker batch, full gate, prod build, :3000 rebuild,
+  fresh-clone check, push. 17:00: freeze report (hash, live, planned,
+  end-to-end demo path). Uncommitted remainder (ledger/web/design) stays
+  for owner review — do NOT sweep it in.
 
 ## 2. Canonical roadmap / status
 - DONE, all pushed: Steps 1–7 (workhub tasks 138–144, all `done`).

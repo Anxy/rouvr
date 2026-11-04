@@ -19,6 +19,22 @@
   --color-warning: #fbbf24;
   --color-danger: #f87171;
 
+  /* Figma shell tokens (design/figma-export/ROUVR-AI-Engineering-Workspace
+     src/index.css :root) ported as theme tokens. Existing tokens keep their
+     values; these add the Figma surfaces, lines, and status accents the
+     dashboard package renders. Figma --purple is deliberately NOT ported
+     (standing no-purple rail); status accents stay cyan/green/yellow/red. */
+  --color-panel: #071522;
+  --color-panel2: #091a29;
+  --color-line: #142a3a;
+  --color-line2: #1a3547;
+  --color-fog: #eaf3f8;
+  --color-dim: #71899a;
+  --color-mint: #38d9a9;
+  --color-honey: #f6bd52;
+  --color-coral: #fb7185;
+  --color-cyan2: #67d1ff;
+
   --animate-shimmer: shimmer 6s linear infinite;
   --animate-drift-a: drift-a 22s ease-in-out infinite;
   --animate-drift-b: drift-b 28s ease-in-out infinite;
@@ -92,6 +108,16 @@ html.light {
   --color-success: #047857;
   --color-warning: #b45309;
   --color-danger: #b91c1c;
+  --color-panel: #ffffff;
+  --color-panel2: #e8eef5;
+  --color-line: #a9bfd2;
+  --color-line2: #6d879c;
+  --color-fog: #1a3146;
+  --color-dim: #4a6275;
+  --color-mint: #047857;
+  --color-honey: #b45309;
+  --color-coral: #b91c1c;
+  --color-cyan2: #046687;
   --header-bar: #ffffff;
   --header-sheen: #102033;
   --header-line: #102033;

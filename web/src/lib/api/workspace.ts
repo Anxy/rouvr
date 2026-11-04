@@ -53,6 +53,63 @@ export interface ProxyPaths {
       };
     };
   };
+  "/api/tasks/{id}/evidence": {
+    post: {
+      parameters: { path: { id: string } };
+      requestBody: {
+        content: { "application/json": { kind: string; body: unknown } };
+      };
+      responses: {
+        200: { content: { "application/json": unknown } };
+        401: { content: { "application/json": { detail: string } } };
+        404: { content: { "application/json": { detail: string } } };
+        422: { content: { "application/json": { detail: string } } };
+      };
+    };
+  };
+  "/api/grants": {
+    post: {
+      requestBody: {
+        content: {
+          "application/json": {
+            scope: string;
+            expires_at: string;
+            approved_by: string;
+            contract_rev?: string;
+          };
+        };
+      };
+      responses: {
+        200: { content: { "application/json": GrantRow } };
+        401: { content: { "application/json": { detail: string } } };
+        403: { content: { "application/json": { detail: string } } };
+        422: { content: { "application/json": { detail: string } } };
+      };
+    };
+  };
+  "/api/grants/active": {
+    get: {
+      parameters: { query: { scope: string; contract_rev?: string } };
+      responses: {
+        200: { content: { "application/json": { active: boolean; grant: GrantRow | null } } };
+        401: { content: { "application/json": { detail: string } } };
+        422: { content: { "application/json": { detail: string } } };
+      };
+    };
+  };
+  "/api/tasks/{id}/seal": {
+    post: {
+      parameters: { path: { id: string } };
+      requestBody: { content: { "application/json": Record<string, never> } };
+      responses: {
+        200: { content: { "application/json": unknown } };
+        401: { content: { "application/json": { detail: string } } };
+        404: { content: { "application/json": { detail: string } } };
+        409: { content: { "application/json": { detail: string } } };
+        422: { content: { "application/json": { detail: string } } };
+      };
+    };
+  };
   "/api/chat": {
     post: {
       requestBody: {
@@ -169,6 +226,11 @@ export interface TaskRow {
   updated_at: string;
   attention?: string;
   pipeline?: PipelineState;
+  // Seal flags (ledger-computed from evidence rows + spec presence):
+  // sealing — hidden suite pending (async hold, retry seals it);
+  // needs_spec — worker host has no exec spec for this project.
+  sealing?: boolean;
+  needs_spec?: boolean;
 }
 
 export interface TaskDetail extends TaskRow {
@@ -204,6 +266,15 @@ export interface KnowledgeEntry extends KnowledgeHit {
   visibility: string;
 }
 
+export interface GrantRow {
+  id: number;
+  scope: string;
+  contract_rev: string;
+  expires_at: string;
+  approved_by: string;
+  created_at: string;
+}
+
 export const ws = createClient<ProxyPaths>();
 
 const CSRF_KEY = "rouvr.csrf_token";
@@ -227,6 +298,36 @@ export function setCsrfToken(token: string): void {
 export function clearCsrfToken(): void {
   try {
     sessionStorage.removeItem(CSRF_KEY);
+  } catch {
+    /* ignore */
+  }
+}
+
+const USER_KEY = "rouvr.username";
+
+// The ledger authenticated this username at login (LoginReply.username)
+// and set the session cookie alongside it. The shell greeting reads it
+// only while the session probe says authenticated; 401/logout clears it,
+// so a stale name can never render past its session.
+export function sessionUsername(): string | null {
+  try {
+    return sessionStorage.getItem(USER_KEY);
+  } catch {
+    return null;
+  }
+}
+
+export function setSessionUsername(name: string): void {
+  try {
+    sessionStorage.setItem(USER_KEY, name);
+  } catch {
+    /* private mode: greeting falls back to the daypart alone */
+  }
+}
+
+export function clearSessionUsername(): void {
+  try {
+    sessionStorage.removeItem(USER_KEY);
   } catch {
     /* ignore */
   }

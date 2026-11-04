@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/Button";
-import { setCsrfToken, ws } from "@/lib/api/workspace";
+import { setCsrfToken, setSessionUsername, ws } from "@/lib/api/workspace";
 
 export default function WorkspaceLoginPage() {
   const router = useRouter();
@@ -28,6 +28,7 @@ export default function WorkspaceLoginPage() {
         return;
       }
       setCsrfToken(data.csrf_token);
+      setSessionUsername(data.username);
       router.push("/workspace");
     } catch (err) {
       setError(err instanceof Error ? err.message : "login failed");

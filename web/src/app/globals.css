@@ -161,6 +161,11 @@ html.light .bg-\[\#0D2133\] {
   background-color: #e7eef5;
 }
 
+/* Figma nav active state: inset 2px brand bar with no layout shift. */
+.nav-item-active {
+  box-shadow: inset 2px 0 0 var(--color-brand);
+}
+
 .theme-icon-moon {
   display: none;
 }

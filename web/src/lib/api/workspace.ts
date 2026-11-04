@@ -193,6 +193,23 @@ export interface ProxyPaths {
       };
     };
   };
+  "/api/knowledge/{key}/usage": {
+    get: {
+      parameters: { path: { key: string } };
+      responses: {
+        200: { content: { "application/json": KnowledgeUsage } };
+        401: { content: { "application/json": { detail: string } } };
+        404: { content: { "application/json": { detail: string } } };
+      };
+    };
+  };
+}
+
+export interface KnowledgeUsage {
+  key: string;
+  id: number;
+  applied_to_tasks: number;
+  last_used_at: string | null;
 }
 
 export interface LoginReply {

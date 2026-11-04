@@ -67,32 +67,25 @@ test("kind counts tally the loaded shortlist, ignoring foreign kinds", () => {
 
 // --- explainer -----------------------------------------------------------------
 
-test("explainer card states what the system is in two sentences", () => {
+test("header states what the system is, honestly", () => {
   const page = read(PAGE);
-  assert.ok(page.includes("data-explainer"), "explainer must be marked");
   const flat = page.replace(/\s+/g, " ");
   for (const phrase of [
-    "approved decisions",
-    "task outcomes and chat",
-    "human",
-    "confirms rules",
-    "verified",
+    "Institutional memory",
+    "Versioned project memory",
+    "reusable memory for future tasks",
   ]) {
-    assert.ok(flat.includes(phrase), `explainer must mention "${phrase}"`);
+    assert.ok(flat.includes(phrase), `header must mention "${phrase}"`);
   }
 });
 
 // --- kind counts -----------------------------------------------------------------
 
-test("kind counts row labels the loaded shortlist as showing N", () => {
+test("folders aside tallies the loaded shortlist as showing N", () => {
   const page = read(PAGE);
-  assert.ok(page.includes("data-kind-counts"), "counts row must be marked");
-  assert.ok(page.includes("countKinds"), "counts must tally the loaded hits");
-  assert.ok(page.includes("showing"), "counts must label themselves as showing N");
-  assert.ok(
-    page.includes("KIND_OPTIONS.map"),
-    "counts row must iterate the shared kind options",
-  );
+  assert.ok(page.includes("countKinds"), "folders must tally the loaded hits");
+  assert.ok(page.includes("showing"), "folders must label themselves as showing N");
+  assert.ok(page.includes("match filters"), "folders must state the filter match");
   assert.deepEqual(
     [...KIND_OPTIONS].sort(),
     ["decision", "note", "rule", "skill", "snapshot"],
@@ -100,18 +93,19 @@ test("kind counts row labels the loaded shortlist as showing N", () => {
   );
 });
 
-test("no new ledger endpoint for totals; search/detail/history only", () => {
+test("no ledger endpoint for totals; search/detail/history/usage only", () => {
   const page = read(PAGE);
   assert.ok(page.includes('"/api/knowledge/search"'));
   assert.ok(page.includes('"/api/knowledge/{key}"'));
+  assert.ok(page.includes('"/api/knowledge/{key}/usage"'));
   assert.ok(
     !page.includes("/api/knowledge/counts"),
     "page must not fetch a counts endpoint",
   );
   assert.equal(
     (page.match(/ws\.GET\(/g) ?? []).length,
-    3,
-    "page fetches exactly three endpoints: search, detail, history",
+    4,
+    "page fetches exactly four endpoints: search, detail, history, usage",
   );
   assert.ok(
     !page.includes("/v1/knowledge"),
@@ -167,7 +161,7 @@ test("default search sends no project filter (the 0-entries trap)", () => {
 
 // --- per-entry version, no invented usage ----------------------------------------------
 
-test("versions render from data; usage stats are omitted entirely", () => {
+test("versions render from data; usage renders from the usage endpoint or em dash", () => {
   const page = read(PAGE);
   assert.ok(page.includes("data-version"), "entries must show a version");
   assert.ok(
@@ -178,10 +172,18 @@ test("versions render from data; usage stats are omitted entirely", () => {
     page.includes("v{selected.version}"),
     "detail version must render the entry's real version field",
   );
+  assert.ok(
+    page.includes("applied_to_tasks"),
+    "usage line must read the ledger usage field",
+  );
+  assert.ok(
+    page.includes("Usage loading") || page.includes("Usage —"),
+    "unloaded usage must show a loading or em-dash state, never a number",
+  );
   for (const invented of ["used by", "last applied", "lastApplied", "usedBy"]) {
     assert.ok(
       !page.includes(invented),
-      `page must not claim "${invented}" without task data to source it`,
+      `page must not claim "${invented}" outside the sourced usage line`,
     );
   }
 });
@@ -195,7 +197,7 @@ test("knowledge slice keeps theme tokens, no hard-coded colour", () => {
   }
   const page = read(PAGE);
   assert.ok(
-    page.includes("text-muted") && page.includes("text-cloud"),
-    "knowledge must keep theme tokens",
+    page.includes("text-dim") && page.includes("text-fog"),
+    "knowledge must keep Figma theme tokens",
   );
 });

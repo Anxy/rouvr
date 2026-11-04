@@ -59,6 +59,17 @@ def test_login_sets_httponly_lax_cookie_and_csrf(user_client):
     assert "SameSite=Lax" in raw or "samesite=lax" in raw.lower()
 
 
+def test_remember_me_extends_cookie_and_default_stays_short(user_client):
+    plain = _login(user_client)
+    assert "Max-Age=43200" in plain.headers.get("set-cookie", ""), plain.headers.get("set-cookie")
+    remembered = user_client.post("/auth/login", data={
+        "username": "admin", "password": "admin-test-password-0123456789",
+        "remember": "true"})
+    assert remembered.status_code == 200, remembered.text
+    raw = remembered.headers.get("set-cookie", "")
+    assert "Max-Age=2592000" in raw, raw
+
+
 def test_session_cookie_accesses_tasks(user_client):
     c = TestClient(user_client.app, cookies=_login(user_client).cookies)
     r = c.get("/api/v1/tasks")

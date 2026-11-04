@@ -35,6 +35,9 @@ log = logging.getLogger(__name__)
 
 COOKIE_NAME = "rouvr_session"
 SESSION_LIFETIME_S = 12 * 3600
+# Industry-standard persistent login for private devices (remember-me):
+# 30 days, issued only when the login form explicitly opts in.
+REMEMBER_LIFETIME_S = 30 * 24 * 3600
 ADMIN_USERNAME = "admin"
 EMAIL_DOMAIN = "local"
 ADMIN_TENANT = "demo"
@@ -255,7 +258,13 @@ def build_auth_router(
                                     headers={"Retry-After": str(wait)})
             return JSONResponse({"detail": "invalid username or password"}, status_code=401)
         throttle.record(ip, True)
-        token = await get_strategy().write_token(user)
+        try:
+            form = await request.form()
+            remember = str(form.get("remember", "")).lower() in ("1", "true", "on", "yes")
+        except Exception:
+            remember = False
+        lifetime = REMEMBER_LIFETIME_S if remember else SESSION_LIFETIME_S
+        token = await JWTStrategy(secret=secret, lifetime_seconds=lifetime).write_token(user)
         body = {
             "id": str(user.id),
             "username": user.email.split("@")[0],
@@ -266,7 +275,7 @@ def build_auth_router(
         resp = JSONResponse(body)
         resp.set_cookie(
             transport.cookie_name, token,
-            max_age=transport.cookie_max_age, path=transport.cookie_path,
+            max_age=lifetime, path=transport.cookie_path,
             secure=transport.cookie_secure, httponly=transport.cookie_httponly,
             samesite=transport.cookie_samesite,
         )

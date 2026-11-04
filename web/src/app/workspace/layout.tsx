@@ -101,6 +101,15 @@ function Avatar({ name, size = 30 }: { name: string; size?: number }) {
 function AppShell({ children }: { children: React.ReactNode }) {
   const { status, tenant, project, projects, username, logout } = useSession();
   const pathname = usePathname();
+  // The login page stands alone: no sidebar, no topbar — just the brand,
+  // the fields, and remember-me. Everything else renders inside the shell.
+  if (pathname === "/workspace/login") {
+    return (
+      <div className="min-h-screen bg-abyss">
+        <main className="mx-auto w-full max-w-[1600px] px-8 py-[30px]">{children}</main>
+      </div>
+    );
+  }
   const context = contextLabel(tenant, project, Math.max(0, projects.length - 1));
   const authed = status === "authenticated";
   // Real session user + real client date. suppressHydrationWarning: the

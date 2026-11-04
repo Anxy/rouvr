@@ -6,7 +6,7 @@ import createClient from "openapi-fetch";
 export interface ProxyPaths {
   "/api/auth/login": {
     post: {
-      requestBody: { content: { "application/json": { username: string; password: string } } };
+      requestBody: { content: { "application/json": { username: string; password: string; remember?: boolean } } };
       responses: {
         200: { content: { "application/json": LoginReply } };
         401: { content: { "application/json": { detail: string } } };

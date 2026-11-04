@@ -179,11 +179,18 @@ test("login shows the official mark and wordmark only", () => {
     "wordmark must sit above the form",
   );
   assert.ok(
-    !login.includes("gradient"),
-    "login must keep theme tokens, no gradients",
+    login.includes("Make it happen."),
+    "login must carry the marketing tagline under the wordmark",
   );
   assert.ok(
-    !/#[0-9a-fA-F]{3,8}/.test(login),
-    "login must not hard-code hex colours",
+    login.includes("linear-gradient(100deg") && login.includes("#08a9f0"),
+    "tagline must use the marketing white-to-brand gradient",
+  );
+  // The marketing gradient is fixed brand art (same exemption as the
+  // logo fills); everything else must stay on theme tokens.
+  const withoutTagline = login.replace(/linear-gradient\([^)]*\)/g, "");
+  assert.ok(
+    !/#[0-9a-fA-F]{3,8}/.test(withoutTagline),
+    "login must not hard-code hex colours outside the brand tagline",
   );
 });

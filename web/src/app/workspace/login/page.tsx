@@ -49,6 +49,15 @@ export default function WorkspaceLoginPage() {
       <p className="mt-4 text-xl font-semibold tracking-tight text-white">
         rouvr<span className="text-brand">.</span>
       </p>
+      <p
+        className="mt-1 bg-clip-text text-lg font-semibold tracking-tight text-transparent"
+        style={{
+          backgroundImage:
+            "linear-gradient(100deg, #fff 0, #9fe2ff 25%, #08a9f0 50%, #9fe2ff 75%, #fff 100%)",
+        }}
+      >
+        Make it happen.
+      </p>
       <form onSubmit={submit} className="mt-8 w-full space-y-4 text-left">
         <label className="block">
           <span className="mb-1 block font-mono text-xs uppercase tracking-wider text-muted">

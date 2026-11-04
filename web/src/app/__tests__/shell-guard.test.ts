@@ -69,7 +69,13 @@ test("workspace sources contain no marketing markers", () => {
   for (const file of files) {
     const text = readFileSync(file, "utf8");
     const rel = path.relative(WEB_ROOT, file);
-    if (text.includes(MARKETING_TAGLINE))
+    // The standalone login page (no app shell) carries the official
+    // brand block by explicit user direction; everywhere else the
+    // tagline is a leak.
+    if (
+      text.includes(MARKETING_TAGLINE) &&
+      !(rel === "src/app/workspace/login/page.tsx" && text.includes("/rouvr-logo.svg"))
+    )
       offenders.push(`${rel}: marketing tagline`);
     if (MARKETING_COMPONENT_IMPORT.test(text))
       offenders.push(`${rel}: marketing component/nav import`);

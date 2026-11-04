@@ -78,19 +78,19 @@ flowchart LR
 
 ## Quickstart (fresh clone)
 
-Toolchains: Python 3.12+ and Node 22 + pnpm. Without a Meta key everything
-below runs on the offline stub provider (chat plans and sealing need the
-live model).
+Toolchains: Python 3.12+, Node 22 + pnpm, and make (Node version is
+pinned in `.nvmrc`). Without a Meta key everything below runs on the
+offline stub provider (chat plans and hidden-test sealing need the live
+model; the stub works without one).
 
 ```bash
-git clone https://github.com/Anxy/rouvr.git && cd rouvr
+git clone --depth 1 https://github.com/Anxy/rouvr.git && cd rouvr
+# full history is ~237MB; --depth 1 keeps the fresh clone small
 git checkout rouvr-development    # the active branch; main does not have this yet
-make setup PY=python3.12         # project-local .venv + requirements.txt
+make setup PY=python3.12
 ```
 
-Python must be 3.12 (`make setup` uses the system `python3`, which fails on
-newer interpreters — tiktoken has no buildable wheel there). If `python3.12`
-is missing, install it first; `uv` is not required.
+Needs the `python3.12` binary; install it first if missing.
 
 Export the three lite secrets before anything else. The first process to
 create `.rouvr/ledger.db` (even the test suite, which builds the app at
@@ -100,7 +100,7 @@ import) fixes the admin password, so later exports cannot change it:
 export ROUVR_AUTH_SECRET=$(openssl rand -hex 32)
 export ROUVR_LEDGER_TOKEN=$(openssl rand -hex 16)
 export ROUVR_ADMIN_PASSWORD=<a strong password, 12+ chars>
-make test-public                  # green (~7 min), no services needed
+make test-public                  # green (~2 min), no services needed
 ```
 
 If sign-in ever fails with a fresh password, stop the ledger, `rm -rf .rouvr`,
@@ -125,20 +125,26 @@ Run the web workspace (terminal 3):
 
 ```bash
 cd web && pnpm install && pnpm build --webpack && pnpm start --port 3000
-# open http://localhost:3000/workspace/login, sign in as admin
+# open http://localhost:3000/workspace/login, sign in as `admin`
 # with ROUVR_ADMIN_PASSWORD, then chat a plan, approve it in the
 # planner, and watch it in the execute view
 ```
 
+The ledger defaults to `http://127.0.0.1:8221`. If yours runs elsewhere,
+export `ROUVR_LEDGER_URL` (e.g. `http://127.0.0.1:8222`) before starting
+the web app. `pnpm start --port 3000` sets the web port; change `3000`
+to serve elsewhere.
+
 (`pnpm dev` also serves the pages, but judge with the production build
 above — it is what the screenshots and recordings were made against.)
 
-To use a Meta model instead of the stub (required for plan authoring and
-sealing), export before starting the ledger:
+To use a Meta model instead of the stub (required for chat plan authoring
+and hidden-test sealing; the stub works without one), export before
+starting the ledger:
 
 ```bash
 export ROUVR_MODEL_PROVIDER=meta
-export META_API_KEY=<your key> META_MODEL_API_BASE_URL=<model endpoint> META_MODEL_NAME=muse-spark-1.3
+export META_API_KEY=<your key> META_MODEL_API_BASE_URL=https://api.meta.ai/v1 META_MODEL_NAME=muse-spark-1.3-contributor
 # or local open weights: ROUVR_MODEL_PROVIDER=ollama OLLAMA_MODEL=llama3.1
 ```
 
@@ -146,7 +152,7 @@ export META_API_KEY=<your key> META_MODEL_API_BASE_URL=<model endpoint> META_MOD
 
 | Role | Job | Model / tool | How it runs |
 |---|---|---|---|
-| Supervisor chat | One turn → plan offer or tasks (`POST /v1/chat`) | `muse-spark-1.3` via the **Meta Model API key**; stub when unset | Server-side in the ledger, streamed as SSE |
+| Supervisor chat | One turn → plan offer or tasks (`POST /v1/chat`) | `muse-spark-1.3-contributor` via the **Meta Model API key**; stub when unset | Server-side in the ledger, streamed as SSE |
 | Approver (you) | Planner Approve; seals hidden suites at approve time | Same model via the ledger | Approve button → `POST /v1/plans/{slug}/approve` |
 | Coder / worker | Claim → attempt → result on a leased task | Headless `muse` CLI (Muse Code subscription) or `META_API_KEY` | Any host against the ledger; the execute view only observes |
 | Reviewer | Pass/fail verdicts; done needs contract + evidence + passing head | No separate persona UI — verdicts are recorded via the API | Ledger receipts |

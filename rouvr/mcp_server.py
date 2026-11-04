@@ -10,6 +10,7 @@ Serves streamable HTTP on 127.0.0.1:8231/mcp (override with ROUVR_MCP_PORT).
 """
 from __future__ import annotations
 
+import ast
 import json
 import os
 
@@ -17,6 +18,42 @@ import httpx
 from mcp.server.mcpserver import MCPServer
 
 LEDGER = os.environ.get("WORKHUB_BASE_URL", "http://127.0.0.1:8221").rstrip("/")
+
+
+def _load_local_model_env(path: str | None = None) -> None:
+    """Host-launched servers (plugin run.sh) inherit only the ledger token;
+    model creds live in the repo's 0600 env file — the same file
+    start_ledger.py loads. Import-time load so suite authoring has a real
+    provider in any launch. Explicit env always wins (setdefault); missing
+    or unreadable file simply leaves the stub, which fails closed.
+    Also fills HIDDEN_TESTS_ROOT with the repo default when unset, so the
+    sealed suite lands on disk in every launch (same layout
+    start_ledger.py uses); without it the write fails AFTER the task is
+    created."""
+    here = os.path.dirname(os.path.abspath(__file__))
+    repo_root = os.path.dirname(here)
+    if not os.environ.get("ROUVR_MODEL_PROVIDER"):
+        if path is None:
+            path = os.path.join(repo_root, ".data", "meta-provider-env.sh")
+        try:
+            with open(path) as fh:
+                lines = fh.read().splitlines()
+        except OSError:
+            lines = []
+        for line in lines:
+            line = line.strip()
+            if not line or line.startswith("#") or "=" not in line:
+                continue
+            k, v = line.split("=", 1)
+            k = k.replace("export ", "").strip()
+            v = v.strip().strip("'\"")
+            if k and k not in os.environ:
+                os.environ[k] = v
+    if not os.environ.get("HIDDEN_TESTS_ROOT"):
+        os.environ["HIDDEN_TESTS_ROOT"] = os.path.join(repo_root, ".data", "hidden-tests")
+
+
+_load_local_model_env()
 
 mcp = MCPServer("rouvr-workhub", instructions=(
     "Deliver coding tasks to WorkHub with workhub_create_task, then launch the "
@@ -42,9 +79,51 @@ def _prose_warnings(description: str, criteria: list[str]) -> list[str]:
     return []
 
 
-def _author_hidden_suite(criteria: list[str]) -> dict[str, str]:
+_SUITE_MAX_TOKENS = 6000
+_SUITE_MIN_TESTS = 5
+_SUITE_MAX_TESTS = 8
+_SUITE_TIMEOUT = 90
+
+
+def _validate_suite(raw: str, ids: list[str]) -> dict[str, str]:
+    """Parse + contract-check one authoring turn. Raises RuntimeError (fail
+    closed) on anything unsealable: unparsable, not exactly one file, bad
+    name, wrong test count, or a criterion with no citing test."""
+    try:
+        files = json.loads(raw)
+    except ValueError:
+        raise RuntimeError("test_author returned unparsable output; create refused") from None
+    if not isinstance(files, dict) or len(files) != 1 or \
+            any(not isinstance(k, str) or not isinstance(v, str) for k, v in files.items()):
+        raise RuntimeError("test_author must return exactly one test file; create refused")
+    from rouvr.hiddentests import HIDDEN_FILE_PREFIX, is_hidden_suite_name
+    name, content = next(iter(files.items()))
+    if not is_hidden_suite_name(name):
+        raise RuntimeError(f"test_author must name hidden suites "
+                           f"{HIDDEN_FILE_PREFIX}*.py, got: {name!r}; create refused")
+    try:
+        tree = ast.parse(content)
+    except SyntaxError as e:
+        raise RuntimeError(f"test_author suite does not parse as Python ({e}); "
+                           "create refused") from None
+    n_tests = sum(1 for node in ast.walk(tree)
+                  if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
+                  and node.name.startswith("test_"))
+    if not _SUITE_MIN_TESTS <= n_tests <= _SUITE_MAX_TESTS:
+        raise RuntimeError(f"test_author suite has {n_tests} tests, need "
+                           f"{_SUITE_MIN_TESTS}-{_SUITE_MAX_TESTS}; create refused")
+    for cid in ids:
+        if f"[{cid}]" not in content:
+            raise RuntimeError(f"test_author suite never cites criterion [{cid}]; "
+                               "create refused")
+    return files
+
+
+def _author_hidden_suite(criteria: list[str], timeout: float = _SUITE_TIMEOUT) -> dict[str, str]:
     """Author hidden checks via a test_author model turn. Never placeholders.
 
+    One file, 5-8 focused tests, each citing its criterion id; bounded by
+    max_tokens with a single concise retry on length truncation.
     Override point for tests: monkeypatch rouvr.mcp_server._author_hidden_suite.
     Raises RuntimeError (fail closed, nothing written) when no model is
     available or the model output is unusable — the create is refused
@@ -56,34 +135,47 @@ def _author_hidden_suite(criteria: list[str]) -> dict[str, str]:
         raise RuntimeError(
             "hidden suite needs a real model: set ROUVR_MODEL_PROVIDER "
             "(meta|ollama|openrouter) with its key, then retry the create")
-    # Full-suite generation is the longest single model call on the create
-    # path; the 60 s provider default trips under slow-model conditions.
-    raw = provider.chat([
-        {"role": "system", "content": (
-            "Write pytest checks for the acceptance criteria. Reply with ONLY a "
-            "JSON object mapping flat filenames (test_rouvr_hidden_*.py, no "
-            "directories) to file "
-            "contents. Every test name must start with test_. No placeholders: "
-            "every test must assert real behavior. Assert behavior, never exact "
-            "production string literals: do not require the implementation to "
-            "contain any particular string (such as module __all__ contents or "
-            "identifier spellings as strings) — compliant code must be writable "
-            "without tripping literal-cheat detection.")},
-        {"role": "user", "content": "\n".join(f"- {c}" for c in criteria)}],
-        timeout=300)
-    try:
-        files = json.loads(raw)
-    except ValueError:
-        raise RuntimeError("test_author returned unparsable output; create refused") from None
-    if not isinstance(files, dict) or not files or \
-            any(not isinstance(k, str) or not isinstance(v, str) for k, v in files.items()):
-        raise RuntimeError("test_author returned an unusable suite; create refused")
-    from rouvr.hiddentests import HIDDEN_FILE_PREFIX, is_hidden_suite_name
-    for name in files:
-        if not is_hidden_suite_name(name):
-            raise RuntimeError(f"test_author must name hidden suites "
-                               f"{HIDDEN_FILE_PREFIX}*.py, got: {name!r}; create refused")
-    return files
+    ids = [f"c{i}" for i in range(1, len(criteria) + 1)]
+    labeled = "\n".join(f"[{i}] {c}" for i, c in zip(ids, criteria))
+    system = (
+        "Write ONE pytest file with 5-8 focused tests for the acceptance "
+        "criteria below. Reply with ONLY a JSON object mapping a single flat "
+        "filename (test_rouvr_hidden_*.py, no directories) to the file "
+        "contents. Rules: every test name starts with test_; each test cites "
+        "its criterion id ([c1], ...) in a comment; stdlib + pytest only; no "
+        "fixtures/helpers beyond what the tests need; no prose outside code; "
+        "target under 150 lines. No placeholders: every test must assert "
+        "real behavior. Assert behavior, never exact production string "
+        "literals: do not require the implementation to contain any particular "
+        "string (such as module __all__ contents or identifier spellings as "
+        "strings) — compliant code must be writable without tripping "
+        "literal-cheat detection.")
+
+    def _attempt(concise: bool = False) -> tuple[str, str | None]:
+        user = labeled + ("\n\nBe more concise: fewer lines, same 5-8 tests "
+                          "and coverage." if concise else "")
+        messages = [{"role": "system", "content": system},
+                    {"role": "user", "content": user}]
+        # reasoning_effort=low: measured 999 reasoning tokens / 15 s vs
+        # 6000+ tokens / 60 s+ without it (model burns budget thinking).
+        complete = getattr(provider, "chat_complete", None)
+        if complete is None:  # legacy/test providers expose content only
+            return provider.chat(messages, timeout=timeout,
+                                 max_tokens=_SUITE_MAX_TOKENS,
+                                 reasoning_effort="low"), None
+        env = complete(messages, timeout=timeout, max_tokens=_SUITE_MAX_TOKENS,
+                       reasoning_effort="low")
+        return env.get("content") or "", env.get("finish_reason")
+
+    raw, finish = _attempt()
+    if finish == "length":
+        raw, finish = _attempt(concise=True)
+        try:
+            return _validate_suite(raw, ids)
+        except RuntimeError as e:
+            raise RuntimeError(f"test_author hit max_tokens twice even when concise "
+                               f"({e}); create refused") from e
+    return _validate_suite(raw, ids)
 
 
 @mcp.tool()
@@ -291,6 +383,30 @@ def workhub_create_task(title: str, description: str, acceptance_criteria: list[
     return task
 
 
+@mcp.tool()
+def workhub_health() -> dict:
+    """Supervisor startup probe: ledger reachability, model provider for
+    suite authoring, hidden-tests writability. Never raises — a broken
+    probe must report, not join the outage. Call at session start; if
+    provider is 'stub', workhub_create_task will refuse (fail closed)."""
+    status: dict = {}
+    try:
+        with _ledger() as c:
+            r = c.get("/health")
+            status["ledger"] = "ok" if r.status_code == 200 else f"http-{r.status_code}"
+    except Exception as e:
+        status["ledger"] = f"unreachable: {type(e).__name__}"
+    try:
+        from backend.rouvr_models.providers import get_provider
+        status["provider"] = get_provider().name
+    except Exception as e:
+        status["provider"] = f"error: {type(e).__name__}"
+    root = os.environ.get("HIDDEN_TESTS_ROOT", "/srv/rouvr/hidden-tests")
+    status["hidden_tests_root"] = root
+    status["hidden_tests_writable"] = os.access(root, os.W_OK) if os.path.isdir(root) else None
+    return status
+
+
 def _verified_rules(tenant: str, project: str) -> list[dict]:
     """Context bundle: latest verified rules for a project (coder/reviewer)."""
     try:
@@ -450,9 +566,23 @@ def workhub_show_task(task_id: int) -> dict:
                        "submits": kinds.count("submit_attempt"),
                        "messages": kinds.count("agent_message"),
                        "knowledge_citations": sorted(set(kc))}
-    task["progress"] = (task.get("state") if task.get("state") in ("done", "blocked")
+    task["progress"] = (task.get("state") if task.get("state") in ("done", "blocked", "retired")
                         else next((_PROGRESS[k] for k in reversed(kinds) if k in _PROGRESS), "queued"))
     return _annotate(task)
+
+
+@mcp.tool()
+def workhub_retire_task(task_id: int, reason: str, idempotency_key: str = "") -> dict:
+    """Retire a task with a mandatory reason (open/blocked/failed only; terminal).
+    The reason lands as retire_note evidence; done stays reserved for verified
+    work. Retired tasks leave attention, progress, and window-reaping surfaces.
+    Idempotent on idempotency_key (a unique key per decision)."""
+    import time
+    key = idempotency_key or f"retire-{task_id}-{time.time_ns()}"
+    with _ledger() as c:
+        return c.post(f"/v1/tasks/{task_id}/retire",
+                      json={"reason": reason, "idempotency_key": key}
+                      ).raise_for_status().json()
 
 
 @mcp.tool()
@@ -595,7 +725,7 @@ def _stale_windows(windows: list[dict], states: dict[int, str]) -> list[dict]:
     (orphaned window). Only called with states from a successful ledger
     fetch, so 'unknown' never means 'ledger unreachable'."""
     return [w for w in windows
-            if states.get(w["task_id"], "unknown") in ("done", "blocked", "unknown")]
+            if states.get(w["task_id"], "unknown") in ("done", "blocked", "retired", "unknown")]
 
 
 def _live_windows() -> tuple[list[dict], dict[int, str]]:

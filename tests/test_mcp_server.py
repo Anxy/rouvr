@@ -38,9 +38,10 @@ async def test_mcp_tools_registered():
                      "knowledge_history", "knowledge_update", "knowledge_confirm",
                      "knowledge_store", "knowledge_compact", "knowledge_snapshot",
                      "knowledge_store_and_close", "knowledge_curate",
-                     "workhub_create_task", "workhub_list_tasks",
+                     "workhub_create_task", "workhub_health", "workhub_list_tasks",
                      "knowledge_context_bundle_tool",
-                     "workhub_show_task", "workhub_post_message",
+                     "workhub_show_task", "workhub_retire_task",
+                     "workhub_post_message",
                      "workhub_read_messages", "workhub_peer_sessions",
                      "workhub_message_agent", "workhub_agent_windows",
                      "workhub_reap_windows", "rouvr_start_task", "rouvr_schedule",
@@ -231,9 +232,54 @@ def test_mcp_create_refuses_without_model(monkeypatch, ledger_url, tmp_path):
     import importlib
     import rouvr.mcp_server as ms
     importlib.reload(ms)
-    with pytest.raises(RuntimeError, match="hidden suite"):
+    with pytest.raises(RuntimeError, match="ROUVR_MODEL_PROVIDER"):
         ms.workhub_create_task("t-refused", "d", ["c1"], "acme", "site")
     assert not (tmp_path / "hidden").exists()
+
+
+def test_mcp_model_env_loader_prefers_explicit_env(monkeypatch, tmp_path):
+    """Observability fix: the loader fills missing creds from a file but
+    never overrides explicit env, and ignores a missing file (stub stays)."""
+    import os
+    import rouvr.mcp_server as ms
+    saved = {k: os.environ.get(k)
+             for k in ("ROUVR_MODEL_PROVIDER", "META_API_KEY", "HIDDEN_TESTS_ROOT")}
+    try:
+        f = tmp_path / "meta.env"
+        f.write_text("export ROUVR_MODEL_PROVIDER=meta\nexport META_API_KEY=k\n")
+        os.environ.pop("ROUVR_MODEL_PROVIDER", None)
+        os.environ.pop("META_API_KEY", None)
+        os.environ.pop("HIDDEN_TESTS_ROOT", None)
+        ms._load_local_model_env(str(f))
+        assert os.environ["ROUVR_MODEL_PROVIDER"] == "meta"
+        assert os.environ["HIDDEN_TESTS_ROOT"].endswith(os.path.join(".data", "hidden-tests"))
+        os.environ["ROUVR_MODEL_PROVIDER"] = "stub"  # explicit env wins
+        ms._load_local_model_env(str(f))
+        assert os.environ["ROUVR_MODEL_PROVIDER"] == "stub"
+        os.environ.pop("ROUVR_MODEL_PROVIDER", None)
+        ms._load_local_model_env(str(tmp_path / "nope.env"))  # missing: no crash
+        assert "ROUVR_MODEL_PROVIDER" not in os.environ
+    finally:
+        for k, v in saved.items():
+            if v is None:
+                os.environ.pop(k, None)
+            else:
+                os.environ[k] = v
+
+
+def test_mcp_health_reports_stub_instead_of_breaking(monkeypatch, ledger_url, tmp_path):
+    """Observability: with no model, the probe reports provider=stub and a
+    reachable ledger instead of raising — silence becomes a visible row."""
+    monkeypatch.setenv("WORKHUB_BASE_URL", ledger_url)
+    monkeypatch.setenv("HIDDEN_TESTS_ROOT", str(tmp_path / "hidden"))
+    monkeypatch.setenv("ROUVR_MODEL_PROVIDER", "stub")
+    import importlib
+    import rouvr.mcp_server as ms
+    importlib.reload(ms)
+    status = ms.workhub_health()
+    assert status["ledger"] == "ok"
+    assert status["provider"] == "stub"
+    assert status["hidden_tests_writable"] is None  # root not created yet
 
 
 def test_mcp_author_rejects_malformed_model_output(monkeypatch):
@@ -265,20 +311,110 @@ def test_mcp_author_rejects_malformed_model_output(monkeypatch):
         ms._author_hidden_suite(["c1"])
 
 
+def _compliant_suite(n=5, cite="[c1]", name="test_rouvr_hidden_x.py"):
+    import json
+    lines = []
+    for i in range(1, n + 1):
+        lines += [f"def test_x{i}():  # {cite}",
+                  f"    assert {i} + {i} == {2 * i}", ""]
+    return json.dumps({name: "\n".join(lines)})
+
+
+def test_mcp_author_rejects_wrong_test_count(monkeypatch):
+    """Bounded suite: fewer than 5 or more than 8 tests refuse."""
+    import rouvr.mcp_server as ms
+
+    class Few:
+        name = "meta"
+        def chat(self, messages, **kw):
+            return _compliant_suite(n=3)
+    monkeypatch.setattr("backend.rouvr_models.providers.get_provider", lambda *a, **k: Few())
+    with pytest.raises(RuntimeError, match="5-8"):
+        ms._author_hidden_suite(["c1"])
+
+
+def test_mcp_author_rejects_missing_criterion_cite(monkeypatch):
+    """Every criterion needs a citing test."""
+    import rouvr.mcp_server as ms
+
+    class Uncited:
+        name = "meta"
+        def chat(self, messages, **kw):
+            return _compliant_suite(n=5, cite="# no criterion here")
+    monkeypatch.setattr("backend.rouvr_models.providers.get_provider", lambda *a, **k: Uncited())
+    with pytest.raises(RuntimeError, match="cites criterion"):
+        ms._author_hidden_suite(["c1"])
+
+
+def test_mcp_author_rejects_second_file(monkeypatch):
+    """Exactly one test file per suite."""
+    import json
+    import rouvr.mcp_server as ms
+
+    class Two:
+        name = "meta"
+        def chat(self, messages, **kw):
+            first = json.loads(_compliant_suite())
+            first["test_rouvr_hidden_y.py"] = "def test_y1():  # [c1]\n    assert 1\n"
+            return json.dumps(first)
+    monkeypatch.setattr("backend.rouvr_models.providers.get_provider", lambda *a, **k: Two())
+    with pytest.raises(RuntimeError, match="exactly one"):
+        ms._author_hidden_suite(["c1"])
+
+
+def test_mcp_author_retries_once_on_length_then_seals(monkeypatch):
+    """Length truncation retries once concise, then seals."""
+    import rouvr.mcp_server as ms
+    calls = []
+
+    class Truncating:
+        name = "meta"
+        def chat_complete(self, messages, **kw):
+            calls.append(messages)
+            if len(calls) == 1:
+                return {"content": '{"test_rouvr_hidden_x.py": "def test_x', "finish_reason": "length"}
+            return {"content": _compliant_suite(), "finish_reason": "stop"}
+    monkeypatch.setattr("backend.rouvr_models.providers.get_provider", lambda *a, **k: Truncating())
+    files = ms._author_hidden_suite(["c1"])
+    assert list(files) == ["test_rouvr_hidden_x.py"]
+    assert len(calls) == 2
+    assert "concise" in calls[1][-1]["content"].lower()
+
+
+def test_mcp_author_fails_closed_after_second_length(monkeypatch):
+    """Two truncations in a row refuse with a clear reason."""
+    import rouvr.mcp_server as ms
+
+    class AlwaysLong:
+        name = "meta"
+        def chat_complete(self, messages, **kw):
+            return {"content": '{"half": ', "finish_reason": "length"}
+    monkeypatch.setattr("backend.rouvr_models.providers.get_provider", lambda *a, **k: AlwaysLong())
+    with pytest.raises(RuntimeError, match="twice"):
+        ms._author_hidden_suite(["c1"])
+
+
 def test_mcp_author_uses_extended_timeout(monkeypatch):
     """Suite generation is the longest create-path call; it must allow slow models."""
+    import json
     import rouvr.mcp_server as ms
     seen = {}
+    lines = []
+    for i in range(1, 6):
+        lines += [f"def test_x{i}():  # [c1]",
+                  f"    assert {i} + {i} == {2 * i}", ""]
+    suite = {"test_rouvr_hidden_x.py": "\n".join(lines)}
 
     class Patient:
         name = "meta"
         def chat(self, messages, **kw):
             seen.update(kw)
-            return '{"test_rouvr_hidden_x.py": "def test_x():\\n    assert 1\\n"}'
+            return json.dumps(suite)
     monkeypatch.setattr("backend.rouvr_models.providers.get_provider", lambda *a, **k: Patient())
     files = ms._author_hidden_suite(["c1"])
     assert list(files) == ["test_rouvr_hidden_x.py"]
     assert seen.get("timeout", 0) > 60
+    assert seen.get("reasoning_effort") == "low"
 
 
 def test_waiting_lists_escalation_reason_from_json_string_body(monkeypatch, ledger_url, tmp_path):

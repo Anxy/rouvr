@@ -14,7 +14,7 @@
   `ROUVR_LEDGER_URL=http://127.0.0.1:8221` + `.data/meta-provider-env.sh`;
   log `/tmp/rouvr-web-3000.log`). Tunnel `dial tcp 127.0.0.1:3000` failures
   were just :3000 being down — fixed by the restart, reload the tab.
-  Smoke stack (:18234/:13002) left alone. `vmg-frontend.service` remains
+  Smoke stack (:18234/:13002) left alone. The host frontend service remains
   STOPPED (one-time stop to free :3000; still enabled, restarts on boot).
 - Admin login: `admin@local`, tenant `supervisor` (moved from empty `demo`),
   password ONLY in `.data/ankur-demo-auth.env` (0600). Model:
@@ -62,8 +62,21 @@
   `core/backend/rouvr_models/providers.py` `get_provider("meta")` with key
   only from env file returned exactly `PONG`. Demo coders used subscription
   instead; full worker-loop-off-key run NOT yet exercised.
-- **Hygiene**: no `/home/anxy` in tracked files (use `$HOME`/expanduser);
+- **Hygiene**: no host-home absolute paths in tracked files (use `$HOME`/expanduser);
   never `git add -A` dirs with recordings. `.venv` is 3.12.
+- **Supervisor startup probe (2026-11-04 incident)**: `workhub_health` MCP
+  tool (registers at session start; after a restart, new tools need a new
+  session). provider=stub means `workhub_create_task` WILL refuse — that is
+  fail-closed working, not breakage. If health itself errors, check the
+  plugin server (`pgrep -f rouvr.mcp_server`, child of run.sh; kill only the
+  child, the loop restarts it). Never verify runtime-added env via
+  /proc/PID/environ (glibc moves it; always reads stale) — check in-process.
+  2026-11-04 08:3x UTC: my child-kills left every respawn deaf (stdio
+  /dev/null, pipes orphaned on fds 6/7) — ALL MCP calls fail -32602 until
+  the host side recovers (session restart). HTTP fallback to :8221 works for
+  everything (tasks/evidence/retire/knowledge). Do NOT kill run.sh itself.
+  Also fixed in the same batch: import-time HIDDEN_TESTS_ROOT default
+  (probe #181 proved authoring+create, disk write failed without it).
 
 ## 2. Canonical roadmap / status
 - DONE, all pushed: Steps 1–7 (workhub tasks 138–144, all `done`).
@@ -108,6 +121,42 @@
   inside, only own session scratch without asking.
 - `workhub_*`/`knowledge_*` MCP tools: dead until session restart (see §0).
   Workaround that works now: direct `curl` to 8221 with repo-local token.
+- **Frontend worker LIVE (2026-11-04 ~06:35 UTC)**: persistent headless
+  `muse` in tmux `rouvr-fe1`, cwd `$HOME/dev/rouvr-fe1` (detached
+  worktree @ `761efb0`, node_modules symlinked), model `muse-spark-1.3-
+  contributor`, `--approval-mode never --disable-sandbox` (sandbox bwrap
+  broken on this host; first launch stalled on trust prompt + dead shell).
+  Session `01a1a543-...` (see `muse session-message list --json`).
+  Creds: ledger user `frontend-dev-1` (tenant `supervisor`,
+  `~/.config/rouvr/users/frontend-dev-1.json`) + stack env
+  `~/.config/rouvr/frontend-worker.env` (0600; claim/transition/evidence
+  need stack — user tokens are worker-only). Boot:
+  `~/.config/rouvr/frontend-boot.md`. Messaging: NATIVE session-message
+  DEAD here (`external_agent_ingress_closed` + shell `muse` denied) —
+  durable channel is task evidence (`agent_message` from supervisor,
+  `note`/`test_run` back; worker polls `GET /v1/tasks/{id}`). Urgent:
+  type into tmux directly. Running assignment: task #131 FL-D3 inbox,
+  claimed (lease holder `frontend-dev-1`, 1h). Loop: worker builds →
+  `needs_review` → supervisor verifies + closes. Worker NEVER commits,
+  never `done`, dev server :3100 only, no model-spending pytest.
+  Screenshots WORK: Playwright-pinned `chrome-headless-shell` under
+  `~/.cache/ms-playwright` (`--screenshot`, verified 2026-11-04) — never
+  claim no-browser from `command -v` alone. Shots to `/tmp/rouvr-shots/`.
+  QUEUED next (agent_message on #131): brand passes #159–#164 in order,
+  one at a time. #158 is a supervisor probe row — ignore, do not touch.
+- **Seal batch LIVE but UNCOMMITTED** (ledger/app.py Convert sealing,
+  providers chat_complete, mcp bound author, /seal + /knowledge usage
+  endpoints, web seal/spec badges + proxy, tests). Gates green (639 passed).
+  Restart ledger after pulling (needs `core` on sys.path — start_ledger.py
+  fixed). `make test-public` + hygiene + tsc all clean this session.
+- **Knowledge Lite entries 1204–1207, 1209** (worker ops, messaging
+  channel, MCP-create fallback, ledger sys.path, retire design) under
+  `supervisor/liveproof`.
+- **Retire path LIVE, gates green** (643 passed): `retired` terminal state
+  (blocked/failed/open only), `POST /v1/tasks/{id}/retire` (reason required),
+  `retire_note` evidence, MCP `workhub_retire_task` + reap update, web pill
+  + detail banner, usage endpoint live. All 19 dead blocked tasks retired
+  with reasons (board blocked = 0). Tracking tasks #169/#170 done.
 - Billing: no spend meter — wall-clock only for model costs.
   2026-11-03/04: Meta key flaky — full turns alternate 402/empty; tiny
   probes misleading (empty turns burn budget silently). Re-probe with a

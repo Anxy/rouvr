@@ -108,7 +108,7 @@ def test_tenant_visibility_and_cross_tenant_denied(tmp_path, monkeypatch):
         assert r.status_code == 404
         assert c.get("/v1/projects", headers=amy).json()["projects"] == [
             {"tenant": "acme", "project": "site", "title": None, "code": None,
-             "description": None, "domain": None}]
+             "description": None, "domain": None, "archived": 0}]
         assert len(c.get("/v1/projects", headers=stack).json()["projects"]) == 2
 
 

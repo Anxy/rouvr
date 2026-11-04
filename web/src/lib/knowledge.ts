@@ -25,6 +25,27 @@ export function isVerified(hit: { verified: number | boolean }): boolean {
   return hit.verified === 1 || hit.verified === true;
 }
 
+// Review workflow: the ledger tracks review_state per entry (pending by
+// default; verified | rejected | needs_revision after review). List badges
+// render only for rejected/needs_revision rows — verified rows already
+// carry the verified pill, pending rows carry neither.
+export function reviewStateLabel(state?: string | null): string {
+  switch (state) {
+    case "verified":
+      return "Verified";
+    case "rejected":
+      return "Rejected";
+    case "needs_revision":
+      return "Needs revision";
+    default:
+      return "Pending";
+  }
+}
+
+export function isPinned(hit: { pinned?: number | boolean }): boolean {
+  return hit.pinned === 1 || hit.pinned === true;
+}
+
 // Count the loaded shortlist by kind. Callers label the result
 // "showing N" so it never reads as a ledger-wide total.
 export function countKinds(hits: { kind: string }[]): Record<KnowledgeKind, number> {

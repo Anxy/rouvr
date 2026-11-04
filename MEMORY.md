@@ -1,9 +1,21 @@
-# MEMORY.md — handoff (fresh instance resumes here; updated 2026-11-04 ~05:30 UTC / 11:00 IST)
+# MEMORY.md — handoff (fresh instance resumes here; updated 2026-11-04 ~13:35 UTC / 19:05 IST — pre-shutdown, zero-loss snapshot)
 
 ## 0. Right now (read first)
-- Branch `rouvr-development`, tree CLEAN, pushed to `origin/rouvr-development`
-  this session (consolidation commit on top of `7ed21eb`). `main` untouched —
-  merges to base are owner-only.
+- Branch `rouvr-development` @ `1e2b763` (pushed; Projects+Tasks, footer/
+  user-menu, knowledge inner page #192/#193) + **2 UNCOMMITTED files**:
+  `rouvr/mcp_server.py` + `tests/test_mcp_server.py` (MCP adopt fix + 4
+  tests — commit + push first; see §4). `main` untouched.
+- Services LIVE on current tree: ledger :8221 (pid 4169916, restarted for
+  owner-create), web prod :3000 (pid 4184276, `next start -H 127.0.0.1 -p
+  3000` from `web/`), both pidfile-guarded. MCP channel HEALED this
+  session (root cause found — §1; server pid 31963, child of run.sh 3250144).
+- Workhub: #192/#193 evidence posted (msgs 1196/1197, needs_review);
+  e2e residue in demo ledger: project `e2e-probe-192` + retired task #194.
+  Knowledge: entries up to 1220 (1220 = MCP -32602 diagnosis).
+- NEXT TASK (user supplied, not started): UX consolidated gap analysis
+  (G1–G5, C1–C6, P1–P7, B1–B4, T1–T7, K1–K7, KD1–KD6 + Sprints 1–3) — full
+  text in the session, condensed in §4. Verify backend support per action
+  before promising sprint scope.
 - Chat is now orchestration-first (intake router + plan gate, A–E built).
   Web app rebuilt: route-group split, attention-first board, thread
   chat, Knowledge page. All committed + pushed; `make test-public` green
@@ -50,9 +62,19 @@
   627 passed, 7 skipped.
 - **MCP transport fragility**: plugin server reads `ROUVR_LEDGER_TOKEN`
   only from `/tmp/rouvr-supervisor/env.sh` at start; wipe = all `workhub_*`
-  + `knowledge_*` tools 401. NEVER restart it mid-session — runtime holds
-  the stdio pipe and won't respawn (3× broken pipe). Repair = restore env.sh,
-  fresh session brings tools back.
+  + `knowledge_*` tools 401.
+- **MCP -32602 ROOT CAUSE (2026-11-04 ~13:30 UTC, knowledge:1220) —
+  SUPERSEDES all older "dead until restart" notes**: -32602 on every call
+  = missed `initialize` handshake, NOT a dead server or bad params. After a
+  plugin-child kill/respawn the host may never re-initialize; the fresh
+  server correctly rejects pre-init tools/call. Diagnose: (1) server alive?
+  (2) schemas OK? (3) direct pipe test WITH initialize. Heal: one `initialize`
+  frame down the host→server pipe (worked live), else session restart.
+  RED HERRING (do not chase): fd 0/1=/dev/null + live pipes on 6/7 is NORMAL
+  — mcp 2.3.0 `stdio_server()` diverts stdio itself while serving from
+  private dups. Killed-child respawns ARE picked up by run.sh's S012 loop.
+  Repo keeps single-shot `_adopt_host_pipes` + 4 tests as belt-and-braces
+  (UNCOMMITTED — commit first, §4).
 - **Knowledge Lite updated 2026-11-03**: entries 1187–1193 under
   `supervisor/liveproof` (contracts rule, footage/hygiene rule,
   non-streaming decision, demo provenance, MCP fragility rule, demo-done
@@ -71,10 +93,11 @@
   plugin server (`pgrep -f rouvr.mcp_server`, child of run.sh; kill only the
   child, the loop restarts it). Never verify runtime-added env via
   /proc/PID/environ (glibc moves it; always reads stale) — check in-process.
-  2026-11-04 08:3x UTC: my child-kills left every respawn deaf (stdio
-  /dev/null, pipes orphaned on fds 6/7) — ALL MCP calls fail -32602 until
-  the host side recovers (session restart). HTTP fallback to :8221 works for
-  everything (tasks/evidence/retire/knowledge). Do NOT kill run.sh itself.
+  CORRECTION 13:30 UTC: the 08:3x "deaf respawn" was NOT fd damage — the
+  library diverts stdio itself (see §1 root cause); the loops' children were
+  healthy but un-initialized. After killing a plugin child, either restart
+  the session (reliable) or hand-heal with one initialize frame. Do NOT kill
+  run.sh itself. HTTP fallback to :8221 works for everything.
   Also fixed in the same batch: import-time HIDDEN_TESTS_ROOT default
   (probe #181 proved authoring+create, disk write failed without it).
 - **FREEZE PLAN 15:45 IST (knowledge:1215)**: `40945a9` pushed. Session
@@ -129,8 +152,10 @@
 - Never rewrite history; never touch `main`; merges to base are owner's.
 - Nothing outside the rouvr repo gets deleted without explicit OK; even
   inside, only own session scratch without asking.
-- `workhub_*`/`knowledge_*` MCP tools: dead until session restart (see §0).
-  Workaround that works now: direct `curl` to 8221 with repo-local token.
+- `workhub_*`/`knowledge_*` MCP tools: HEALED 13:30 UTC (see §1 root
+  cause). If -32602 recurs on every call: server likely respawned without
+  host initialize — restart session, or hand-heal via direct pipe.
+  Fallback that always works: direct `curl` to 8221 with repo-local token.
 - **Frontend worker LIVE (2026-11-04 ~06:35 UTC)**: persistent headless
   `muse` in tmux `rouvr-fe1`, cwd `$HOME/dev/rouvr-fe1` (detached
   worktree @ `761efb0`, node_modules symlinked), model `muse-spark-1.3-
@@ -192,3 +217,54 @@
 - Restart discipline: ledger via `.data/tmp/ankur-demo/start_ledger.py`
   (sources `.data/meta-provider-env.sh` + admin/auth secrets); web via
   `next start -H 127.0.0.1 -p 3000`; both pidfile-guarded, never pkill.
+
+## 4. Handoff — do first after boot
+1. `git status` → expect `M rouvr/mcp_server.py`, `M tests/test_mcp_server.py`
+   ONLY. Full `tests/test_mcp_server.py` (30 tests) + hygiene were running
+   at shutdown — result UNKNOWN (neither running nor delivered). Rerun:
+   `TMPDIR=$PWD/.data/tmp .venv/bin/pytest tests/test_mcp_server.py -q`
+   then `bash scripts/hygiene.sh`. If green: commit ("MCP: adopt parked
+   host pipes + missed-initialize diagnosis, knowledge:1220") + push
+   `rouvr-development`.
+2. Verify: one `workhub_show_task` MCP call (any id). -32602 on EVERY call
+   = missed initialize again (see §1) — restart session or hand-heal.
+   Then close out #192/#193 (evidence msgs 1196/1197 already posted).
+3. UX sprints next (user's consolidated gap review, condensed — full text in
+   prior session; mindset: "helping users accomplish tasks", not data dumps):
+   - Global: G1 searchable combobox everywhere (header/chat/board/tasks);
+     G2 pagination (10/page) for board/projects/knowledge; G3 collapse
+     sections + internal scroll; G4 render metadata once; G5 actions
+     everywhere (edit/archive/retire/verify/claim/assign/delete).
+   - Chat: C1 fixed header + scroll msgs + sticky composer; C2 composer
+     always visible; C3 single error state + retry; C4 bubbles/timestamps;
+     C5 clickable suggestion empty-state; C6 autoscroll.
+   - Projects: P1 create modal/page (P0 — currently 403s were fixed via
+     owner-create, VERIFY live); P2 edit/rename/owner; P3 active/archived/
+     retired states; P4 ⋮ menu; P5 one clean card; P6 filters; P7 header
+     metrics (total/active/archived/attention).
+   - Board: B1/B2 done collapsed by default + collapsible sections; B3
+     simpler cards (name/status/updated/owner); B4 filters (project/owner/
+     status/priority).
+   - Task detail: T1 keep (lifecycle/criteria/journey); T2 actions (claim/
+     move/request-changes/approve/evidence/edit); T3 single metadata block;
+     T4 timeline not raw events; T5 evidence section; T6 prev/next; T7
+     metadata panel.
+   - Knowledge: K1–K2 compact curated cards; K3 verify workflow (approve/
+     reject/needs-revision); K4 hide zero-usage; K5 actions (edit/verify/
+     archive/pin/merge/delete); K6 filters; K7 dashboard counts; KD1–KD6
+     inner page = identity→summary→content→related→actions + trust
+     indicators + relationships (tasks/projects/rules).
+   - Sprint order: S1 = P1 + C1/C2 + G1 + G2 + G4; S2 = P2/P3 + chat UX +
+     task actions + verify workflow; S3 = relationships + summaries +
+     timelines + dashboard + advanced filters.
+   - BEFORE promising scope: probe the ledger for each action's endpoint
+     (project rename/archive? knowledge verify/edit/archive? task claim/
+     approve/evidence-as-owner?) — several K/P actions may need NEW backend
+     endpoints + tests, not just UI. Real-data-only rule stands.
+4. Screenshots live in `/tmp/rouvr-shots/` — /tmp may not survive reboot;
+   re-shoot after any rebuild (`/tmp/authed_shots.py`, `/tmp/shots_193.py`,
+   knowledge via `/tmp/shots_k.py` — all reference the pinned
+   chrome-headless-shell; rewrite paths if /tmp was wiped).
+5. Residue to know: `e2e-probe-192` project + retired #194 (demo evidence,
+   harmless); orphan MCP server pid 3713013 (Nov 2, PPID 1, port 8231 —
+   stale, leave unless port conflicts); tmux `rouvr-fe1` sessions dead.

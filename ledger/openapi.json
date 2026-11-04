@@ -806,6 +806,26 @@
               "title": "Full",
               "type": "boolean"
             }
+          },
+          {
+            "in": "query",
+            "name": "include_archived",
+            "required": false,
+            "schema": {
+              "default": false,
+              "title": "Include Archived",
+              "type": "boolean"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "title": "Offset",
+              "type": "integer"
+            }
           }
         ],
         "responses": {
@@ -1052,6 +1072,56 @@
         "summary": "Knowledge Usage Lite"
       }
     },
+    "/api/v1/knowledge/{kid}/archive": {
+      "post": {
+        "description": "Archive (or restore) an entry: archived rows leave search, counts\nand kind folders but stay readable by id. Same owner-or-stack gate\nas review. Append-only history is preserved \u2014 nothing is deleted.",
+        "operationId": "archive_knowledge_lite_api_v1_knowledge__kid__archive_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "kid",
+            "required": true,
+            "schema": {
+              "title": "Kid",
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": true,
+                "title": "Body",
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Archive Knowledge Lite"
+      }
+    },
     "/api/v1/knowledge/{kid}/confirm": {
       "post": {
         "operationId": "confirm_knowledge_lite_api_v1_knowledge__kid__confirm_post",
@@ -1125,6 +1195,106 @@
           }
         },
         "summary": "Knowledge History Lite"
+      }
+    },
+    "/api/v1/knowledge/{kid}/pin": {
+      "post": {
+        "description": "Pin (or unpin) an entry: pinned rows get the same extra rank vote\nverified rows get, so they surface first. Same gate as review.",
+        "operationId": "pin_knowledge_lite_api_v1_knowledge__kid__pin_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "kid",
+            "required": true,
+            "schema": {
+              "title": "Kid",
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": true,
+                "title": "Body",
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Pin Knowledge Lite"
+      }
+    },
+    "/api/v1/knowledge/{kid}/review": {
+      "post": {
+        "description": "Review verdict on an entry: verified | rejected | needs_revision,\nplus an optional reviewer note. Stack may act anywhere; a session\nowner inside its own tenant (broader than creator-only confirm, so\ntenant reviewers can work any entry). verified verdicts keep the\nverified flag in sync for legacy readers.",
+        "operationId": "review_knowledge_lite_api_v1_knowledge__kid__review_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "kid",
+            "required": true,
+            "schema": {
+              "title": "Kid",
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": true,
+                "title": "Body",
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Review Knowledge Lite"
       }
     },
     "/api/v1/knowledge/{kid}/versions": {
@@ -1290,9 +1460,117 @@
         "summary": "Onboard Register Lite"
       }
     },
+    "/api/v1/plans/{slug}": {
+      "get": {
+        "description": "Plan lifecycle, derived not stored: the entry plus its status\n(draft/agreed/materialized) and the slice->tasks chain with links.",
+        "operationId": "get_plan_lite_api_v1_plans__slug__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "slug",
+            "required": true,
+            "schema": {
+              "title": "Slug",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "tenant",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Tenant"
+            }
+          },
+          {
+            "in": "query",
+            "name": "project",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Project"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Plan Lite"
+      }
+    },
+    "/api/v1/plans/{slug}/approve": {
+      "post": {
+        "description": "Approve a plan: confirm the entry, then materialize one slice +\none task per step via the same path chat Convert uses (no model\ncall, no sealing \u2014 tasks land pending, seal retry applies).\nIdempotent on the plan:convert receipt, so approve-then-Convert and\nConvert-then-approve both replay the same slice.",
+        "operationId": "approve_plan_lite_api_v1_plans__slug__approve_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "slug",
+            "required": true,
+            "schema": {
+              "title": "Slug",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Approve Plan Lite"
+      }
+    },
     "/api/v1/projects": {
       "get": {
-        "description": "Projects visible to the caller: its own tenant, or all for stack.",
+        "description": "Projects visible to the caller: its own tenant, or all for stack.\nArchived projects are hidden unless include_archived is set.",
         "operationId": "list_projects_lite_api_v1_projects_get",
         "parameters": [
           {
@@ -1309,6 +1587,16 @@
                 }
               ],
               "title": "Tenant"
+            }
+          },
+          {
+            "in": "query",
+            "name": "include_archived",
+            "required": false,
+            "schema": {
+              "default": false,
+              "title": "Include Archived",
+              "type": "boolean"
             }
           }
         ],
@@ -1335,7 +1623,7 @@
         "summary": "List Projects Lite"
       },
       "post": {
-        "description": "Register a project under an existing tenant (S022). Idempotent.\n\nStack may create anywhere; a session owner may create inside its\nown tenant \u2014 the same owner-within-tenant rule task transitions\nuse. Anything else stays worker-only.",
+        "description": "Register a project under an existing tenant (S022). Idempotent.\n\nStack may create anywhere; a session owner may create inside its\nown tenant \u2014 the same owner-within-tenant rule task transitions\nuse. Anything else stays worker-only. Optional metadata (title,\ncode, description, domain) is stored when provided and updated on\nre-creation; unprovided fields keep their stored values.",
         "operationId": "create_project_lite_api_v1_projects_post",
         "requestBody": {
           "content": {
@@ -1372,6 +1660,56 @@
         "summary": "Create Project Lite"
       }
     },
+    "/api/v1/projects/{project}": {
+      "patch": {
+        "description": "Edit a project: rename (name), metadata, archived flag.\n\nStack may act anywhere; a session owner inside its own tenant.\nRename rewrites the tenant/project scope on projects, tasks,\nknowledge, chat turns, classifications and autonomy rows \u2014 receipts\nand outbox payloads are historical records and stay as written.\n409 when the target name is already taken.",
+        "operationId": "edit_project_lite_api_v1_projects__project__patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project",
+            "required": true,
+            "schema": {
+              "title": "Project",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": true,
+                "title": "Body",
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Edit Project Lite"
+      }
+    },
     "/api/v1/tasks": {
       "get": {
         "operationId": "list_tasks_lite_api_v1_tasks_get",
@@ -1406,6 +1744,32 @@
                 }
               ],
               "title": "Tenant"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Limit"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "title": "Offset",
+              "type": "integer"
             }
           }
         ],
@@ -1505,7 +1869,7 @@
         "summary": "Get Task Lite"
       },
       "patch": {
-        "description": "Edit title/intent of an unclaimed open task. Requires idempotency_key;\nreplays return the first receipt. Claimed/leased or non-open tasks\nrefuse with 409 \u2014 editing live work would fork the worker's context.",
+        "description": "Edit title/intent of an unclaimed open task, optionally moving it\nto another project in the same tenant. Requires idempotency_key;\nreplays return the first receipt. Claimed/leased or non-open tasks\nrefuse with 409 \u2014 editing live work would fork the worker's context.\nMoves refuse with 422 when the task is a slice or slice member\n(the chain lives in one project) or the target is unregistered;\ncross-tenant moves are never allowed.",
         "operationId": "edit_task_lite_api_v1_tasks__tid__patch",
         "parameters": [
           {
@@ -3117,6 +3481,26 @@
               "title": "Full",
               "type": "boolean"
             }
+          },
+          {
+            "in": "query",
+            "name": "include_archived",
+            "required": false,
+            "schema": {
+              "default": false,
+              "title": "Include Archived",
+              "type": "boolean"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "title": "Offset",
+              "type": "integer"
+            }
           }
         ],
         "responses": {
@@ -3363,6 +3747,56 @@
         "summary": "Knowledge Usage"
       }
     },
+    "/v1/knowledge/{kid}/archive": {
+      "post": {
+        "description": "Archive (or restore) an entry: archived rows leave search, counts\nand kind folders but stay readable by id. Same owner-or-stack gate\nas review. Append-only history is preserved \u2014 nothing is deleted.",
+        "operationId": "archive_knowledge_v1_knowledge__kid__archive_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "kid",
+            "required": true,
+            "schema": {
+              "title": "Kid",
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": true,
+                "title": "Body",
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Archive Knowledge"
+      }
+    },
     "/v1/knowledge/{kid}/confirm": {
       "post": {
         "operationId": "confirm_knowledge_v1_knowledge__kid__confirm_post",
@@ -3436,6 +3870,106 @@
           }
         },
         "summary": "Knowledge History"
+      }
+    },
+    "/v1/knowledge/{kid}/pin": {
+      "post": {
+        "description": "Pin (or unpin) an entry: pinned rows get the same extra rank vote\nverified rows get, so they surface first. Same gate as review.",
+        "operationId": "pin_knowledge_v1_knowledge__kid__pin_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "kid",
+            "required": true,
+            "schema": {
+              "title": "Kid",
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": true,
+                "title": "Body",
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Pin Knowledge"
+      }
+    },
+    "/v1/knowledge/{kid}/review": {
+      "post": {
+        "description": "Review verdict on an entry: verified | rejected | needs_revision,\nplus an optional reviewer note. Stack may act anywhere; a session\nowner inside its own tenant (broader than creator-only confirm, so\ntenant reviewers can work any entry). verified verdicts keep the\nverified flag in sync for legacy readers.",
+        "operationId": "review_knowledge_v1_knowledge__kid__review_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "kid",
+            "required": true,
+            "schema": {
+              "title": "Kid",
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": true,
+                "title": "Body",
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Review Knowledge"
       }
     },
     "/v1/knowledge/{kid}/versions": {
@@ -3601,9 +4135,117 @@
         "summary": "Onboard Register"
       }
     },
+    "/v1/plans/{slug}": {
+      "get": {
+        "description": "Plan lifecycle, derived not stored: the entry plus its status\n(draft/agreed/materialized) and the slice->tasks chain with links.",
+        "operationId": "get_plan_v1_plans__slug__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "slug",
+            "required": true,
+            "schema": {
+              "title": "Slug",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "tenant",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Tenant"
+            }
+          },
+          {
+            "in": "query",
+            "name": "project",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Project"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Plan"
+      }
+    },
+    "/v1/plans/{slug}/approve": {
+      "post": {
+        "description": "Approve a plan: confirm the entry, then materialize one slice +\none task per step via the same path chat Convert uses (no model\ncall, no sealing \u2014 tasks land pending, seal retry applies).\nIdempotent on the plan:convert receipt, so approve-then-Convert and\nConvert-then-approve both replay the same slice.",
+        "operationId": "approve_plan_v1_plans__slug__approve_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "slug",
+            "required": true,
+            "schema": {
+              "title": "Slug",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Approve Plan"
+      }
+    },
     "/v1/projects": {
       "get": {
-        "description": "Projects visible to the caller: its own tenant, or all for stack.",
+        "description": "Projects visible to the caller: its own tenant, or all for stack.\nArchived projects are hidden unless include_archived is set.",
         "operationId": "list_projects_v1_projects_get",
         "parameters": [
           {
@@ -3620,6 +4262,16 @@
                 }
               ],
               "title": "Tenant"
+            }
+          },
+          {
+            "in": "query",
+            "name": "include_archived",
+            "required": false,
+            "schema": {
+              "default": false,
+              "title": "Include Archived",
+              "type": "boolean"
             }
           }
         ],
@@ -3646,7 +4298,7 @@
         "summary": "List Projects"
       },
       "post": {
-        "description": "Register a project under an existing tenant (S022). Idempotent.\n\nStack may create anywhere; a session owner may create inside its\nown tenant \u2014 the same owner-within-tenant rule task transitions\nuse. Anything else stays worker-only.",
+        "description": "Register a project under an existing tenant (S022). Idempotent.\n\nStack may create anywhere; a session owner may create inside its\nown tenant \u2014 the same owner-within-tenant rule task transitions\nuse. Anything else stays worker-only. Optional metadata (title,\ncode, description, domain) is stored when provided and updated on\nre-creation; unprovided fields keep their stored values.",
         "operationId": "create_project_v1_projects_post",
         "requestBody": {
           "content": {
@@ -3683,6 +4335,56 @@
         "summary": "Create Project"
       }
     },
+    "/v1/projects/{project}": {
+      "patch": {
+        "description": "Edit a project: rename (name), metadata, archived flag.\n\nStack may act anywhere; a session owner inside its own tenant.\nRename rewrites the tenant/project scope on projects, tasks,\nknowledge, chat turns, classifications and autonomy rows \u2014 receipts\nand outbox payloads are historical records and stay as written.\n409 when the target name is already taken.",
+        "operationId": "edit_project_v1_projects__project__patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project",
+            "required": true,
+            "schema": {
+              "title": "Project",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": true,
+                "title": "Body",
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Edit Project"
+      }
+    },
     "/v1/tasks": {
       "get": {
         "operationId": "list_tasks_v1_tasks_get",
@@ -3717,6 +4419,32 @@
                 }
               ],
               "title": "Tenant"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Limit"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "title": "Offset",
+              "type": "integer"
             }
           }
         ],
@@ -3816,7 +4544,7 @@
         "summary": "Get Task"
       },
       "patch": {
-        "description": "Edit title/intent of an unclaimed open task. Requires idempotency_key;\nreplays return the first receipt. Claimed/leased or non-open tasks\nrefuse with 409 \u2014 editing live work would fork the worker's context.",
+        "description": "Edit title/intent of an unclaimed open task, optionally moving it\nto another project in the same tenant. Requires idempotency_key;\nreplays return the first receipt. Claimed/leased or non-open tasks\nrefuse with 409 \u2014 editing live work would fork the worker's context.\nMoves refuse with 422 when the task is a slice or slice member\n(the chain lives in one project) or the target is unregistered;\ncross-tenant moves are never allowed.",
         "operationId": "edit_task_v1_tasks__tid__patch",
         "parameters": [
           {

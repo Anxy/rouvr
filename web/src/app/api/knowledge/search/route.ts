@@ -1,6 +1,7 @@
 import { incomingCookie, ledgerClient, passJson } from "@/lib/api/server";
 
 // Knowledge search: shortlist (slug/title/kind/summary/verified/citation).
+// Archived entries are excluded server-side unless include_archived.
 export async function GET(req: Request) {
   const url = new URL(req.url);
   const q = url.searchParams.get("q") ?? "";
@@ -15,6 +16,8 @@ export async function GET(req: Request) {
         project: url.searchParams.get("project") ?? undefined,
         n: url.searchParams.get("n") ?? undefined,
         full: url.searchParams.get("full") ?? undefined,
+        offset: url.searchParams.get("offset") ?? undefined,
+        include_archived: url.searchParams.get("include_archived") ?? undefined,
       } as never,
     },
   });

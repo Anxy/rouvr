@@ -859,8 +859,58 @@ def _mcp_http_auth() -> str:
                        "(set the token, or explicit ROUVR_INSECURE_DEV=1)")
 
 
+def _find_host_pipes(stdin_fd: int = 0, read_fd: int = 6,
+                     write_fd: int = 7) -> "tuple[int, int] | None":
+    """Locate the host's stdio transport when it is not on fds 0/1.
+
+    Normal plugin launch inherits the host pipes as stdin/stdout and this
+    returns None. After a plugin-child kill the host may respawn the
+    server with stdio nulled and the live pipes parked on fds 6/7; the
+    pair is adopted only when stdin is unusable for the transport (not a
+    pipe) and 6/7 are a readable/writable FIFO pair.
+    """
+    import stat as _stat
+    try:
+        if _stat.S_ISFIFO(os.fstat(stdin_fd).st_mode):
+            return None  # healthy stdio inheritance; leave it alone
+        r, w = os.fstat(read_fd), os.fstat(write_fd)
+    except OSError:
+        return None
+    if not (_stat.S_ISFIFO(r.st_mode) and _stat.S_ISFIFO(w.st_mode)):
+        return None
+    try:
+        import fcntl as _fcntl
+        fr = _fcntl.fcntl(read_fd, _fcntl.F_GETFL)
+        fw = _fcntl.fcntl(write_fd, _fcntl.F_GETFL)
+    except OSError:
+        return None
+    if fr & os.O_ACCMODE not in (os.O_RDONLY, os.O_RDWR):
+        return None
+    if fw & os.O_ACCMODE not in (os.O_WRONLY, os.O_RDWR):
+        return None
+    return read_fd, write_fd
+
+
+def _adopt_host_pipes(read_fd: int = 6, write_fd: int = 7,
+                      stdin_fd: int = 0, stdout_fd: int = 1) -> bool:
+    """Dup a parked host-pipe pair onto stdin/stdout. Returns True adopted.
+
+    Single check at startup: the host hands a fresh plugin child live
+    stdio (adopt nothing), or — after a plugin-child kill and managed
+    respawn — nulled stdio with the live pipes already parked on 6/7.
+    """
+    found = _find_host_pipes(stdin_fd, read_fd, write_fd)
+    if found is None:
+        return False
+    src_read, src_write = found
+    os.dup2(src_read, stdin_fd)
+    os.dup2(src_write, stdout_fd)
+    return True
+
+
 if __name__ == "__main__":
     if os.environ.get("ROUVR_MCP_TRANSPORT") == "stdio":  # plugin-bundled mode
+        _adopt_host_pipes()
         mcp.run(transport="stdio")
     else:
         import threading

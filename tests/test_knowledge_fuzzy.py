@@ -127,7 +127,8 @@ def test_shortlist_shape_and_default_n(ctx):
     hits = c.get("/v1/knowledge/search", params={"q": "shortlist"},
                  headers=amy).json()["items"]
     assert len(hits) == 15  # default top N
-    assert all(set(h) == {"slug", "title", "kind", "summary", "verified", "citation"}
+    assert all(set(h) == {"slug", "title", "kind", "summary", "verified",
+                             "review_state", "pinned", "citation"}
                for h in hits)
     assert all(len(h["summary"]) <= 160 and "\n" not in h["summary"] for h in hits)
     five = c.get("/v1/knowledge/search", params={"q": "shortlist", "n": 5},

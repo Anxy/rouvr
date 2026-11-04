@@ -1,8 +1,12 @@
 import { incomingCookie, jsonThrough, ledgerClient, passJson } from "@/lib/api/server";
 
 export async function GET(req: Request) {
+  const url = new URL(req.url);
+  const includeArchived = url.searchParams.get("include_archived");
   const client = ledgerClient(incomingCookie(req));
-  const { data, error, response } = await client.GET("/v1/projects");
+  const { data, error, response } = await client.GET("/v1/projects", {
+    params: { query: includeArchived ? { include_archived: includeArchived === "true" } : {} },
+  });
   return passJson(response.status, response.ok ? data : (error ?? { detail: "projects failed" }), response);
 }
 

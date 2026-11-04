@@ -1,12 +1,16 @@
 import { incomingCookie, ledgerClient, passJson } from "@/lib/api/server";
 
-// Board: tasks visible to the caller's tenant.
+// Board: tasks visible to the caller's tenant. Bounded pages: callers pass
+// limit/offset for server-side windows; without them the full list comes
+// back for client-side grouping.
 export async function GET(req: Request) {
   const client = ledgerClient(incomingCookie(req));
   const url = new URL(req.url);
   const state = url.searchParams.get("state") ?? undefined;
+  const limit = url.searchParams.get("limit") ?? undefined;
+  const offset = url.searchParams.get("offset") ?? undefined;
   const { data, error, response } = await client.GET("/v1/tasks", {
-    params: { query: { state } as never },
+    params: { query: { state, limit, offset } as never },
   });
   return passJson(response.status, response.ok ? data : (error ?? { detail: "tasks failed" }), response);
 }

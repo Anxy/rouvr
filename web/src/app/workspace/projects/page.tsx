@@ -12,6 +12,9 @@ import { csrfHeaders, ws, type ProjectRow, type TaskRow } from "@/lib/api/worksp
 // list (GET /api/tasks). No invented metrics; a project with no tasks
 // shows zeroes and "—". The grid pages client-side at 10 per page.
 const PAGE_SIZE = 10;
+
+type Filter = "all" | "active" | "archived";
+
 interface ProjectStats {
   open: number;
   stuck: number;
@@ -30,9 +33,13 @@ function formatWhen(iso: string): string {
   return new Date(ms).toLocaleString();
 }
 
+function isArchived(row: ProjectRow | undefined): boolean {
+  return Number(row?.archived ?? 0) !== 0;
+}
+
 export default function ProjectsPage() {
   const router = useRouter();
-  const { tenant, refresh } = useSession();
+  const { tenant, project: activeProject, setProject, refresh } = useSession();
   const [names, setNames] = useState<string[]>([]);
   const [meta, setMeta] = useState<Record<string, ProjectRow>>({});
   const [tasks, setTasks] = useState<TaskRow[]>([]);
@@ -48,48 +55,63 @@ export default function ProjectsPage() {
   const [query, setQuery] = useState("");
   const [page, setPage] = useState(1);
   const [showCreate, setShowCreate] = useState(false);
+  const [editing, setEditing] = useState<string | null>(null);
+  const [filter, setFilter] = useState<Filter>("all");
+  const [busy, setBusy] = useState<string | null>(null);
+  const [actionError, setActionError] = useState("");
 
-  const load = useCallback(async () => {
-    setLoading(true);
-    setError("");
-    try {
-      const [pRes, tRes] = await Promise.all([
-        ws.GET("/api/projects"),
-        ws.GET("/api/tasks"),
-      ]);
-      if (pRes.response.status === 401 || tRes.response.status === 401) {
-        router.push("/workspace/login");
-        return;
+  const load = useCallback(
+    async (nextFilter: Filter = "all") => {
+      setLoading(true);
+      setError("");
+      try {
+        const wantArchived = nextFilter !== "active";
+        const [pRes, tRes] = await Promise.all([
+          wantArchived
+            ? ws.GET("/api/projects", {
+                params: { query: { include_archived: "true" } },
+              })
+            : ws.GET("/api/projects"),
+          ws.GET("/api/tasks"),
+        ]);
+        if (pRes.response.status === 401 || tRes.response.status === 401) {
+          router.push("/workspace/login");
+          return;
+        }
+        if (!pRes.response.ok || !pRes.data) {
+          setError(`projects failed (${pRes.response.status})`);
+          return;
+        }
+        if (!tRes.response.ok || !tRes.data) {
+          setError(`tasks failed (${tRes.response.status})`);
+          return;
+        }
+        setNames(pRes.data.projects.map((p) => p.project));
+        setMeta(Object.fromEntries(pRes.data.projects.map((p) => [p.project, p])));
+        setTasks(tRes.data.items);
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "projects failed");
+      } finally {
+        setLoading(false);
       }
-      if (!pRes.response.ok || !pRes.data) {
-        setError(`projects failed (${pRes.response.status})`);
-        return;
-      }
-      if (!tRes.response.ok || !tRes.data) {
-        setError(`tasks failed (${tRes.response.status})`);
-        return;
-      }
-      setNames(pRes.data.projects.map((p) => p.project));
-      setMeta(Object.fromEntries(pRes.data.projects.map((p) => [p.project, p])));
-      setTasks(tRes.data.items);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "projects failed");
-    } finally {
-      setLoading(false);
-    }
-  }, [router]);
+    },
+    [router],
+  );
 
   useEffect(() => {
     // Mount fetch: one projects + tasks snapshot, not a render cascade.
     // eslint-disable-next-line react-hooks/set-state-in-effect
-    void load();
+    void load("all");
   }, [load]);
 
-  // Close the create modal on Escape.
+  // Close the project modal on Escape.
   useEffect(() => {
     if (!showCreate) return;
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") setShowCreate(false);
+      if (e.key === "Escape") {
+        setShowCreate(false);
+        setEditing(null);
+      }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
@@ -118,7 +140,9 @@ export default function ProjectsPage() {
 
   const visible = useMemo(() => {
     const q = query.trim().toLowerCase();
-    const all = [...new Set([...names, ...stats.keys()])].sort();
+    let all = [...new Set([...names, ...stats.keys()])].sort();
+    if (filter === "active") all = all.filter((n) => !isArchived(meta[n]));
+    else if (filter === "archived") all = all.filter((n) => isArchived(meta[n]));
     if (!q) return all;
     return all.filter((n) => {
       if (n.toLowerCase().includes(q)) return true;
@@ -127,13 +151,51 @@ export default function ProjectsPage() {
         (f ?? "").toLowerCase().includes(q),
       );
     });
-  }, [names, stats, meta, query]);
+  }, [names, stats, meta, query, filter]);
 
   // Client-side 10/page slice; the page clamps to the filtered length so
   // narrowing the search can never strand the grid on an empty page.
   const totalPages = Math.max(1, Math.ceil(visible.length / PAGE_SIZE));
   const safePage = Math.min(Math.max(1, page), totalPages);
   const pageRows = visible.slice((safePage - 1) * PAGE_SIZE, safePage * PAGE_SIZE);
+
+  function changeFilter(next: Filter) {
+    setFilter(next);
+    setPage(1);
+    void load(next);
+  }
+
+  function clearForm() {
+    setNewName("");
+    setNewTitle("");
+    setNewCode("");
+    setNewDescription("");
+    setNewDomain("");
+  }
+
+  function openCreate() {
+    setEditing(null);
+    clearForm();
+    setCreateError("");
+    setShowCreate(true);
+  }
+
+  function openEdit(name: string) {
+    const m = meta[name];
+    setEditing(name);
+    setNewName(name);
+    setNewTitle(m?.title ?? "");
+    setNewCode(m?.code ?? "");
+    setNewDescription(m?.description ?? "");
+    setNewDomain(m?.domain ?? "");
+    setCreateError("");
+    setShowCreate(true);
+  }
+
+  function closeModal() {
+    setShowCreate(false);
+    setEditing(null);
+  }
 
   async function createProject(e: React.FormEvent) {
     e.preventDefault();
@@ -164,20 +226,91 @@ export default function ProjectsPage() {
         setCreateError(`create failed (${response.status})`);
         return;
       }
-      setNewName("");
-      setNewTitle("");
-      setNewCode("");
-      setNewDescription("");
-      setNewDomain("");
-      setShowCreate(false);
+      clearForm();
+      closeModal();
       refresh();
-      await load();
+      await load(filter);
     } catch (err) {
       setCreateError(err instanceof Error ? err.message : "create failed");
     } finally {
       setCreating(false);
     }
   }
+
+  async function saveEdit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!editing) return;
+    const next = newName.trim();
+    if (!next) {
+      setCreateError("project name is required");
+      return;
+    }
+    setCreating(true);
+    setCreateError("");
+    try {
+      const { response } = await ws.PATCH("/api/projects/{name}", {
+        params: { path: { name: editing } },
+        body: {
+          name: next,
+          title: newTitle.trim(),
+          code: newCode.trim(),
+          description: newDescription.trim(),
+          domain: newDomain.trim(),
+        },
+        headers: csrfHeaders(),
+      });
+      if (response.status === 401) {
+        router.push("/workspace/login");
+        return;
+      }
+      if (response.status === 409) {
+        setCreateError("name taken");
+        return;
+      }
+      if (!response.ok) {
+        setCreateError(`update failed (${response.status})`);
+        return;
+      }
+      clearForm();
+      closeModal();
+      await refresh();
+      if (activeProject === editing && next !== editing) setProject(next);
+      await load(filter);
+    } catch (err) {
+      setCreateError(err instanceof Error ? err.message : "update failed");
+    } finally {
+      setCreating(false);
+    }
+  }
+
+  async function toggleArchive(name: string) {
+    const archived = isArchived(meta[name]);
+    setBusy(name);
+    setActionError("");
+    try {
+      const { response } = await ws.PATCH("/api/projects/{name}", {
+        params: { path: { name } },
+        body: { archived: !archived },
+        headers: csrfHeaders(),
+      });
+      if (response.status === 401) {
+        router.push("/workspace/login");
+        return;
+      }
+      if (!response.ok) {
+        setActionError(`update failed (${response.status})`);
+        return;
+      }
+      refresh();
+      await load(filter);
+    } catch (err) {
+      setActionError(err instanceof Error ? err.message : "update failed");
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  const isEditing = editing !== null;
 
   return (
     <div>
@@ -190,7 +323,7 @@ export default function ProjectsPage() {
           </p>
         </div>
         <div className="ml-auto">
-          <Button onClick={() => setShowCreate(true)}>Create project</Button>
+          <Button onClick={openCreate}>Create project</Button>
         </div>
       </div>
 
@@ -198,22 +331,22 @@ export default function ProjectsPage() {
         <div
           data-create-project-modal
           className="fixed inset-0 z-50 flex items-center justify-center bg-abyss p-4"
-          onClick={() => setShowCreate(false)}
+          onClick={closeModal}
         >
           <div
             role="dialog"
             aria-modal="true"
-            aria-label="Create project"
+            aria-label={isEditing ? "Edit project" : "Create project"}
             className="w-full max-w-md rounded-2xl border border-steel/40 bg-navy p-5"
             onClick={(e) => e.stopPropagation()}
           >
             <h2 className="text-base font-semibold text-white">
-              Create project
+              {isEditing ? "Edit project" : "Create project"}
             </h2>
             <p className="mt-1 text-sm text-muted">
-              New project{tenant ? ` in ${tenant}` : ""}
+              {isEditing ? `Editing ${editing}` : `New project${tenant ? ` in ${tenant}` : ""}`}
             </p>
-            <form onSubmit={createProject} className="mt-4 space-y-3">
+            <form onSubmit={isEditing ? saveEdit : createProject} className="mt-4 space-y-3">
               <label className="block">
                 <span className="mb-1 block font-mono text-[11px] uppercase tracking-wider text-muted">
                   Project name
@@ -222,10 +355,15 @@ export default function ProjectsPage() {
                   value={newName}
                   onChange={(e) => setNewName(e.target.value)}
                   placeholder="project name…"
-                  aria-label="New project name"
+                  aria-label={isEditing ? "Project name (rename)" : "New project name"}
                   autoFocus
                   className="w-full rounded-xl border border-steel/40 bg-abyss/60 px-3 py-2 text-sm text-cloud placeholder:text-muted/60 focus:border-brand/60 focus:outline-none"
                 />
+                {isEditing ? (
+                  <span className="mt-1 block text-xs text-muted">
+                    Renaming moves its tasks along with it.
+                  </span>
+                ) : null}
               </label>
               <label className="block">
                 <span className="mb-1 block font-mono text-[11px] uppercase tracking-wider text-muted">
@@ -235,7 +373,7 @@ export default function ProjectsPage() {
                   value={newTitle}
                   onChange={(e) => setNewTitle(e.target.value)}
                   placeholder="Display title…"
-                  aria-label="New project title"
+                  aria-label={isEditing ? "Project title" : "New project title"}
                   className="w-full rounded-xl border border-steel/40 bg-abyss/60 px-3 py-2 text-sm text-cloud placeholder:text-muted/60 focus:border-brand/60 focus:outline-none"
                 />
               </label>
@@ -248,7 +386,7 @@ export default function ProjectsPage() {
                     value={newCode}
                     onChange={(e) => setNewCode(e.target.value)}
                     placeholder="SHORT-CODE…"
-                    aria-label="New project code"
+                    aria-label={isEditing ? "Project code" : "New project code"}
                     className="w-full rounded-xl border border-steel/40 bg-abyss/60 px-3 py-2 text-sm text-cloud placeholder:text-muted/60 focus:border-brand/60 focus:outline-none"
                   />
                 </label>
@@ -260,7 +398,7 @@ export default function ProjectsPage() {
                     value={newDomain}
                     onChange={(e) => setNewDomain(e.target.value)}
                     placeholder="e.g. web, ops…"
-                    aria-label="New project domain"
+                    aria-label={isEditing ? "Project domain" : "New project domain"}
                     className="w-full rounded-xl border border-steel/40 bg-abyss/60 px-3 py-2 text-sm text-cloud placeholder:text-muted/60 focus:border-brand/60 focus:outline-none"
                   />
                 </label>
@@ -273,7 +411,7 @@ export default function ProjectsPage() {
                   value={newDescription}
                   onChange={(e) => setNewDescription(e.target.value)}
                   placeholder="What is this project about…"
-                  aria-label="New project description"
+                  aria-label={isEditing ? "Project description" : "New project description"}
                   rows={3}
                   className="w-full rounded-xl border border-steel/40 bg-abyss/60 px-3 py-2 text-sm text-cloud placeholder:text-muted/60 focus:border-brand/60 focus:outline-none"
                 />
@@ -282,15 +420,17 @@ export default function ProjectsPage() {
                 <p className="text-sm text-danger">{createError}</p>
               ) : null}
               <div className="flex justify-end gap-2">
-                <Button
-                  type="button"
-                  variant="secondary"
-                  onClick={() => setShowCreate(false)}
-                >
+                <Button type="button" variant="secondary" onClick={closeModal}>
                   Cancel
                 </Button>
                 <Button type="submit" disabled={creating || !newName.trim()}>
-                  {creating ? "Creating…" : "Create project"}
+                  {creating
+                    ? isEditing
+                      ? "Saving…"
+                      : "Creating…"
+                    : isEditing
+                      ? "Save changes"
+                      : "Create project"}
                 </Button>
               </div>
             </form>
@@ -298,7 +438,7 @@ export default function ProjectsPage() {
         </div>
       ) : null}
 
-      <div className="mb-4">
+      <div className="mb-4 flex flex-wrap items-center gap-2">
         <input
           type="search"
           value={query}
@@ -310,14 +450,32 @@ export default function ProjectsPage() {
           aria-label="Search projects"
           className="w-full rounded-xl border border-steel/40 bg-abyss/60 px-3 py-2 text-sm text-cloud placeholder:text-muted/60 focus:border-brand/60 focus:outline-none sm:max-w-xs"
         />
+        <div role="group" aria-label="Project status filter" className="flex gap-1.5">
+          {(["all", "active", "archived"] as const).map((f) => (
+            <button
+              key={f}
+              type="button"
+              aria-pressed={filter === f}
+              onClick={() => changeFilter(f)}
+              className={
+                filter === f
+                  ? "rounded-lg border border-brand/60 bg-brand/10 px-2.5 py-1 text-xs text-cloud transition-colors"
+                  : "rounded-lg border border-steel/40 px-2.5 py-1 text-xs text-muted transition-colors hover:border-brand/50 hover:text-cloud"
+              }
+            >
+              {f[0].toUpperCase() + f.slice(1)}
+            </button>
+          ))}
+        </div>
       </div>
 
       {error ? <p className="mb-4 text-sm text-danger">{error}</p> : null}
+      {actionError ? <p className="mb-4 text-sm text-danger">{actionError}</p> : null}
       {loading ? (
         <p className="font-mono text-sm text-muted">loading…</p>
       ) : visible.length === 0 ? (
         <p className="rounded-2xl border border-steel/40 bg-abyss/60 p-6 text-center text-sm text-muted">
-          No projects yet — create one above.
+          {filter === "archived" ? "No archived projects." : "No projects yet — create one above."}
         </p>
       ) : (
         <>
@@ -326,6 +484,7 @@ export default function ProjectsPage() {
             const s = stats.get(name) ?? emptyStats();
             const m = meta[name];
             const heading = m?.title?.trim() ? m.title : name;
+            const archived = isArchived(m);
             return (
               <li
                 key={name}
@@ -345,6 +504,11 @@ export default function ProjectsPage() {
                       {m.domain}
                     </span>
                   ) : null}
+                  {archived ? (
+                    <span className="shrink-0 rounded-full border border-line2 bg-panel2 px-2 py-0.5 font-mono text-[10px] uppercase tracking-wide text-muted">
+                      archived
+                    </span>
+                  ) : null}
                 </div>
                 {m?.description?.trim() ? (
                   <p className="mt-1 line-clamp-2 text-[13px] leading-relaxed text-dim">
@@ -356,7 +520,7 @@ export default function ProjectsPage() {
                   open {s.open} · attention {s.stuck} · done {s.done} ·
                   last activity {formatWhen(s.lastActivity)}
                 </p>
-                <div className="mt-2 flex gap-2">
+                <div className="mt-2 flex flex-wrap gap-2">
                   <Link
                     href="/workspace"
                     className="rounded-lg border border-steel/40 px-2.5 py-1 text-xs text-cloud transition-colors hover:border-brand/50"
@@ -369,6 +533,21 @@ export default function ProjectsPage() {
                   >
                     Open in chat
                   </Link>
+                  <button
+                    type="button"
+                    onClick={() => openEdit(name)}
+                    className="rounded-lg border border-steel/40 px-2.5 py-1 text-xs text-cloud transition-colors hover:border-brand/50"
+                  >
+                    Edit
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => void toggleArchive(name)}
+                    disabled={busy === name}
+                    className="rounded-lg border border-steel/40 px-2.5 py-1 text-xs text-cloud transition-colors hover:border-brand/50 disabled:opacity-40"
+                  >
+                    {busy === name ? "…" : archived ? "Restore" : "Archive"}
+                  </button>
                 </div>
               </li>
             );

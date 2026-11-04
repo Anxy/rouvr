@@ -10,7 +10,7 @@ import {
   type KnowledgeEntry,
   type KnowledgeUsage,
 } from "@/lib/api/workspace";
-import { isVerified } from "@/lib/knowledge";
+import { isPinned, isVerified, reviewStateLabel } from "@/lib/knowledge";
 
 // Knowledge inner page: one entry with its hierarchy (kind, version,
 // verification, usage), the full body, and its version history. Every
@@ -28,6 +28,29 @@ function VerifiedPill({ verified }: { verified: boolean }) {
       {verified ? "verified" : "unverified"}
     </span>
   );
+}
+
+function ReviewBadge({ state }: { state?: string }) {
+  if (state !== "rejected" && state !== "needs_revision") return null;
+  return (
+    <span
+      data-review-state={state}
+      className={`shrink-0 rounded-full px-2 py-0.5 font-mono text-[11px] ${
+        state === "rejected"
+          ? "border border-danger/40 bg-danger/10 text-danger"
+          : "border border-warning/40 bg-warning/10 text-warning"
+      }`}
+    >
+      {reviewStateLabel(state)}
+    </span>
+  );
+}
+
+// The proxy type omits the ledger's created_at; it still arrives on the
+// detail payload (SELECT *), so read it structurally for the trust block.
+function createdAt(entry: KnowledgeEntry): string | null {
+  const raw = (entry as KnowledgeEntry & { created_at?: string }).created_at;
+  return typeof raw === "string" && raw ? raw : null;
 }
 
 function usageLine(u: KnowledgeUsage | null | undefined): string {
@@ -105,7 +128,6 @@ export default function KnowledgeEntryPage({
     void params.then(({ key: id }) => {
       if (!alive) return;
       setKey(id);
-      // eslint-disable-next-line react-hooks/set-state-in-effect
       void load(id);
     });
     return () => {
@@ -134,6 +156,60 @@ export default function KnowledgeEntryPage({
       await load(key);
     } catch (err) {
       setActionError(err instanceof Error ? err.message : "verify failed");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function setArchived(next: boolean) {
+    if (!key) return;
+    setActionError("");
+    setBusy(true);
+    try {
+      const { response } = await ws.POST("/api/knowledge/{key}/archive", {
+        params: { path: { key } },
+        body: { archived: next },
+        headers: csrfHeaders(),
+      });
+      if (response.status === 401) {
+        router.push("/workspace/login");
+        return;
+      }
+      if (!response.ok) {
+        const detail = await response.text().catch(() => "");
+        setActionError(detail || `archive failed (${response.status})`);
+        return;
+      }
+      await load(key);
+    } catch (err) {
+      setActionError(err instanceof Error ? err.message : "archive failed");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function setPinned(next: boolean) {
+    if (!key) return;
+    setActionError("");
+    setBusy(true);
+    try {
+      const { response } = await ws.POST("/api/knowledge/{key}/pin", {
+        params: { path: { key } },
+        body: { pinned: next },
+        headers: csrfHeaders(),
+      });
+      if (response.status === 401) {
+        router.push("/workspace/login");
+        return;
+      }
+      if (!response.ok) {
+        const detail = await response.text().catch(() => "");
+        setActionError(detail || `pin failed (${response.status})`);
+        return;
+      }
+      await load(key);
+    } catch (err) {
+      setActionError(err instanceof Error ? err.message : "pin failed");
     } finally {
       setBusy(false);
     }
@@ -173,6 +249,10 @@ export default function KnowledgeEntryPage({
     }
   }
 
+  const created = entry ? createdAt(entry) : null;
+  const archived = entry ? entry.archived === 1 || entry.archived === true : false;
+  const taskIds = usage?.task_ids ?? [];
+
   return (
     <div className="mx-auto w-full max-w-6xl">
       <Link
@@ -193,12 +273,47 @@ export default function KnowledgeEntryPage({
             <h1 className="min-w-0 flex-1 text-2xl font-semibold text-white">
               {entry.title}
             </h1>
+            <ReviewBadge state={entry.review_state} />
             <VerifiedPill verified={isVerified(entry)} />
+            {isPinned(entry) ? (
+              <span
+                data-pinned
+                className="shrink-0 rounded-full border border-brand/40 bg-brand/10 px-2 py-0.5 font-mono text-[11px] text-brand-300"
+              >
+                pinned
+              </span>
+            ) : null}
+            {archived ? (
+              <span
+                data-archived
+                className="shrink-0 rounded-full border border-line2 bg-abyss px-2 py-0.5 font-mono text-[11px] text-muted"
+              >
+                archived
+              </span>
+            ) : null}
           </div>
           <p className="mt-1 font-mono text-[11px] text-dim" data-version>
             v{entry.version} · by {entry.author}
+            {created ? ` · ${new Date(created).toLocaleDateString()}` : null}
           </p>
           <p className="mt-1 font-mono text-[11px] text-cyan2">{usageLine(usage)}</p>
+          <section
+            aria-label="Trust"
+            data-trust
+            className="mt-3 rounded-xl border border-line bg-abyss/60 p-3"
+          >
+            <p className="font-mono text-[11px] text-dim">
+              Status:{" "}
+              <span className="text-fog">
+                {isVerified(entry) ? "Verified" : reviewStateLabel(entry.review_state)}
+              </span>
+            </p>
+            {entry.review_note ? (
+              <p data-review-note className="mt-1 text-[13px] leading-relaxed text-fog">
+                Reviewer note: {entry.review_note}
+              </p>
+            ) : null}
+          </section>
           <div className="mt-3 flex flex-wrap gap-2">
             {!isVerified(entry) ? (
               <Button
@@ -211,6 +326,24 @@ export default function KnowledgeEntryPage({
                 {busy ? "Working…" : "Verify"}
               </Button>
             ) : null}
+            <Button
+              type="button"
+              variant="secondary"
+              data-archive-entry
+              disabled={busy}
+              onClick={() => void setArchived(!archived)}
+            >
+              {busy ? "Working…" : archived ? "Restore" : "Archive"}
+            </Button>
+            <Button
+              type="button"
+              variant="secondary"
+              data-pin-entry
+              disabled={busy}
+              onClick={() => void setPinned(!isPinned(entry))}
+            >
+              {busy ? "Working…" : isPinned(entry) ? "Unpin" : "Pin"}
+            </Button>
             <Button
               type="button"
               variant="secondary"
@@ -289,6 +422,31 @@ export default function KnowledgeEntryPage({
               </p>
             ) : null;
           })()}
+          <section
+            aria-label="Referenced by"
+            data-referenced-by
+            className="mt-4 border-t border-line pt-3"
+          >
+            <h2 className="mb-2 font-mono text-[10px] uppercase tracking-widest text-dim">
+              Referenced by
+            </h2>
+            {taskIds.length > 0 ? (
+              <ul className="space-y-1.5">
+                {taskIds.map((id) => (
+                  <li key={id}>
+                    <Link
+                      href={`/workspace/tasks/${id}`}
+                      className="font-mono text-xs text-brand-300 hover:underline"
+                    >
+                      Task #{id}
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className="text-[13px] text-dim">No referencing tasks yet</p>
+            )}
+          </section>
           {history.length > 1 ? (
             <section aria-label="Version history" className="mt-4 border-t border-line pt-3">
               <h2 className="mb-2 font-mono text-[10px] uppercase tracking-widest text-dim">

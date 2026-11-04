@@ -22,9 +22,15 @@ export interface ProxyPaths {
   };
   "/api/tasks": {
     get: {
+      parameters: { query?: { state?: string; limit?: string; offset?: string } };
       responses: {
-        200: { content: { "application/json": { items: TaskRow[] } } };
+        200: {
+          content: {
+            "application/json": { items: TaskRow[]; total?: number; offset?: number };
+          };
+        };
         401: { content: { "application/json": { detail: string } } };
+        422: { content: { "application/json": { detail: string } } };
       };
     };
     post: {
@@ -62,6 +68,7 @@ export interface ProxyPaths {
           "application/json": {
             title?: string;
             intent?: string;
+            project?: string;
             idempotency_key: string;
           };
         };
@@ -245,6 +252,7 @@ export interface ProxyPaths {
   };
   "/api/projects": {
     get: {
+      parameters: { query?: { include_archived?: string } };
       responses: {
         200: { content: { "application/json": { projects: ProjectRow[] } } };
         401: { content: { "application/json": { detail: string } } };
@@ -283,9 +291,35 @@ export interface ProxyPaths {
       };
     };
   };
+  "/api/projects/{name}": {
+    patch: {
+      parameters: { path: { name: string } };
+      requestBody: {
+        content: {
+          "application/json": {
+            tenant?: string;
+            name?: string;
+            title?: string;
+            code?: string;
+            description?: string;
+            domain?: string;
+            archived?: boolean;
+          };
+        };
+      };
+      responses: {
+        200: { content: { "application/json": ProjectRow } };
+        401: { content: { "application/json": { detail: string } } };
+        403: { content: { "application/json": { detail: string } } };
+        404: { content: { "application/json": { detail: string } } };
+        409: { content: { "application/json": { detail: string } } };
+        422: { content: { "application/json": { detail: string } } };
+      };
+    };
+  };
   "/api/knowledge/search": {
     get: {
-      parameters: { query?: { q: string; project?: string; n?: string; full?: string } };
+      parameters: { query?: { q: string; project?: string; n?: string; full?: string; offset?: string } };
       responses: {
         200: { content: { "application/json": { items: KnowledgeHit[] } } };
         401: { content: { "application/json": { detail: string } } };
@@ -335,6 +369,76 @@ export interface ProxyPaths {
       };
     };
   };
+  "/api/knowledge/{key}/review": {
+    post: {
+      parameters: { path: { key: string } };
+      requestBody: {
+        content: {
+          "application/json": { verdict: string; note?: string };
+        };
+      };
+      responses: {
+        200: { content: { "application/json": KnowledgeEntry } };
+        401: { content: { "application/json": { detail: string } } };
+        403: { content: { "application/json": { detail: string } } };
+        404: { content: { "application/json": { detail: string } } };
+        422: { content: { "application/json": { detail: string } } };
+      };
+    };
+  };
+  "/api/knowledge/{key}/archive": {
+    post: {
+      parameters: { path: { key: string } };
+      requestBody: {
+        content: { "application/json": { archived: boolean } };
+      };
+      responses: {
+        200: { content: { "application/json": KnowledgeEntry } };
+        401: { content: { "application/json": { detail: string } } };
+        403: { content: { "application/json": { detail: string } } };
+        404: { content: { "application/json": { detail: string } } };
+        422: { content: { "application/json": { detail: string } } };
+      };
+    };
+  };
+  "/api/knowledge/{key}/pin": {
+    post: {
+      parameters: { path: { key: string } };
+      requestBody: {
+        content: { "application/json": { pinned: boolean } };
+      };
+      responses: {
+        200: { content: { "application/json": KnowledgeEntry } };
+        401: { content: { "application/json": { detail: string } } };
+        403: { content: { "application/json": { detail: string } } };
+        404: { content: { "application/json": { detail: string } } };
+        422: { content: { "application/json": { detail: string } } };
+      };
+    };
+  };
+  "/api/plans/{slug}": {
+    get: {
+      parameters: { path: { slug: string } };
+      responses: {
+        200: { content: { "application/json": PlanDetail } };
+        401: { content: { "application/json": { detail: string } } };
+        404: { content: { "application/json": { detail: string } } };
+        422: { content: { "application/json": { detail: string } } };
+      };
+    };
+  };
+  "/api/plans/{slug}/approve": {
+    post: {
+      parameters: { path: { slug: string } };
+      responses: {
+        200: { content: { "application/json": PlanDetail } };
+        401: { content: { "application/json": { detail: string } } };
+        403: { content: { "application/json": { detail: string } } };
+        404: { content: { "application/json": { detail: string } } };
+        422: { content: { "application/json": { detail: string } } };
+      };
+    };
+  };
   "/api/knowledge/{key}/versions": {
     post: {
       parameters: { path: { key: string } };
@@ -359,6 +463,7 @@ export interface KnowledgeUsage {
   key: string;
   id: number;
   applied_to_tasks: number;
+  task_ids?: number[];
   last_used_at: string | null;
 }
 
@@ -416,6 +521,7 @@ export interface ProjectRow {
   code?: string | null;
   description?: string | null;
   domain?: string | null;
+  archived?: number | null;
 }
 
 export interface KnowledgeHit {
@@ -424,6 +530,8 @@ export interface KnowledgeHit {
   kind: string;
   summary: string;
   verified: number | boolean;
+  review_state?: string;
+  pinned?: number | boolean;
   citation: string;
 }
 
@@ -435,6 +543,34 @@ export interface KnowledgeEntry extends KnowledgeHit {
   version: number;
   author: string;
   visibility: string;
+  review_note?: string;
+  archived?: number | boolean;
+}
+
+export interface PlanTaskCard {
+  id: number;
+  title: string;
+  state: string;
+  link: string;
+}
+
+export interface PlanDetail {
+  tenant: string;
+  project: string;
+  slug: string;
+  entry: {
+    id: number;
+    title: string;
+    version: number;
+    verified: boolean;
+    author: string;
+    created_at: string;
+  };
+  status: "draft" | "agreed" | "materialized";
+  slice: { id: number; link: string } | null;
+  tasks: PlanTaskCard[];
+  replayed?: boolean;
+  confirmed?: boolean;
 }
 
 export interface GrantRow {

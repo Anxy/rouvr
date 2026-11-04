@@ -26,6 +26,7 @@ API).
 | `/api/v1/tenants` | POST | `POST /v1/tenants` (`create_tenant`) | idempotent register |
 | `/api/v1/projects` | POST | `POST /v1/projects` (`create_project`) | idempotent register |
 | `/api/v1/projects` | GET | `GET /v1/projects` (`list_projects`) | tenant filter |
+| `/api/v1/projects/{project}` | PATCH | `PATCH /v1/projects/{project}` (`edit_project`) | rename/metadata/archive |
 | `/api/v1/users/{username}/disable` | POST | `POST /v1/users/{username}/disable` (`disable_user`) | stack-only |
 | `/api/v1/onboard/register` | POST | `POST /v1/onboard/register` (`onboard_register`) | auth-open (pre-account) |
 | `/api/v1/onboard/login` | POST | `POST /v1/onboard/login` (`onboard_login`) | auth-open (pre-account) |
@@ -37,6 +38,11 @@ API).
 | `/api/v1/knowledge/{key}/usage` | GET | `GET /v1/knowledge/{key}/usage` (`knowledge_usage`) | applied count + last used |
 | `/api/v1/knowledge/{kid}/versions` | POST | `POST /v1/knowledge/{kid}/versions` (`version_knowledge`) | new version |
 | `/api/v1/knowledge/{kid}/confirm` | POST | `POST /v1/knowledge/{kid}/confirm` (`confirm_knowledge`) | verify flag |
+| `/api/v1/knowledge/{kid}/review` | POST | `POST /v1/knowledge/{kid}/review` (`review_knowledge`) | verified/rejected/needs_revision + note |
+| `/api/v1/knowledge/{kid}/archive` | POST | `POST /v1/knowledge/{kid}/archive` (`archive_knowledge`) | hide from search, readable by id |
+| `/api/v1/knowledge/{kid}/pin` | POST | `POST /v1/knowledge/{kid}/pin` (`pin_knowledge`) | rank boost like verified |
+| `/api/v1/plans/{slug}` | GET | `GET /v1/plans/{slug}` (`get_plan`) | draft/agreed/materialized + chain |
+| `/api/v1/plans/{slug}/approve` | POST | `POST /v1/plans/{slug}/approve` (`approve_plan`) | confirm + materialize, idempotent |
 | `/api/v1/knowledge/store` | POST | `POST /v1/knowledge/store` (`knowledge_store`) | session store |
 | `/api/v1/knowledge/compact` | POST | `POST /v1/knowledge/compact` (`knowledge_compact`) | session compact |
 | `/api/v1/knowledge/snapshot` | POST | `POST /v1/knowledge/snapshot` (`knowledge_snapshot`) | snapshot |
@@ -47,6 +53,7 @@ API).
 | `/api/v1/tasks_with_contract` | POST | `POST /v1/tasks_with_contract` (`create_task_with_contract`) | atomic create+bind |
 | `/api/v1/tasks` | GET | `GET /v1/tasks` (`list_tasks`) | state/tenant filter |
 | `/api/v1/tasks/{tid}` | GET | `GET /v1/tasks/{tid}` (`get_task`) | + contracts/evidence/receipts |
+| `/api/v1/tasks/{tid}` | PATCH | `PATCH /v1/tasks/{tid}` (`edit_task`) | title/intent, idempotent key |
 | `/api/v1/tasks/{tid}/contracts` | POST | `POST /v1/tasks/{tid}/contracts` (`add_contract`) | dedupe by sha |
 | `/api/v1/grants` | POST | `POST /v1/grants` (`create_grant`) | stack-only |
 | `/api/v1/grants/active` | GET | `GET /v1/grants/active` (`active_grant`) | newest unexpired |

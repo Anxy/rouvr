@@ -502,3 +502,61 @@ def test_create_records_skipped_decomposition_without_model(monkeypatch, ledger_
     bodies = [e.get("body") for e in detail.get("evidence") or []
               if e.get("kind") == "decomposition"]
     assert bodies and bodies[0].get("status") == "skipped"
+
+
+def test_find_host_pipes_leaves_healthy_stdio_alone():
+    """Stdin already a pipe: normal launch, adopt nothing."""
+    import os
+    from rouvr.mcp_server import _find_host_pipes
+    r, w = os.pipe()
+    try:
+        assert _find_host_pipes(stdin_fd=r, read_fd=999, write_fd=998) is None
+    finally:
+        os.close(r)
+        os.close(w)
+
+
+def test_find_host_pipes_adopts_parked_pair():
+    """Stdin nulled + FIFO pair on 6/7: the post-kill respawn layout."""
+    import os
+    from rouvr.mcp_server import _find_host_pipes
+    null = os.open("/dev/null", os.O_RDONLY)
+    r, w = os.pipe()
+    try:
+        assert _find_host_pipes(stdin_fd=null, read_fd=r, write_fd=w) == (r, w)
+    finally:
+        os.close(null)
+        os.close(r)
+        os.close(w)
+
+
+def test_adopt_host_pipes_moves_parked_pair_onto_stdio():
+    """Full adopt onto spare fds: decision + dup2 move the pair."""
+    import os
+    import stat
+    from rouvr.mcp_server import _adopt_host_pipes
+    null = os.open("/dev/null", os.O_RDONLY)
+    r, w = os.pipe()
+    try:
+        assert _adopt_host_pipes(read_fd=r, write_fd=w,
+                                 stdin_fd=null, stdout_fd=61) is True
+        assert stat.S_ISFIFO(os.fstat(null).st_mode)
+        assert stat.S_ISFIFO(os.fstat(61).st_mode)
+    finally:
+        for fd in (null, r, w, 61):
+            try:
+                os.close(fd)
+            except OSError:
+                pass
+
+
+def test_find_host_pipes_refuses_without_pair():
+    """Stdin nulled but no parked pair: adopt nothing, stay fail-closed."""
+    import os
+    from rouvr.mcp_server import _find_host_pipes
+    null = os.open("/dev/null", os.O_RDONLY)
+    try:
+        assert _find_host_pipes(stdin_fd=null, read_fd=999, write_fd=998) is None
+        assert _find_host_pipes(stdin_fd=null, read_fd=null, write_fd=null) is None
+    finally:
+        os.close(null)

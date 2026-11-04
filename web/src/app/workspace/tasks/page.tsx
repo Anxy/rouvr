@@ -43,6 +43,7 @@ export default function TasksPage() {
   const [editingId, setEditingId] = useState<number | null>(null);
   const [eTitle, setETitle] = useState("");
   const [eIntent, setEIntent] = useState("");
+  const [eProject, setEProject] = useState("");
   const [rowBusy, setRowBusy] = useState(false);
   const [rowError, setRowError] = useState("");
   const [retiringId, setRetiringId] = useState<number | null>(null);
@@ -133,6 +134,7 @@ export default function TasksPage() {
     setEditingId(task.id);
     setETitle(task.title);
     setEIntent("");
+    setEProject(task.project);
     setRetiringId(null);
   }
 
@@ -141,11 +143,13 @@ export default function TasksPage() {
     setRowBusy(true);
     setRowError("");
     try {
+      const row = visible.find((t) => t.id === id);
       const { response } = await ws.PATCH("/api/tasks/{id}", {
         params: { path: { id: String(id) } },
         body: {
           title: eTitle.trim(),
           intent: eIntent.trim() || undefined,
+          project: eProject && row && eProject !== row.project ? eProject : undefined,
           idempotency_key: newKey(),
         },
         headers: csrfHeaders(),
@@ -388,6 +392,23 @@ export default function TasksPage() {
                     aria-label={`Edit intent for task ${t.id}`}
                     className="w-full rounded-xl border border-steel/40 bg-abyss/60 px-3 py-2 text-sm text-cloud placeholder:text-muted/60 focus:border-brand/60 focus:outline-none"
                   />
+                  <label className="block">
+                    <span className="mb-1 block font-mono text-[11px] uppercase tracking-wider text-muted">
+                      Project (same tenant only)
+                    </span>
+                    <select
+                      value={eProject || t.project}
+                      onChange={(e) => setEProject(e.target.value)}
+                      aria-label={`Move task ${t.id} to another project`}
+                      className="w-full rounded-xl border border-steel/40 bg-abyss/60 px-3 py-2 text-sm text-cloud focus:border-brand/60 focus:outline-none"
+                    >
+                      {projectOptions.filter((n) => n !== "All").map((name) => (
+                        <option key={name} value={name}>
+                          {name}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
                   <div className="flex gap-2">
                     <Button
                       onClick={() => void saveEdit(t.id)}

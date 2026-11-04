@@ -28,7 +28,7 @@ interface SessionValue {
   project: string | null;
   setProject: (name: string) => void;
   username: string | null;
-  refresh: () => void;
+  refresh: () => Promise<void>;
   logout: () => Promise<void>;
 }
 
@@ -59,22 +59,20 @@ export function SessionProvider({ children }: { children: ReactNode }) {
 
   // Active project: the stored choice wins when it is still in the live
   // list, otherwise the first project. Header switcher writes it.
-  const setProject = useCallback(
-    (name: string) => {
-      if (!projects.some((p) => p.project === name)) return;
-      setActiveProject(name);
-      try {
-        localStorage.setItem(PROJECT_KEY, name);
-      } catch {
-        /* private mode: choice lasts for the session only */
-      }
-    },
-    [projects],
-  );
+  const setProject = useCallback((name: string) => {
+    // No membership guard: callers offer known names, and post-rename
+    // callers re-point at a name the pre-refresh list does not contain yet.
+    setActiveProject(name);
+    try {
+      localStorage.setItem(PROJECT_KEY, name);
+    } catch {
+      /* private mode: choice lasts for the session only */
+    }
+  }, []);
 
-  const refresh = useCallback(() => {
+  const refresh = useCallback(async () => {
     const run = ++seq.current;
-    void (async () => {
+    await (async () => {
       try {
         const { data, response } = await ws.GET("/api/projects");
         if (run !== seq.current) return;

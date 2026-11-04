@@ -226,7 +226,8 @@ def test_list_endpoints_ignore_foreign_tenant_param(tmp_path, monkeypatch):
         mine = c.get("/v1/tasks", params={"tenant": ACME}, headers=gus).json()["items"]
         assert mine and all(t["tenant"] == GLOBEX for t in mine)
         projs = c.get("/v1/projects", params={"tenant": ACME}, headers=gus).json()["projects"]
-        assert projs == [{"tenant": GLOBEX, "project": SITE}]
+        assert projs == [{"tenant": GLOBEX, "project": SITE, "title": None, "code": None,
+                          "description": None, "domain": None, "archived": 0}]
         assert len(c.get("/v1/tasks", params={"tenant": ACME}, headers=stack).json()["items"]) == 1
         assert len(c.get("/v1/projects", headers=stack).json()["projects"]) == 2
     finally:

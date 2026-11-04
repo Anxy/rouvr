@@ -406,6 +406,28 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/knowledge/{kid}/archive": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Archive Knowledge Lite
+         * @description Archive (or restore) an entry: archived rows leave search, counts
+         *     and kind folders but stay readable by id. Same owner-or-stack gate
+         *     as review. Append-only history is preserved — nothing is deleted.
+         */
+        post: operations["archive_knowledge_lite_api_v1_knowledge__kid__archive_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/knowledge/{kid}/confirm": {
         parameters: {
             query?: never;
@@ -438,6 +460,51 @@ export interface paths {
         get: operations["knowledge_history_lite_api_v1_knowledge__kid__history_get"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/knowledge/{kid}/pin": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Pin Knowledge Lite
+         * @description Pin (or unpin) an entry: pinned rows get the same extra rank vote
+         *     verified rows get, so they surface first. Same gate as review.
+         */
+        post: operations["pin_knowledge_lite_api_v1_knowledge__kid__pin_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/knowledge/{kid}/review": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Review Knowledge Lite
+         * @description Review verdict on an entry: verified | rejected | needs_revision,
+         *     plus an optional reviewer note. Stack may act anywhere; a session
+         *     owner inside its own tenant (broader than creator-only confirm, so
+         *     tenant reviewers can work any entry). verified verdicts keep the
+         *     verified flag in sync for legacy readers.
+         */
+        post: operations["review_knowledge_lite_api_v1_knowledge__kid__review_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -512,6 +579,51 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/plans/{slug}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Plan Lite
+         * @description Plan lifecycle, derived not stored: the entry plus its status
+         *     (draft/agreed/materialized) and the slice->tasks chain with links.
+         */
+        get: operations["get_plan_lite_api_v1_plans__slug__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/plans/{slug}/approve": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Approve Plan Lite
+         * @description Approve a plan: confirm the entry, then materialize one slice +
+         *     one task per step via the same path chat Convert uses (no model
+         *     call, no sealing — tasks land pending, seal retry applies).
+         *     Idempotent on the plan:convert receipt, so approve-then-Convert and
+         *     Convert-then-approve both replay the same slice.
+         */
+        post: operations["approve_plan_lite_api_v1_plans__slug__approve_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/projects": {
         parameters: {
             query?: never;
@@ -522,6 +634,7 @@ export interface paths {
         /**
          * List Projects Lite
          * @description Projects visible to the caller: its own tenant, or all for stack.
+         *     Archived projects are hidden unless include_archived is set.
          */
         get: operations["list_projects_lite_api_v1_projects_get"];
         put?: never;
@@ -531,13 +644,41 @@ export interface paths {
          *
          *     Stack may create anywhere; a session owner may create inside its
          *     own tenant — the same owner-within-tenant rule task transitions
-         *     use. Anything else stays worker-only.
+         *     use. Anything else stays worker-only. Optional metadata (title,
+         *     code, description, domain) is stored when provided and updated on
+         *     re-creation; unprovided fields keep their stored values.
          */
         post: operations["create_project_lite_api_v1_projects_post"];
         delete?: never;
         options?: never;
         head?: never;
         patch?: never;
+        trace?: never;
+    };
+    "/api/v1/projects/{project}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Edit Project Lite
+         * @description Edit a project: rename (name), metadata, archived flag.
+         *
+         *     Stack may act anywhere; a session owner inside its own tenant.
+         *     Rename rewrites the tenant/project scope on projects, tasks,
+         *     knowledge, chat turns, classifications and autonomy rows — receipts
+         *     and outbox payloads are historical records and stay as written.
+         *     409 when the target name is already taken.
+         */
+        patch: operations["edit_project_lite_api_v1_projects__project__patch"];
         trace?: never;
     };
     "/api/v1/tasks": {
@@ -574,9 +715,13 @@ export interface paths {
         head?: never;
         /**
          * Edit Task Lite
-         * @description Edit title/intent of an unclaimed open task. Requires idempotency_key;
+         * @description Edit title/intent of an unclaimed open task, optionally moving it
+         *     to another project in the same tenant. Requires idempotency_key;
          *     replays return the first receipt. Claimed/leased or non-open tasks
          *     refuse with 409 — editing live work would fork the worker's context.
+         *     Moves refuse with 422 when the task is a slice or slice member
+         *     (the chain lives in one project) or the target is unregistered;
+         *     cross-tenant moves are never allowed.
          */
         patch: operations["edit_task_lite_api_v1_tasks__tid__patch"];
         trace?: never;
@@ -1362,6 +1507,28 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/knowledge/{kid}/archive": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Archive Knowledge
+         * @description Archive (or restore) an entry: archived rows leave search, counts
+         *     and kind folders but stay readable by id. Same owner-or-stack gate
+         *     as review. Append-only history is preserved — nothing is deleted.
+         */
+        post: operations["archive_knowledge_v1_knowledge__kid__archive_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/knowledge/{kid}/confirm": {
         parameters: {
             query?: never;
@@ -1394,6 +1561,51 @@ export interface paths {
         get: operations["knowledge_history_v1_knowledge__kid__history_get"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/knowledge/{kid}/pin": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Pin Knowledge
+         * @description Pin (or unpin) an entry: pinned rows get the same extra rank vote
+         *     verified rows get, so they surface first. Same gate as review.
+         */
+        post: operations["pin_knowledge_v1_knowledge__kid__pin_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/knowledge/{kid}/review": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Review Knowledge
+         * @description Review verdict on an entry: verified | rejected | needs_revision,
+         *     plus an optional reviewer note. Stack may act anywhere; a session
+         *     owner inside its own tenant (broader than creator-only confirm, so
+         *     tenant reviewers can work any entry). verified verdicts keep the
+         *     verified flag in sync for legacy readers.
+         */
+        post: operations["review_knowledge_v1_knowledge__kid__review_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1468,6 +1680,51 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/plans/{slug}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Plan
+         * @description Plan lifecycle, derived not stored: the entry plus its status
+         *     (draft/agreed/materialized) and the slice->tasks chain with links.
+         */
+        get: operations["get_plan_v1_plans__slug__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/plans/{slug}/approve": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Approve Plan
+         * @description Approve a plan: confirm the entry, then materialize one slice +
+         *     one task per step via the same path chat Convert uses (no model
+         *     call, no sealing — tasks land pending, seal retry applies).
+         *     Idempotent on the plan:convert receipt, so approve-then-Convert and
+         *     Convert-then-approve both replay the same slice.
+         */
+        post: operations["approve_plan_v1_plans__slug__approve_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/projects": {
         parameters: {
             query?: never;
@@ -1478,6 +1735,7 @@ export interface paths {
         /**
          * List Projects
          * @description Projects visible to the caller: its own tenant, or all for stack.
+         *     Archived projects are hidden unless include_archived is set.
          */
         get: operations["list_projects_v1_projects_get"];
         put?: never;
@@ -1487,13 +1745,41 @@ export interface paths {
          *
          *     Stack may create anywhere; a session owner may create inside its
          *     own tenant — the same owner-within-tenant rule task transitions
-         *     use. Anything else stays worker-only.
+         *     use. Anything else stays worker-only. Optional metadata (title,
+         *     code, description, domain) is stored when provided and updated on
+         *     re-creation; unprovided fields keep their stored values.
          */
         post: operations["create_project_v1_projects_post"];
         delete?: never;
         options?: never;
         head?: never;
         patch?: never;
+        trace?: never;
+    };
+    "/v1/projects/{project}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Edit Project
+         * @description Edit a project: rename (name), metadata, archived flag.
+         *
+         *     Stack may act anywhere; a session owner inside its own tenant.
+         *     Rename rewrites the tenant/project scope on projects, tasks,
+         *     knowledge, chat turns, classifications and autonomy rows — receipts
+         *     and outbox payloads are historical records and stay as written.
+         *     409 when the target name is already taken.
+         */
+        patch: operations["edit_project_v1_projects__project__patch"];
         trace?: never;
     };
     "/v1/tasks": {
@@ -1530,9 +1816,13 @@ export interface paths {
         head?: never;
         /**
          * Edit Task
-         * @description Edit title/intent of an unclaimed open task. Requires idempotency_key;
+         * @description Edit title/intent of an unclaimed open task, optionally moving it
+         *     to another project in the same tenant. Requires idempotency_key;
          *     replays return the first receipt. Claimed/leased or non-open tasks
          *     refuse with 409 — editing live work would fork the worker's context.
+         *     Moves refuse with 422 when the task is a slice or slice member
+         *     (the chain lives in one project) or the target is unregistered;
+         *     cross-tenant moves are never allowed.
          */
         patch: operations["edit_task_v1_tasks__tid__patch"];
         trace?: never;
@@ -2386,6 +2676,8 @@ export interface operations {
                 project?: string | null;
                 n?: number;
                 full?: boolean;
+                include_archived?: boolean;
+                offset?: number;
             };
             header?: never;
             path?: never;
@@ -2584,6 +2876,43 @@ export interface operations {
             };
         };
     };
+    archive_knowledge_lite_api_v1_knowledge__kid__archive_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                kid: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    [key: string]: unknown;
+                };
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     confirm_knowledge_lite_api_v1_knowledge__kid__confirm_post: {
         parameters: {
             query?: never;
@@ -2625,6 +2954,80 @@ export interface operations {
             cookie?: never;
         };
         requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    pin_knowledge_lite_api_v1_knowledge__kid__pin_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                kid: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    [key: string]: unknown;
+                };
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    review_knowledge_lite_api_v1_knowledge__kid__review_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                kid: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    [key: string]: unknown;
+                };
+            };
+        };
         responses: {
             /** @description Successful Response */
             200: {
@@ -2788,10 +3191,76 @@ export interface operations {
             };
         };
     };
+    get_plan_lite_api_v1_plans__slug__get: {
+        parameters: {
+            query?: {
+                tenant?: string | null;
+                project?: string | null;
+            };
+            header?: never;
+            path: {
+                slug: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    approve_plan_lite_api_v1_plans__slug__approve_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                slug: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     list_projects_lite_api_v1_projects_get: {
         parameters: {
             query?: {
                 tenant?: string | null;
+                include_archived?: boolean;
             };
             header?: never;
             path?: never;
@@ -2854,11 +3323,50 @@ export interface operations {
             };
         };
     };
+    edit_project_lite_api_v1_projects__project__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    [key: string]: unknown;
+                };
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     list_tasks_lite_api_v1_tasks_get: {
         parameters: {
             query?: {
                 state?: string | null;
                 tenant?: string | null;
+                limit?: number | null;
+                offset?: number;
             };
             header?: never;
             path?: never;
@@ -4174,6 +4682,8 @@ export interface operations {
                 project?: string | null;
                 n?: number;
                 full?: boolean;
+                include_archived?: boolean;
+                offset?: number;
             };
             header?: never;
             path?: never;
@@ -4372,6 +4882,43 @@ export interface operations {
             };
         };
     };
+    archive_knowledge_v1_knowledge__kid__archive_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                kid: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    [key: string]: unknown;
+                };
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     confirm_knowledge_v1_knowledge__kid__confirm_post: {
         parameters: {
             query?: never;
@@ -4413,6 +4960,80 @@ export interface operations {
             cookie?: never;
         };
         requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    pin_knowledge_v1_knowledge__kid__pin_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                kid: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    [key: string]: unknown;
+                };
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    review_knowledge_v1_knowledge__kid__review_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                kid: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    [key: string]: unknown;
+                };
+            };
+        };
         responses: {
             /** @description Successful Response */
             200: {
@@ -4576,10 +5197,76 @@ export interface operations {
             };
         };
     };
+    get_plan_v1_plans__slug__get: {
+        parameters: {
+            query?: {
+                tenant?: string | null;
+                project?: string | null;
+            };
+            header?: never;
+            path: {
+                slug: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    approve_plan_v1_plans__slug__approve_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                slug: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     list_projects_v1_projects_get: {
         parameters: {
             query?: {
                 tenant?: string | null;
+                include_archived?: boolean;
             };
             header?: never;
             path?: never;
@@ -4642,11 +5329,50 @@ export interface operations {
             };
         };
     };
+    edit_project_v1_projects__project__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    [key: string]: unknown;
+                };
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     list_tasks_v1_tasks_get: {
         parameters: {
             query?: {
                 state?: string | null;
                 tenant?: string | null;
+                limit?: number | null;
+                offset?: number;
             };
             header?: never;
             path?: never;

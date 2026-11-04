@@ -16,7 +16,9 @@ import {
   citationId,
   citationVersion,
   countKinds,
+  isPinned,
   isVerified,
+  reviewStateLabel,
 } from "@/lib/knowledge";
 
 // Knowledge browser in the Figma Knowledge shape: a search panel up top,
@@ -50,6 +52,22 @@ function VerifiedPill({ verified }: { verified: boolean }) {
   );
 }
 
+function ReviewBadge({ state }: { state?: string }) {
+  if (state !== "rejected" && state !== "needs_revision") return null;
+  return (
+    <span
+      data-review-state={state}
+      className={`shrink-0 rounded-full px-2 py-0.5 font-mono text-[11px] ${
+        state === "rejected"
+          ? "border border-danger/40 bg-danger/10 text-danger"
+          : "border border-warning/40 bg-warning/10 text-warning"
+      }`}
+    >
+      {reviewStateLabel(state)}
+    </span>
+  );
+}
+
 function usageLine(u: KnowledgeUsage | null | undefined): string {
   if (!u) return "Usage —";
   const n = u.applied_to_tasks;
@@ -72,6 +90,8 @@ export default function KnowledgePage() {
   // loading stay visible — only a loaded zero count hides a row.
   const [hideUnused, setHideUnused] = useState(false);
   const [verifying, setVerifying] = useState<string | null>(null);
+  const [reviewing, setReviewing] = useState<string | null>(null);
+  const [pinning, setPinning] = useState<string | null>(null);
   const defaultRan = useRef(false);
   const usageRun = useRef(0);
 
@@ -148,6 +168,8 @@ export default function KnowledgePage() {
     void search();
   }, [search]);
 
+  // Archived rows never reach the shortlist — the ledger excludes them
+  // from search server-side, so no client filter is needed here.
   const visible = useMemo(
     () =>
       hits.filter((h) => {
@@ -184,6 +206,62 @@ export default function KnowledgePage() {
   // K7: dashboard counts tally the loaded shortlist only — verified share
   // plus the kind folders aside. Nothing here claims a ledger-wide total.
   const verifiedCount = useMemo(() => hits.filter(isVerified).length, [hits]);
+
+  async function reviewHit(hit: KnowledgeHit, verdict: "rejected" | "needs_revision") {
+    const id = citationId(hit.citation);
+    setReviewing(`${hit.citation}:${verdict}`);
+    setError("");
+    try {
+      const { response } = await ws.POST("/api/knowledge/{key}/review", {
+        params: { path: { key: id } },
+        body: { verdict },
+        headers: csrfHeaders(),
+      });
+      if (response.status === 401) {
+        router.push("/workspace/login");
+        return;
+      }
+      if (!response.ok) {
+        const detail = await response.text().catch(() => "");
+        setError(detail || `review failed (${response.status})`);
+        return;
+      }
+      await search();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "review failed");
+    } finally {
+      setReviewing(null);
+    }
+  }
+
+  async function togglePin(hit: KnowledgeHit) {
+    const id = citationId(hit.citation);
+    setPinning(hit.citation);
+    setError("");
+    try {
+      const { response } = await ws.POST("/api/knowledge/{key}/pin", {
+        params: { path: { key: id } },
+        body: { pinned: !isPinned(hit) },
+        headers: csrfHeaders(),
+      });
+      if (response.status === 401) {
+        router.push("/workspace/login");
+        return;
+      }
+      if (!response.ok) {
+        const detail = await response.text().catch(() => "");
+        setError(detail || `pin failed (${response.status})`);
+        return;
+      }
+      // Pinned rows earn the same rank vote as verified rows, so the
+      // reload re-sorts them to the top server-side.
+      await search();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "pin failed");
+    } finally {
+      setPinning(null);
+    }
+  }
 
   async function verifyHit(hit: KnowledgeHit) {
     const id = citationId(hit.citation);
@@ -342,7 +420,16 @@ export default function KnowledgePage() {
                           </span>
                         ) : null}
                         <span className="flex-1" />
+                        <ReviewBadge state={hit.review_state} />
                         <VerifiedPill verified={isVerified(hit)} />
+                        {isPinned(hit) ? (
+                          <span
+                            data-pinned={hit.citation}
+                            className="shrink-0 rounded-full border border-brand/40 bg-brand/10 px-2 py-0.5 font-mono text-[11px] text-brand-300"
+                          >
+                            pinned
+                          </span>
+                        ) : null}
                       </div>
                       <Link
                         href={`/workspace/knowledge/${citationId(hit.citation)}`}
@@ -357,8 +444,8 @@ export default function KnowledgePage() {
                           </p>
                         ) : null}
                       </Link>
-                      <div className="mt-3 flex items-center gap-2 border-t border-line pt-2">
-                        <p className="min-w-0 flex-1 font-mono text-[11px] text-dim">
+                      <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-line pt-2">
+                        <p className="min-w-0 flex-1 basis-full font-mono text-[11px] text-dim">
                           {hit.citation in usage
                             ? usageLine(usage[hit.citation])
                             : "Usage loading…"}
@@ -374,6 +461,40 @@ export default function KnowledgePage() {
                             {verifying === hit.citation ? "Verifying…" : "Verify"}
                           </button>
                         ) : null}
+                        <button
+                          type="button"
+                          data-review-reject={hit.citation}
+                          disabled={reviewing === `${hit.citation}:rejected`}
+                          onClick={() => void reviewHit(hit, "rejected")}
+                          className="shrink-0 rounded-lg border border-danger/40 bg-danger/10 px-2 py-1 font-mono text-[11px] text-danger transition-colors hover:border-danger/70 disabled:opacity-50"
+                        >
+                          {reviewing === `${hit.citation}:rejected` ? "Rejecting…" : "Reject"}
+                        </button>
+                        <button
+                          type="button"
+                          data-review-needs-revision={hit.citation}
+                          disabled={reviewing === `${hit.citation}:needs_revision`}
+                          onClick={() => void reviewHit(hit, "needs_revision")}
+                          className="shrink-0 rounded-lg border border-warning/40 bg-warning/10 px-2 py-1 font-mono text-[11px] text-warning transition-colors hover:border-warning/70 disabled:opacity-50"
+                        >
+                          {reviewing === `${hit.citation}:needs_revision`
+                            ? "Saving…"
+                            : "Needs revision"}
+                        </button>
+                        <button
+                          type="button"
+                          data-pin={hit.citation}
+                          aria-pressed={isPinned(hit)}
+                          disabled={pinning === hit.citation}
+                          onClick={() => void togglePin(hit)}
+                          className="shrink-0 rounded-lg border border-line2 bg-abyss px-2 py-1 font-mono text-[11px] text-dim transition-colors hover:border-brand/60 hover:text-fog disabled:opacity-50"
+                        >
+                          {pinning === hit.citation
+                            ? "Pinning…"
+                            : isPinned(hit)
+                              ? "Unpin"
+                              : "Pin"}
+                        </button>
                       </div>
                     </article>
                   </li>

@@ -6,18 +6,21 @@ import { useParams, useRouter } from "next/navigation";
 import { TaskStatePill } from "@/components/ui/StatusPill";
 import { PipelineStrip } from "@/components/workspace/PipelineStrip";
 import { Button } from "@/components/ui/Button";
+import { useSession } from "@/components/workspace/session";
 import {
   csrfHeaders,
   parseSseFrames,
   pumpStream,
   ws,
   type TaskDetail,
+  type TaskRow,
 } from "@/lib/api/workspace";
 import {
   attentionFromEvidence,
   collectKnowledgeRefs,
   describeBlockedReason,
   evidenceLabel,
+  eventLabel,
   formatEvidenceTime,
   journeyStages,
   parseContractCriteria,
@@ -58,9 +61,15 @@ export default function TaskPage() {
   const [editing, setEditing] = useState(false);
   const [editTitle, setEditTitle] = useState("");
   const [editIntent, setEditIntent] = useState("");
+  const [editProject, setEditProject] = useState("");
   const [evKind, setEvKind] = useState("note");
   const [evBody, setEvBody] = useState("");
   const [retireInput, setRetireInput] = useState("");
+  const [neighbors, setNeighbors] = useState<{ prev: TaskRow | null; next: TaskRow | null }>({
+    prev: null,
+    next: null,
+  });
+  const { projects } = useSession();
   const abortRef = useRef<AbortController | null>(null);
 
   const load = useCallback(async () => {
@@ -78,6 +87,25 @@ export default function TaskPage() {
         return;
       }
       setTask(data);
+      // Previous/next navigation: siblings in the same tenant+project by
+      // id. Bounded list query (500 rows) so a huge ledger cannot stall the page.
+      try {
+        const { data: list, response: listRes } = await ws.GET("/api/tasks", {
+          params: { query: { limit: "500" } },
+        });
+        if (listRes.ok && list) {
+          const sibs = list.items
+            .filter((t) => t.tenant === data.tenant && t.project === data.project)
+            .sort((a, b) => a.id - b.id);
+          const at = sibs.findIndex((t) => t.id === data.id);
+          setNeighbors({
+            prev: at > 0 ? sibs[at - 1] : null,
+            next: at >= 0 && at < sibs.length - 1 ? sibs[at + 1] : null,
+          });
+        }
+      } catch {
+        /* neighbors are a convenience; the page stands without them */
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : "task load failed");
     }
@@ -285,6 +313,8 @@ export default function TaskPage() {
         body: {
           title: editTitle.trim(),
           intent: editIntent.trim() || undefined,
+          project:
+            editProject && editProject !== task?.project ? editProject : undefined,
           idempotency_key: newKey(),
         },
         headers: csrfHeaders(),
@@ -432,6 +462,51 @@ export default function TaskPage() {
             <p className="mt-3 max-w-2xl whitespace-pre-wrap text-sm leading-relaxed text-dim">
               {task.intent}
             </p>
+            <dl
+              aria-label="Task metadata"
+              className="mt-4 grid grid-cols-2 gap-x-6 gap-y-2 rounded-2xl border border-steel/30 bg-abyss/60 px-4 py-3 font-mono text-[11px] sm:grid-cols-3"
+            >
+              {[
+                ["Status", task.state],
+                ["Project", `${task.tenant} / ${task.project}`],
+                ["Created", formatEvidenceTime(task.created_at)],
+                ["Updated", formatEvidenceTime(task.updated_at)],
+                ["Created by", task.created_by],
+                ["Owner", task.owner ?? "unclaimed"],
+              ].map(([term, value]) => (
+                <div key={term} className="min-w-0">
+                  <dt className="uppercase tracking-wider text-muted">{term}</dt>
+                  <dd className="truncate text-cloud" title={String(value)}>
+                    {value}
+                  </dd>
+                </div>
+              ))}
+            </dl>
+            <nav
+              aria-label="Previous and next tasks"
+              className="mt-3 flex items-center justify-between gap-3 font-mono text-xs"
+            >
+              {neighbors.prev ? (
+                <Link
+                  href={`/workspace/tasks/${neighbors.prev.id}`}
+                  className="min-w-0 truncate text-muted hover:text-white"
+                >
+                  ← #{neighbors.prev.id} {neighbors.prev.title}
+                </Link>
+              ) : (
+                <span />
+              )}
+              {neighbors.next ? (
+                <Link
+                  href={`/workspace/tasks/${neighbors.next.id}`}
+                  className="min-w-0 truncate text-right text-muted hover:text-white"
+                >
+                  #{neighbors.next.id} {neighbors.next.title} →
+                </Link>
+              ) : (
+                <span />
+              )}
+            </nav>
           </div>
           <div className="flex flex-wrap gap-2">
             {APPROVABLE.has(task.state) ? (
@@ -502,6 +577,23 @@ export default function TaskPage() {
                         aria-label={`Edit intent for task ${task.id}`}
                         className="w-full rounded-xl border border-steel/40 bg-navy/60 px-3 py-2 text-sm text-cloud placeholder:text-muted/60 focus:border-brand/60 focus:outline-none"
                       />
+                      <label className="block">
+                        <span className="mb-1 block font-mono text-[11px] uppercase tracking-wider text-muted">
+                          Project (same tenant only; slices stay put)
+                        </span>
+                        <select
+                          value={editProject || task.project}
+                          onChange={(e) => setEditProject(e.target.value)}
+                          aria-label={`Move task ${task.id} to another project`}
+                          className="w-full rounded-xl border border-steel/40 bg-navy/60 px-3 py-2 text-sm text-cloud focus:border-brand/60 focus:outline-none"
+                        >
+                          {projects.map((p) => (
+                            <option key={p.project} value={p.project}>
+                              {p.project}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
                       <div className="flex gap-2">
                         <Button
                           onClick={() => void saveEdit()}
@@ -526,6 +618,7 @@ export default function TaskPage() {
                         setActionError("");
                         setEditTitle(task.title);
                         setEditIntent(task.intent);
+                        setEditProject(task.project);
                         setEditing(true);
                       }}
                     >
@@ -726,8 +819,15 @@ export default function TaskPage() {
                       key={e.id}
                       className="rounded-lg border border-line bg-abyss/60 px-3 py-2 font-mono text-xs text-fog"
                     >
-                      <span className="text-dim">#{e.id}</span> {e.type}{" "}
-                      <span className="text-dim">{e.summary}</span>
+                      <div className="flex items-baseline justify-between gap-3">
+                        <span>
+                          <span className="text-dim">#{e.id}</span> {eventLabel(e.type)}{" "}
+                          <span className="text-dim">{e.summary}</span>
+                        </span>
+                        <time dateTime={e.created_at} className="shrink-0 text-dim/70">
+                          {formatEvidenceTime(e.created_at)}
+                        </time>
+                      </div>
                     </li>
                   ))}
                 </ul>

@@ -313,6 +313,29 @@ export function formatEvidenceTime(iso: string): string {
   return new Date(ms).toLocaleString();
 }
 
+// Human timeline labels for live ledger event types. Unknown types fall
+// back to the raw type string — never invented, always traceable to the
+// outbox row behind the timeline entry.
+const EVENT_LABELS: Record<string, string> = {
+  "task.created": "Created",
+  "task.claimed": "Claimed",
+  "task.transition": "Moved",
+  "task.sealed": "Sealed",
+  "task.retired": "Retired",
+  "task.edit": "Edited",
+  "evidence.appended": "Evidence",
+  "knowledge.confirmed": "Knowledge verified",
+  "knowledge.reviewed": "Knowledge reviewed",
+  "knowledge.archived": "Knowledge archived",
+  "knowledge.pinned": "Knowledge pinned",
+  "plan.converted": "Plan converted",
+  "project.renamed": "Project renamed",
+};
+
+export function eventLabel(type: string): string {
+  return EVENT_LABELS[type] ?? type;
+}
+
 // Agreed outcome as a real checklist: parse the contract JSON the ledger
 // writes and return its acceptance_criteria strings. Null when the body
 // is not a contract (the UI falls back to raw JSON then, never invented

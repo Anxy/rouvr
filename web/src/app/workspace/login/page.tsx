@@ -3,11 +3,12 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/Button";
-import { RouvrMark } from "@/components/workspace/RouvrMark";
 import { setCsrfToken, setSessionUsername, ws } from "@/lib/api/workspace";
 
 // Standalone login: no workspace shell here (the layout skips its sidebar
-// and topbar on this route). Centered brand, fields, remember-me.
+// and topbar on this route). Official brand mark from rouvr.ai
+// (public/rouvr-logo.svg, byte-identical to the marketing site icon)
+// plus the "Rouvr." wordmark only — no brand copy.
 export default function WorkspaceLoginPage() {
   const router = useRouter();
   const [username, setUsername] = useState("admin");
@@ -43,12 +44,9 @@ export default function WorkspaceLoginPage() {
 
   return (
     <div className="mx-auto flex min-h-[70vh] w-full max-w-sm flex-col items-center justify-center text-center">
-      <RouvrMark size={64} />
+      <img src="/rouvr-logo.svg" alt="" width={64} height={64} aria-hidden />
       <h1 className="sr-only">Sign in to Rouvr</h1>
-      <p className="mt-4 font-mono text-sm uppercase tracking-widest text-white">rouvr</p>
-      <p className="mt-3 max-w-xs text-sm leading-relaxed text-muted">
-        An autonomous AI colleague that turns conversations into accountable work.
-      </p>
+      <p className="mt-4 text-xl font-semibold text-white">Rouvr.</p>
       <form onSubmit={submit} className="mt-8 w-full space-y-4 text-left">
         <label className="block">
           <span className="mb-1 block font-mono text-xs uppercase tracking-wider text-muted">

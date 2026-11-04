@@ -14,8 +14,6 @@ const read = (rel: string): string =>
 
 const VALUE_PROP =
   "Rouvr turns requests into tracked work: contract, build, review, evidence.";
-const LOGIN_TAGLINE =
-  "An autonomous AI colleague that turns conversations into accountable work.";
 
 test("chat helper text states the value prop in one line", () => {
   const chat = read("src/app/workspace/chat/page.tsx");
@@ -156,21 +154,29 @@ test("chat plan offers carry a title with the task count plus the buttons", () =
   }
 });
 
-test("login states the value prop under the heading", () => {
+test("login shows the official mark and wordmark only", () => {
   const login = read("src/app/workspace/login/page.tsx");
   assert.ok(
     login.includes("Sign in to Rouvr"),
     "login must keep its heading",
   );
   assert.ok(
-    login.includes(LOGIN_TAGLINE),
-    "login must carry the one-sentence value prop under the heading",
+    login.includes("/rouvr-logo.svg"),
+    "login must use the official rouvr.ai brand mark",
   );
-  const tagAt = login.indexOf(LOGIN_TAGLINE);
+  assert.ok(
+    login.includes("Rouvr."),
+    "login must carry the Rouvr. wordmark",
+  );
+  assert.ok(
+    !login.includes("RouvrMark") &&
+      !login.includes("autonomous AI colleague"),
+    "login must not carry hand-drawn marks or brand copy",
+  );
   const formAt = login.indexOf("<form");
   assert.ok(
-    tagAt !== -1 && formAt !== -1 && tagAt < formAt,
-    "value prop must sit under the heading, above the form",
+    formAt !== -1 && login.indexOf("Rouvr.") < formAt,
+    "wordmark must sit above the form",
   );
   assert.ok(
     !login.includes("gradient"),

@@ -178,7 +178,8 @@ def stream_completion(messages: list[dict], provider: dict, max_tokens: int = MA
             yield body[i:i + step]
         return
     payload = json.dumps({"model": provider["model"], "messages": messages,
-                          "max_tokens": max_tokens, "stream": True}).encode()
+                          "max_tokens": max_tokens, "stream": True,
+                          "reasoning_effort": "low"}).encode()
     headers = {"Content-Type": "application/json"}
     if provider.get("api_key"):
         headers["Authorization"] = f"Bearer {provider['api_key']}"
@@ -230,7 +231,8 @@ def complete_once(messages: list[dict], provider: dict, max_tokens: int = MAX_TO
     if provider["name"] == "stub":
         return _stub_response(messages[-1].get("content", "") if messages else "")
     payload = json.dumps({"model": provider["model"], "messages": messages,
-                          "max_tokens": max_tokens, "stream": False}).encode()
+                          "max_tokens": max_tokens, "stream": False,
+                          "reasoning_effort": "low"}).encode()
     headers = {"Content-Type": "application/json"}
     if provider.get("api_key"):
         headers["Authorization"] = f"Bearer {provider['api_key']}"

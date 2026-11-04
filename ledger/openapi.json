@@ -998,6 +998,60 @@
         "summary": "Get Knowledge Lite"
       }
     },
+    "/api/v1/knowledge/{key}/usage": {
+      "get": {
+        "description": "Where one entry is applied: tasks citing any of its versions.\n\nCounts distinct in-scope tasks whose knowledge_citations evidence names\nknowledge:<id>@v<n>; last_used_at is the newest citing evidence.\nPowers the Knowledge page usage line (brand pass 6 consumes it with\ngraceful fallback): unknown keys 404, unused entries read zero.",
+        "operationId": "knowledge_usage_lite_api_v1_knowledge__key__usage_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "key",
+            "required": true,
+            "schema": {
+              "title": "Key",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "project",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Project"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Knowledge Usage Lite"
+      }
+    },
     "/api/v1/knowledge/{kid}/confirm": {
       "post": {
         "operationId": "confirm_knowledge_lite_api_v1_knowledge__kid__confirm_post",
@@ -1884,6 +1938,106 @@
           }
         },
         "summary": "Record Result Lite"
+      }
+    },
+    "/api/v1/tasks/{tid}/retire": {
+      "post": {
+        "description": "Retire a task with a mandatory reason. The reason is stored as a\nretire_note (the note column the reporter asked for) and the task\nmoves to the terminal retired state \u2014 done stays reserved for\nverified work. Idempotent on idempotency_key; replaying a retired\ntask converges without a second note.",
+        "operationId": "retire_task_lite_api_v1_tasks__tid__retire_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "tid",
+            "required": true,
+            "schema": {
+              "title": "Tid",
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": true,
+                "title": "Body",
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Retire Task Lite"
+      }
+    },
+    "/api/v1/tasks/{tid}/seal": {
+      "post": {
+        "description": "(Re-)seal the hidden acceptance suite for one task. Idempotent:\na suite already sealed (evidence or disk) converges without spending\nanother model call. Seal failures return sealed:false with the reason\ninstead of raising \u2014 the task stays valid, the async hold persists.",
+        "operationId": "seal_task_lite_api_v1_tasks__tid__seal_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "tid",
+            "required": true,
+            "schema": {
+              "title": "Tid",
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": true,
+                "title": "Body",
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Seal Task Lite"
       }
     },
     "/api/v1/tasks/{tid}/transition": {
@@ -3107,6 +3261,60 @@
         "summary": "Get Knowledge"
       }
     },
+    "/v1/knowledge/{key}/usage": {
+      "get": {
+        "description": "Where one entry is applied: tasks citing any of its versions.\n\nCounts distinct in-scope tasks whose knowledge_citations evidence names\nknowledge:<id>@v<n>; last_used_at is the newest citing evidence.\nPowers the Knowledge page usage line (brand pass 6 consumes it with\ngraceful fallback): unknown keys 404, unused entries read zero.",
+        "operationId": "knowledge_usage_v1_knowledge__key__usage_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "key",
+            "required": true,
+            "schema": {
+              "title": "Key",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "project",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Project"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Knowledge Usage"
+      }
+    },
     "/v1/knowledge/{kid}/confirm": {
       "post": {
         "operationId": "confirm_knowledge_v1_knowledge__kid__confirm_post",
@@ -3993,6 +4201,106 @@
           }
         },
         "summary": "Record Result"
+      }
+    },
+    "/v1/tasks/{tid}/retire": {
+      "post": {
+        "description": "Retire a task with a mandatory reason. The reason is stored as a\nretire_note (the note column the reporter asked for) and the task\nmoves to the terminal retired state \u2014 done stays reserved for\nverified work. Idempotent on idempotency_key; replaying a retired\ntask converges without a second note.",
+        "operationId": "retire_task_v1_tasks__tid__retire_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "tid",
+            "required": true,
+            "schema": {
+              "title": "Tid",
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": true,
+                "title": "Body",
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Retire Task"
+      }
+    },
+    "/v1/tasks/{tid}/seal": {
+      "post": {
+        "description": "(Re-)seal the hidden acceptance suite for one task. Idempotent:\na suite already sealed (evidence or disk) converges without spending\nanother model call. Seal failures return sealed:false with the reason\ninstead of raising \u2014 the task stays valid, the async hold persists.",
+        "operationId": "seal_task_v1_tasks__tid__seal_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "tid",
+            "required": true,
+            "schema": {
+              "title": "Tid",
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": true,
+                "title": "Body",
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Seal Task"
       }
     },
     "/v1/tasks/{tid}/transition": {

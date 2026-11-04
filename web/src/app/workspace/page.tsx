@@ -112,6 +112,11 @@ function TaskCard({ task, showAttention }: { task: TaskRow; showAttention: boole
             <PipelineStrip pipeline={task.pipeline} variant="mini" />
           </div>
         ) : null}
+        {task.sealing ? (
+          <p data-seal-badge className="mt-1 font-mono text-[11px] text-muted">
+            Sealing hidden checks…
+          </p>
+        ) : null}
         {showAttention ? (
           <p className="mt-1 truncate text-xs text-muted">{attentionReason(task)}</p>
         ) : null}

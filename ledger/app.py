@@ -15,6 +15,7 @@ import json
 import os
 import re
 import subprocess
+import time
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
@@ -57,12 +58,13 @@ def _build_sha() -> str:
 
 BUILD = _build_sha()
 TRANSITIONS = {
-    "open": {"claimed", "blocked"},
+    "open": {"claimed", "blocked", "retired"},
     "claimed": {"done", "failed", "blocked", "open", "needs_review"},
     "needs_review": {"done", "blocked", "claimed"},
-    "blocked": {"open"},
-    "failed": {"open"},
+    "blocked": {"open", "retired"},
+    "failed": {"open", "retired"},
     "done": set(),
+    "retired": set(),
 }
 
 # FL-A4 event catalog (docs/plans/2026-11-02-frontend-lite.md §4): the ONLY
@@ -1292,6 +1294,68 @@ def make_app(db_url: str = DB_URL) -> FastAPI:
                 raise HTTPException(409, f"slug {key!r} is ambiguous across tenants")
             return _krow(_knowledge_or_404(c, pick["id"], ident, request))
 
+    @app.get("/v1/knowledge/{key}/usage")
+    def knowledge_usage(key: str, request: Request, project: str | None = None):
+        """Where one entry is applied: tasks citing any of its versions.
+
+        Counts distinct in-scope tasks whose knowledge_citations evidence names
+        knowledge:<id>@v<n>; last_used_at is the newest citing evidence.
+        Powers the Knowledge page usage line (brand pass 6 consumes it with
+        graceful fallback): unknown keys 404, unused entries read zero."""
+        ident = _identity(request)
+        with eng.begin() as c:
+            try:
+                base = _knowledge_or_404(c, int(key), ident, request)
+            except ValueError:
+                base = None
+                kw: dict = {"s": key}
+                psql = ""
+                if project:
+                    psql = " AND project=:p"
+                    kw["p"] = project
+                for r in c.execute(text(
+                        "SELECT * FROM knowledge_entries WHERE slug=:s"
+                        f" AND {_LATEST_SELF}{psql}"), kw).mappings():
+                    d = dict(r)
+                    if ident == "supervisor" or (
+                            (d.get("visibility") or "company") == "public"):
+                        base = d
+                        break
+                if base is None:
+                    raise HTTPException(404, "knowledge entry not found")
+            fam = {base["id"]}
+            cur = base
+            while cur.get("supersedes_id") and cur["supersedes_id"] not in fam:
+                fam.add(cur["supersedes_id"])
+                cur = row(c, "SELECT * FROM knowledge_entries WHERE id=:i",
+                          i=cur["supersedes_id"]) or {}
+            cur = base
+            while True:
+                nxt = row(c, "SELECT * FROM knowledge_entries WHERE supersedes_id=:i",
+                          i=cur.get("id"))
+                if not nxt or nxt["id"] in fam:
+                    break
+                fam.add(nxt["id"])
+                cur = nxt
+            latest = max(fam, key=lambda i: (row(
+                c, "SELECT version FROM knowledge_entries WHERE id=:i",
+                i=i) or {"version": 0})["version"])
+            likes = " OR ".join(f"e.body LIKE '%knowledge:{i}@%'" for i in sorted(fam))
+            tenant_scope = None if ident == "supervisor" else _caller_tenant(request, c)
+            q = ("SELECT COUNT(DISTINCT e.task_id) AS n, MAX(e.created_at) AS last_used"
+                 " FROM evidence e JOIN tasks t ON t.id=e.task_id"
+                 f" WHERE e.kind='knowledge_citations' AND ({likes})")
+            kw2: dict = {}
+            if tenant_scope is not None:
+                q += " AND t.tenant=:tn"
+                kw2["tn"] = tenant_scope
+            agg = row(c, q, **kw2) or {"n": 0, "last_used": None}
+            return {"key": key, "id": base["id"],
+                    "citation": f"knowledge:{latest}@v{(row(c, 'SELECT version FROM knowledge_entries WHERE id=:i', i=latest) or {'version': 0})['version']}",
+                    "version": (row(c, "SELECT version FROM knowledge_entries WHERE id=:i", i=latest) or {"version": 0})["version"],
+                    "applied_to_tasks": agg["n"] or 0,
+                    "last_used_at": agg["last_used"]}
+
     @app.get("/v1/knowledge/{kid}/history")
     def knowledge_history(kid: int, request: Request):
         """Version chain for one entry, oldest first. Append-only history
@@ -1901,7 +1965,9 @@ def make_app(db_url: str = DB_URL) -> FastAPI:
                 {"i": t["id"]}).mappings()]
             return {"id": t["id"], "title": t["title"], "state": t.get("state"),
                     "pipeline": _pipeline_flags(t.get("state"), contracts,
-                                               evidence, receipts, verdicts)}
+                                               evidence, receipts, verdicts),
+                    "sealing": _sealing(evidence),
+                    "needs_spec": _needs_exec_spec(t.get("tenant"), t.get("project"))}
 
         def _existing_intake_task(c):
             """Task already created from this turn id (resend dedupe). Prefers
@@ -1946,9 +2012,11 @@ def make_app(db_url: str = DB_URL) -> FastAPI:
             return None
 
         def _create_intake_task(c, ident, msg_id, model_name, title, intent, criteria,
-                                category, plan_slug):
+                                category, plan_slug, sealed_piece=None):
             """One task with category + contract (the task branch: created
-            FIRST, state open = queued for pickup, then the pipeline)."""
+            FIRST, state open = queued for pickup, then the pipeline).
+            sealed_piece = ((ok, files|error), criteria) pre-authored before
+            the txn, or None to skip sealing (legacy callers)."""
             n = _now()
             tid = c.execute(text("INSERT INTO tasks(title,intent,state,created_at,updated_at,"
                                  "created_by,tenant,project) VALUES(:t,:i,'open',:n,:n,:by,:tn,:p)"),
@@ -1959,6 +2027,9 @@ def make_app(db_url: str = DB_URL) -> FastAPI:
             s, h = _canon(_contract_body(criteria, title, category, plan_slug))
             c.execute(text("INSERT INTO contracts(task_id,body,sha256,created_at)"
                            " VALUES(:i,:b,:h,:n)"), {"i": tid, "b": s, "h": h, "n": n})
+            if sealed_piece is not None:
+                (sealed, seal_criteria) = sealed_piece
+                _seal_one_task(c, tid, sealed, seal_criteria)
             s, _ = _canon({"source": msg_id, "role": "task", "model": model_name,
                            "category": category, "plan_slug": plan_slug})
             c.execute(text("INSERT INTO receipts(task_id,idempotency_key,action,body,created_at)"
@@ -1967,9 +2038,11 @@ def make_app(db_url: str = DB_URL) -> FastAPI:
             return row(c, "SELECT * FROM tasks WHERE id=:i", i=tid)
 
         def _materialize_plan(c, ident, msg_id, model_name, spec, tasks, category,
-                              plan_slug):
+                              plan_slug, pre_sealed=None):
             """One slice plus one task per step, each with category +
-            contract, linked to the plan slug."""
+            contract, linked to the plan slug. pre_sealed = {"slice": piece,
+            "kids": [piece]} with piece = ((ok, files|error), criteria)
+            pre-authored before the txn, or None to skip sealing."""
             n = _now()
             sid = c.execute(text("INSERT INTO tasks(title,intent,state,created_at,updated_at,"
                                  "created_by,tenant,project) VALUES(:t,:i,'open',:n,:n,:by,:tn,:p)"),
@@ -1981,8 +2054,12 @@ def make_app(db_url: str = DB_URL) -> FastAPI:
                                           category, plan_slug))
             c.execute(text("INSERT INTO contracts(task_id,body,sha256,created_at)"
                            " VALUES(:i,:b,:h,:n)"), {"i": sid, "b": s, "h": h, "n": n})
+            if pre_sealed is not None and pre_sealed.get("slice") is not None:
+                (sealed, seal_criteria) = pre_sealed["slice"]
+                _seal_one_task(c, sid, sealed, seal_criteria)
             kids = []
-            for t in tasks:
+            kid_pieces = (pre_sealed or {}).get("kids") or []
+            for idx, t in enumerate(tasks):
                 kid = c.execute(text("INSERT INTO tasks(title,intent,state,created_at,updated_at,"
                                      "created_by,tenant,project) VALUES(:t,:i,'open',:n,:n,:by,:tn,:p)"),
                                 {"t": t["title"], "i": t["intent"], "n": n,
@@ -1993,6 +2070,9 @@ def make_app(db_url: str = DB_URL) -> FastAPI:
                                               category, plan_slug, slice_id=sid))
                 c.execute(text("INSERT INTO contracts(task_id,body,sha256,created_at)"
                                " VALUES(:i,:b,:h,:n)"), {"i": kid, "b": s, "h": h, "n": n})
+                if idx < len(kid_pieces) and kid_pieces[idx] is not None:
+                    (sealed, seal_criteria) = kid_pieces[idx]
+                    _seal_one_task(c, kid, sealed, seal_criteria)
                 kids.append(kid)
             for kid in kids:
                 s, h = _canon({"slice_id": sid, "source": msg_id, "plan_slug": plan_slug})
@@ -2014,10 +2094,30 @@ def make_app(db_url: str = DB_URL) -> FastAPI:
             task_rows = [row(c, "SELECT * FROM tasks WHERE id=:i", i=k) for k in kids]
             return slice_row, task_rows
 
-        def _do_convert(c, ident, msg_id, model_name, entry, level, cls, conf, cat):
+        def _build_convert_seals(spec, tasks, want_head):
+            """Seal jobs for one Convert, keyed by creation order. Slice/head
+            suites cover the full acceptance criteria; each kid suite covers
+            its own step (a whole-slice suite on a step would test other
+            steps' work). Authored BEFORE the write txn (see _author_seal_batch)."""
+            jobs = []
+            if want_head:
+                jobs.append(("head", list(spec["acceptance_criteria"])))
+            jobs.append(("slice", list(spec["acceptance_criteria"])))
+            for i, t in enumerate(tasks):
+                step = f"Step: {t['title']}. {t.get('intent') or ''}".strip()
+                jobs.append((f"kid-{i}", [step]))
+            batch = _author_seal_batch(jobs)
+            return {"slice_title": spec["title"], "n_kids": len(tasks),
+                    "head": batch.get("head"), "slice": batch.get("slice"),
+                    "kids": [batch.get(f"kid-{i}") for i in range(len(tasks))]}
+
+        def _do_convert(c, ident, msg_id, model_name, entry, level, cls, conf, cat,
+                        pre_sealed=None):
             """Convert = confirm the plan entry, then one slice + one task
             per step. Idempotent on the plan entry: the plan:convert receipt
-            replays the same slice so double-click/double-send yields one."""
+            replays the same slice so double-click/double-send yields one.
+            pre_sealed (from _build_convert_seals, authored before the txn)
+            seals each created task; replays ignore it."""
             spec_d = _parse_plan_body(entry)
             if spec_d is None:
                 raise HTTPException(422, "plan entry body is not a plan")
@@ -2044,12 +2144,29 @@ def make_app(db_url: str = DB_URL) -> FastAPI:
                 replayed = True
             else:
                 _confirm_entry(c, ident, entry)
+                if pre_sealed is not None and (
+                        pre_sealed.get("slice_title") != spec["title"]
+                        or pre_sealed.get("n_kids") != len(tasks)):
+                    # Plan changed between pre-txn sealing and this write txn
+                    # (edited entry): sealed suites no longer match — mark
+                    # every task pending and let POST /v1/tasks/{id}/seal retry.
+                    void = ("plan changed between seal and convert; "
+                            "use POST /v1/tasks/{id}/seal to retry")
+                    pre_sealed = {
+                        "slice_title": spec["title"], "n_kids": len(tasks),
+                        "head": ((False, void), list(spec["acceptance_criteria"])),
+                        "slice": ((False, void), list(spec["acceptance_criteria"])),
+                        "kids": [((False, void), [f"Step: {t['title']}"])
+                                 for t in tasks]}
+                head_piece = (pre_sealed or {}).get("head")
                 if own_cls == "task" or cls == "task":
                     first_row = _create_intake_task(
                         c, ident, msg_id, model_name, spec["title"], spec["intent"],
-                        spec["acceptance_criteria"], category, entry["slug"])
+                        spec["acceptance_criteria"], category, entry["slug"],
+                        sealed_piece=head_piece)
                 slice_row, kid_rows = _materialize_plan(
-                    c, ident, msg_id, model_name, spec, tasks, category, entry["slug"])
+                    c, ident, msg_id, model_name, spec, tasks, category, entry["slug"],
+                    pre_sealed=pre_sealed)
                 all_rows = ([first_row] if first_row else []) + kid_rows
                 s, _ = _canon({"plan_entry": entry["id"], "plan_slug": entry["slug"],
                                "message_id": msg_id, "slice_id": slice_row["id"],
@@ -2194,6 +2311,26 @@ def make_app(db_url: str = DB_URL) -> FastAPI:
                     if entry is None:
                         raise HTTPException(404, "no pending plan — say what you want"
                                                  " planned first")
+                    spec_d0 = _parse_plan_body(entry) or {}
+                    already = row(c, "SELECT task_id FROM receipts WHERE idempotency_key=:k"
+                                     " AND action='plan:convert'",
+                                  k=f"plan-convert:{entry['id']}")
+                pre_sealed = None
+                if action != "keep" and already is None and spec_d0.get("slice"):
+                    # Slow model calls with NO open txn (see task branch).
+                    spec0, tasks0 = spec_d0["slice"], spec_d0.get("tasks") or []
+                    own0 = spec_d0.get("class") if spec_d0.get("class") in _chatmod.INTAKE_CLASSES \
+                        else "task"
+                    cls0 = spec_d0.get("class")
+                    if cls0 not in _chatmod.INTAKE_CLASSES:
+                        cls0 = "task"
+                    pre_sealed = _build_convert_seals(
+                        spec0, tasks0, want_head=(own0 == "task" or cls0 == "task"))
+                with eng.begin() as c:
+                    entry = _resolve_plan_entry(c, plan_entry)
+                    if entry is None:
+                        raise HTTPException(404, "no pending plan — say what you want"
+                                                 " planned first")
                     if action == "keep":
                         reply = (f"Kept as knowledge only (Saved: {entry['slug']})"
                                  " — no tasks created.")
@@ -2215,7 +2352,8 @@ def make_app(db_url: str = DB_URL) -> FastAPI:
                         if cat0 not in _chatmod.TASK_CATEGORIES:
                             cat0 = None
                         result = _do_convert(c, ident, message_id, model_name,
-                                             entry, level, cls0, 1.0, cat0)
+                                             entry, level, cls0, 1.0, cat0,
+                                             pre_sealed=pre_sealed)
                         reply = result["reply"]
             except HTTPException as e:
                 return [_frame("error", {"detail": str(e.detail)})]
@@ -2302,15 +2440,25 @@ def make_app(db_url: str = DB_URL) -> FastAPI:
                 try:
                     with eng.begin() as c:
                         level = _chat_level(c)
+                    auto = cls == "task" or level == "free" or (
+                        level == "only-important"
+                        and (cat or "feature") in _chatmod.AUTO_CONVERT_CATEGORIES)
+                    pre_sealed = None
+                    if auto:
+                        # Slow model calls with NO open txn (see task branch).
+                        own = spec.get("class") if spec.get("class") in _chatmod.INTAKE_CLASSES \
+                            else "task"
+                        pre_sealed = _build_convert_seals(
+                            spec, tasks, want_head=(own == "task" or cls == "task"))
+                    with eng.begin() as c:
+                        level = _chat_level(c)
                         entry = _plan_entry_for_turn(c)
                         if entry is None:
                             entry = _save_plan_entry(c, ident, spec, tasks, cat, cls)
-                        auto = cls == "task" or level == "free" or (
-                            level == "only-important"
-                            and (cat or "feature") in _chatmod.AUTO_CONVERT_CATEGORIES)
                         if auto:
                             result = _do_convert(c, ident, message_id, model_name,
-                                                 entry, level, cls, conf, cat)
+                                                 entry, level, cls, conf, cat,
+                                                 pre_sealed=pre_sealed)
                             reply = result["reply"]
                         else:
                             reply = ((turn["answer"] + "\n\n")
@@ -2371,14 +2519,26 @@ def make_app(db_url: str = DB_URL) -> FastAPI:
                     else [f"Satisfy the request: {msg_text[:160]}"]
                 category = cat or "feature"
                 try:
+                    # Replay check first (short txn): a double-send replays
+                    # without spending a second seal authoring call.
                     with eng.begin() as c:
                         level = _chat_level(c)
                         trow = _existing_intake_task(c)
                         replayed = trow is not None
+                    sealed_piece = None
+                    if trow is None:
+                        # Slow model call with NO open txn (never hold a
+                        # SQLite write lock across 15-60 s of generation).
+                        sealed_piece = _author_seal_batch([("task", list(criteria))]).get("task")
+                    with eng.begin() as c:
+                        if trow is None:
+                            trow = _existing_intake_task(c)
+                        replayed = trow is not None
                         if trow is None:
                             trow = _create_intake_task(c, ident, message_id, model_name,
                                                        spec["title"], spec["intent"],
-                                                       criteria, category, None)
+                                                       criteria, category, None,
+                                                       sealed_piece=sealed_piece)
                         reply = ((turn["answer"] + "\n")
                                  if turn["answer"].strip() else "") \
                             + f"Task #{trow['id']} {trow['title']} (open)." \
@@ -2782,6 +2942,83 @@ def make_app(db_url: str = DB_URL) -> FastAPI:
             return None
         return v.strip().lower()
 
+    def _seal_paths() -> tuple[Path, Path | None]:
+        """Hidden-suite + exec-spec roots (env-overridable). Same-host
+        assumption is documented: the worker host reads the same roots."""
+        hidden = Path(os.environ.get("HIDDEN_TESTS_ROOT", "/srv/rouvr/hidden-tests"))
+        spec = os.environ.get("SPEC_ROOT", "/srv/rouvr/specs")
+        return hidden, (Path(spec) if spec else None)
+
+    def _author_seal_batch(jobs: list[tuple[str, list[str]]],
+                           budget_s: float = 90.0) -> dict[str, tuple[tuple[bool, object], list[str]]]:
+        """Author hidden suites for Convert-created tasks, sequentially inside
+        one overall budget (sync Convert path; leftovers fall back to async
+        hold + visible badge). No DB touched — call BEFORE opening a write
+        txn so a 15-60 s model call never holds a SQLite write lock. Returns
+        {key: ((ok, files|error), criteria)}."""
+        from rouvr.mcp_server import _author_hidden_suite, _SUITE_TIMEOUT
+        out: dict[str, tuple[tuple[bool, object], list[str]]] = {}
+        deadline = time.monotonic() + budget_s
+        for key, criteria in jobs:
+            remaining = deadline - time.monotonic()
+            if remaining <= 1:
+                out[key] = ((False, f"seal budget exhausted ({budget_s:g}s shared across tasks)"),
+                            criteria)
+                continue
+            try:
+                files = _author_hidden_suite(criteria, timeout=min(_SUITE_TIMEOUT, remaining))
+                out[key] = ((True, files), criteria)
+            except Exception as e:  # noqa: BLE001 — seal failure is data, never fatal
+                out[key] = ((False, f"{type(e).__name__}: {e}"[:300]), criteria)
+        return out
+
+    def _seal_one_task(c, tid: int, sealed: tuple[bool, object], criteria: list[str]) -> None:
+        """Write one task's pre-authored suite (or record why it is pending).
+        Disk write is fast; the slow model call happened before the txn."""
+        ok, payload = sealed
+        if ok:
+            try:
+                from rouvr.hiddentests import write_hidden_suite
+                hidden, _ = _seal_paths()
+                manifest = write_hidden_suite(hidden, task_id=str(tid), files=payload,
+                                              created_by="test_author")
+                s, h = _canon({"files": sorted(payload), "tree": manifest.tree_sha256,
+                               "sealed_by": "test_author"})
+                kind = "suite_sealed"
+            except Exception as e:  # noqa: BLE001 — disk failure also falls back to hold
+                s, h = _canon({"reason": f"disk: {type(e).__name__}: {e}"[:300],
+                               "criteria": criteria})
+                kind = "seal_pending"
+        else:
+            s, h = _canon({"reason": payload, "criteria": criteria})
+            kind = "seal_pending"
+        c.execute(text("INSERT INTO evidence(task_id,kind,body,sha256,created_at)"
+                       " VALUES(:i,:k,:b,:h,:n)"),
+                  {"i": tid, "k": kind, "b": s, "h": h, "n": _now()})
+
+    def _sealing(evidence) -> bool:
+        """Visible async-hold badge: suite pending and nothing sealed since."""
+        kinds = {e.get("kind") for e in (evidence or [])}
+        return "seal_pending" in kinds and "suite_sealed" not in kinds
+
+    def _suite_on_disk(tid: int) -> bool:
+        from rouvr.hiddentests import MANIFEST
+        hidden, _ = _seal_paths()
+        return (hidden / str(tid) / MANIFEST).exists()
+
+    def _needs_exec_spec(tenant: str | None, project: str | None) -> bool:
+        """True when the worker host has no exec spec for this project (the
+        E_CONTRACT fail-closed the pipeline hits at attempt time). Creating
+        specs picks the coder's repo — a supervisor trust decision, so Convert
+        flags it instead of auto-creating. Unknown (no spec root) reads False."""
+        _, root = _seal_paths()
+        t, p = str(tenant or ""), str(project or "")
+        if root is None or not root.is_dir():
+            return False
+        if not t or not p or "/" in t or "/" in p or ".." in t or ".." in p:
+            return False
+        return not (root / t / f"{p}.yaml").exists()
+
     def _pipeline_flags(state, contracts, evidence, receipts, result_verdicts) -> dict:
         flags = {"contract": "pending", "knowledge": "pending",
                  "build": "pending", "review": "pending",
@@ -2858,6 +3095,8 @@ def make_app(db_url: str = DB_URL) -> FastAPI:
             d["pipeline"] = _pipeline_flags(d.get("state"), b["contracts"],
                                             b["evidence"], b["receipts"],
                                             b["verdicts"])
+            d["sealing"] = _sealing(b["evidence"])
+            d["needs_spec"] = _needs_exec_spec(d.get("tenant"), d.get("project"))
 
     @app.get("/v1/tasks")
     def list_tasks(request: Request, state: str | None = None, tenant: str | None = None):
@@ -2905,6 +3144,8 @@ def make_app(db_url: str = DB_URL) -> FastAPI:
             t["pipeline"] = _pipeline_flags(t.get("state"), t["contracts"],
                                             t["evidence"], t["receipts"],
                                             verdicts)
+            t["sealing"] = _sealing(t["evidence"])
+            t["needs_spec"] = _needs_exec_spec(t.get("tenant"), t.get("project"))
             return t
 
     @app.post("/v1/tasks/{tid}/contracts")
@@ -3025,6 +3266,98 @@ def make_app(db_url: str = DB_URL) -> FastAPI:
             _emit(c, t["tenant"], t["project"], "task.transition", tid,
                   {"task_id": tid, "from": t["state"], "to": to, "owner": body.get("owner")})
             return {"replayed": False, "receipt": row(c, "SELECT * FROM receipts WHERE task_id=:i AND idempotency_key=:k", i=tid, k=key)}
+
+    @app.post("/v1/tasks/{tid}/seal")
+    def seal_task(tid: int, body: dict, request: Request):
+        """(Re-)seal the hidden acceptance suite for one task. Idempotent:
+        a suite already sealed (evidence or disk) converges without spending
+        another model call. Seal failures return sealed:false with the reason
+        instead of raising — the task stays valid, the async hold persists."""
+        _transition_allowed(request)
+        with eng.begin() as c:
+            t = _own_or_stack(c, tid, request)
+        criteria: list[str] = []
+        with eng.begin() as c:
+            pend = [dict(r) for r in c.execute(
+                text("SELECT body FROM evidence WHERE task_id=:i AND kind='seal_pending' ORDER BY id DESC LIMIT 1"),
+                {"i": tid}).mappings()]
+            if pend:
+                try:
+                    criteria = [x for x in (json.loads(pend[0]["body"]).get("criteria") or [])
+                                if isinstance(x, str) and x.strip()]
+                except ValueError:
+                    criteria = []
+            if not criteria:
+                for r in c.execute(
+                        text("SELECT body FROM contracts WHERE task_id=:i ORDER BY id LIMIT 1"),
+                        {"i": tid}).mappings():
+                    try:
+                        ac = json.loads(r["body"]).get("acceptance_criteria") or []
+                    except ValueError:
+                        ac = []
+                    criteria = [x for x in ac if isinstance(x, str) and x.strip()]
+                    if criteria:
+                        break
+            if not criteria:
+                raise HTTPException(422, "task has no acceptance criteria to seal")
+            already = [dict(r) for r in c.execute(
+                text("SELECT body FROM evidence WHERE task_id=:i AND kind='suite_sealed' ORDER BY id DESC LIMIT 1"),
+                {"i": tid}).mappings()]
+            on_disk = _suite_on_disk(tid)
+            if already or on_disk:
+                if not already:
+                    s, h = _canon({"files": [], "sealed_by": "test_author",
+                                   "converged": "suite found on disk"})
+                    c.execute(text("INSERT INTO evidence(task_id,kind,body,sha256,created_at)"
+                                   " VALUES(:i,'suite_sealed',:b,:h,:n)"),
+                              {"i": tid, "b": s, "h": h, "n": _now()})
+                return {"sealed": True, "replayed": True, "task_id": tid}
+        sealed = _author_seal_batch([(str(tid), criteria)], budget_s=90.0).get(str(tid))
+        with eng.begin() as c:
+            _own_or_stack(c, tid, request)
+            _seal_one_task(c, tid, sealed[0], sealed[1])
+            return {"sealed": sealed[0][0],
+                    "reason": None if sealed[0][0] else sealed[0][1],
+                    "task_id": tid}
+
+    @app.post("/v1/tasks/{tid}/retire")
+    def retire_task(tid: int, body: dict, request: Request):
+        """Retire a task with a mandatory reason. The reason is stored as a
+        retire_note (the note column the reporter asked for) and the task
+        moves to the terminal retired state — done stays reserved for
+        verified work. Idempotent on idempotency_key; replaying a retired
+        task converges without a second note."""
+        _transition_allowed(request)
+        reason = body.get("reason")
+        if not isinstance(reason, str) or not reason.strip():
+            raise HTTPException(422, "retiring requires a non-empty reason")
+        key = body.get("idempotency_key")
+        if not key:
+            raise HTTPException(422, "idempotency_key is required")
+        with eng.begin() as c:
+            t = _own_or_stack(c, tid, request)
+            if t["state"] == "retired":
+                return {"replayed": True, "task_id": tid}
+            if "retired" not in TRANSITIONS.get(t["state"], set()):
+                raise HTTPException(409, f"illegal transition {t['state']} -> retired")
+            prior = row(c, "SELECT * FROM receipts WHERE task_id=:i AND idempotency_key=:k", i=tid, k=key)
+            if prior:
+                if prior.get("action") != "transition:retired":
+                    raise HTTPException(409, f"idempotency key already used for {prior.get('action')}")
+                return {"replayed": True, "receipt": prior}
+            s, h = _canon({"reason": reason.strip(), "retired_by": _identity(request)})
+            c.execute(text("INSERT INTO evidence(task_id,kind,body,sha256,created_at)"
+                           " VALUES(:i,'retire_note',:b,:h,:n)"),
+                      {"i": tid, "b": s, "h": h, "n": _now()})
+            c.execute(text("UPDATE tasks SET state='retired', updated_at=:n WHERE id=:i"),
+                      {"n": _now(), "i": tid})
+            c.execute(text("INSERT INTO receipts(task_id,idempotency_key,action,body,created_at)"
+                           " VALUES(:i,:k,:a,:b,:n)"),
+                      {"i": tid, "k": key, "a": "transition:retired",
+                       "b": json.dumps({"from": t["state"], "to": "retired"}), "n": _now()})
+            _emit(c, t["tenant"], t["project"], "task.transition", tid,
+                  {"task_id": tid, "from": t["state"], "to": "retired"})
+            return {"replayed": False, "task_id": tid}
 
     # ---- R3 parity: assignment / lease / attempt / result ----
     def _expiry(ttl_s) -> str:

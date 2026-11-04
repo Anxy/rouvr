@@ -121,6 +121,22 @@ function fenceParts(fence: unknown): { code: string | null; attempt: string | nu
 // Mirror of the ledger's _attention_reason (ledger/app.py): latest
 // escalation/reviewer evidence body -> one short string. An explicit
 // ledger `attention` string (list rows carry one) wins when present.
+export function retireReason(evidence: EvidenceRow[]): string | null {
+  for (let i = evidence.length - 1; i >= 0; i--) {
+    if (evidence[i].kind !== "retire_note") continue;
+    try {
+      const parsed: unknown = JSON.parse(evidence[i].body);
+      if (parsed !== null && typeof parsed === "object" && !Array.isArray(parsed)) {
+        const reason = (parsed as Record<string, unknown>)["reason"];
+        if (typeof reason === "string" && reason.trim()) return reason.trim();
+      }
+    } catch {
+      if (evidence[i].body.trim()) return evidence[i].body.trim();
+    }
+  }
+  return null;
+}
+
 export function attentionFromEvidence(
   evidence: EvidenceRow[],
   attention?: string | null,

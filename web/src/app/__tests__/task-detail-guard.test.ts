@@ -14,6 +14,7 @@ import {
   collectKnowledgeRefs,
   describeBlockedReason,
   evidenceLabel,
+  retireReason,
   whyTaskExists,
 } from "../../lib/task-detail.ts";
 
@@ -286,5 +287,73 @@ test("detail slice keeps theme tokens, no hard-coded colour", () => {
   assert.ok(
     page.includes("text-muted") && page.includes("text-cloud"),
     "detail must keep theme tokens",
+  );
+});
+
+test("detail shows a retired banner with the recorded reason", () => {
+  const page = read("src/app/workspace/tasks/[id]/page.tsx");
+  assert.ok(
+    page.includes("data-retire-badge") && page.includes("retireReason"),
+    "detail must render a retired banner from the retire_note reason",
+  );
+  assert.ok(
+    !page.includes("RETRYABLE.has(task.state) && task.state"),
+    "retired tasks must not gain action buttons",
+  );
+});
+
+test("retireReason reads the newest retire_note", () => {
+  const row = (id: number, kind: string, body: string) => ({
+    id,
+    kind,
+    body,
+    created_at: "t",
+  });
+  const none = retireReason([row(1, "note", "{}")]);
+  assert.equal(none, null);
+  const reason = retireReason([
+    row(2, "retire_note", '{"reason": "first"}'),
+    row(3, "note", "{}"),
+    row(4, "retire_note", '{"reason": "second"}'),
+  ]);
+  assert.equal(reason, "second");
+});
+
+test("retired state has an explicit muted pill style", () => {
+  const pill = read("src/components/ui/StatusPill.tsx");
+  assert.ok(
+    pill.includes("retired:") && pill.includes("TASK_STATE_STYLES"),
+    "retired must have an explicit pill style, not the fallback",
+  );
+});
+
+test("detail shows a seal badge with retry while the suite is pending", () => {
+  const page = read("src/app/workspace/tasks/[id]/page.tsx");
+  assert.ok(
+    page.includes("data-seal-badge") && page.includes("task.sealing"),
+    "detail must render a seal badge from the ledger sealing flag",
+  );
+  assert.ok(
+    page.includes("Retry seal") && page.includes("/api/tasks/{id}/seal"),
+    "seal badge must offer a retry through the seal proxy route",
+  );
+  const api = read("src/app/api/tasks/[id]/seal/route.ts");
+  assert.ok(
+    api.includes("/v1/tasks/{tid}/seal"),
+    "seal proxy must forward to the ledger seal endpoint",
+  );
+});
+
+test("detail flags a missing exec spec without inventing a repo", () => {
+  const page = read("src/app/workspace/tasks/[id]/page.tsx");
+  assert.ok(
+    page.includes("data-spec-badge") && page.includes("task.needs_spec"),
+    "detail must render a spec badge from the ledger needs_spec flag",
+  );
+  const at = page.indexOf("data-spec-badge");
+  const badge = page.slice(Math.max(0, at - 100), at + 400);
+  assert.ok(
+    !/repo:|github\.com|\.yaml/i.test(badge),
+    "spec badge must stay generic (the supervisor picks the repo)",
   );
 });

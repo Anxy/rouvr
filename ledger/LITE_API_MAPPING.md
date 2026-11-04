@@ -34,6 +34,7 @@ API).
 | `/api/v1/knowledge/search` | GET | `GET /v1/knowledge/search` (`search_knowledge`) | FTS + fuzz RRF |
 | `/api/v1/knowledge/{key}` | GET | `GET /v1/knowledge/{key}` (`get_knowledge`) | id or slug |
 | `/api/v1/knowledge/{kid}/history` | GET | `GET /v1/knowledge/{kid}/history` (`knowledge_history`) | versions |
+| `/api/v1/knowledge/{key}/usage` | GET | `GET /v1/knowledge/{key}/usage` (`knowledge_usage`) | applied count + last used |
 | `/api/v1/knowledge/{kid}/versions` | POST | `POST /v1/knowledge/{kid}/versions` (`version_knowledge`) | new version |
 | `/api/v1/knowledge/{kid}/confirm` | POST | `POST /v1/knowledge/{kid}/confirm` (`confirm_knowledge`) | verify flag |
 | `/api/v1/knowledge/store` | POST | `POST /v1/knowledge/store` (`knowledge_store`) | session store |
@@ -52,6 +53,8 @@ API).
 | `/api/v1/tasks/{tid}/evidence/lookup` | GET | `GET /v1/tasks/{tid}/evidence/lookup` (`lookup_evidence`) | fence lookup |
 | `/api/v1/tasks/{tid}/evidence` | POST | `POST /v1/tasks/{tid}/evidence` (`add_evidence`) | append-only |
 | `/api/v1/tasks/{tid}/transition` | POST | `POST /v1/tasks/{tid}/transition` (`transition`) | idempotent, done needs contract+evidence |
+| `/api/v1/tasks/{tid}/seal` | POST | `POST /v1/tasks/{tid}/seal` (`seal_task`) | idempotent seal retry, async-hold fallback |
+| `/api/v1/tasks/{tid}/retire` | POST | `POST /v1/tasks/{tid}/retire` (`retire_task`) | retire with mandatory reason, terminal |
 | `/api/v1/tasks/{tid}/binding` | GET | `GET /v1/tasks/{tid}/binding` (`get_binding`) | active assignment+lease |
 | `/api/v1/tasks/{tid}/assignments/claim` | POST | `POST /v1/tasks/{tid}/assignments/claim` (`claim_assignment`) | idempotent claim |
 | `/api/v1/tasks/{tid}/leases/renew` | POST | `POST /v1/tasks/{tid}/leases/renew` (`renew_lease`) | epoch-guarded |

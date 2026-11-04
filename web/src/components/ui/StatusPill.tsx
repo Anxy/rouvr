@@ -27,14 +27,16 @@ const styles: Record<Status, { label: string; cls: string; dot: string }> = {
 };
 
 // Shared task-state colours (single source of truth for board + detail):
-// done green, open blue, needs_review amber, blocked/failed red. Theme
-// tokens only — no hard-coded hex — so dark/light themes stay in sync.
+// done green, open blue, needs_review amber, blocked/failed red, retired
+// muted steel. Theme tokens only — no hard-coded hex — so dark/light
+// themes stay in sync.
 const TASK_STATE_STYLES: Record<string, { cls: string; dot: string }> = {
   done: { cls: "border-success/35 text-success bg-success/10", dot: "bg-success" },
   open: { cls: "border-brand/40 text-brand-300 bg-brand/10", dot: "bg-brand" },
   needs_review: { cls: "border-warning/35 text-warning bg-warning/10", dot: "bg-warning" },
   blocked: { cls: "border-danger/35 text-danger bg-danger/10", dot: "bg-danger" },
   failed: { cls: "border-danger/35 text-danger bg-danger/10", dot: "bg-danger" },
+  retired: { cls: "border-steel text-muted", dot: "bg-steel-400" },
 };
 
 const TASK_STATE_FALLBACK = { cls: "border-steel text-muted", dot: "bg-steel-400" };

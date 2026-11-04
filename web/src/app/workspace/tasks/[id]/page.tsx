@@ -19,6 +19,7 @@ import {
   describeBlockedReason,
   evidenceLabel,
   formatEvidenceTime,
+  retireReason,
   whyTaskExists,
 } from "@/lib/task-detail";
 
@@ -134,6 +135,7 @@ export default function TaskPage() {
     ? collectKnowledgeRefs(task.contracts, task.receipts)
     : { planSlugs: [] as string[], categories: [] as string[], citations: [] as string[] };
   const reasonRaw = task ? attentionFromEvidence(task.evidence, task.attention) : null;
+  const retiredReason = task ? retireReason(task.evidence) : null;
   const reason = reasonRaw ? describeBlockedReason(reasonRaw) : null;
   const showAttention =
     task !== null &&
@@ -200,6 +202,32 @@ export default function TaskPage() {
     }
   }
 
+  async function seal() {
+    setActionError("");
+    setBusy(true);
+    try {
+      const { response } = await ws.POST("/api/tasks/{id}/seal", {
+        params: { path: { id } },
+        body: {},
+        headers: csrfHeaders(),
+      });
+      if (response.status === 401) {
+        router.push("/workspace/login");
+        return;
+      }
+      if (!response.ok) {
+        const detail = await response.text().catch(() => "");
+        setActionError(detail || `seal failed (${response.status})`);
+        return;
+      }
+      await load();
+    } catch (err) {
+      setActionError(err instanceof Error ? err.message : "seal failed");
+    } finally {
+      setBusy(false);
+    }
+  }
+
   useEffect(() => () => abortRef.current?.abort(), []);
 
   return (
@@ -223,6 +251,27 @@ export default function TaskPage() {
             </div>
             {task.pipeline ? (
               <PipelineStrip pipeline={task.pipeline} variant="full" />
+            ) : null}
+            {task.sealing ? (
+              <p
+                data-seal-badge
+                className="mt-2 font-mono text-xs text-muted"
+              >
+                Sealing hidden checks…{" "}
+                <button
+                  type="button"
+                  disabled={busy}
+                  onClick={() => void seal()}
+                  className="underline hover:text-white"
+                >
+                  {busy ? "Working…" : "Retry seal"}
+                </button>
+              </p>
+            ) : null}
+            {task.needs_spec ? (
+              <p data-spec-badge className="mt-2 font-mono text-xs text-muted">
+                Needs exec spec — the worker host has no spec for this project yet.
+              </p>
             ) : null}
             <p data-why className="mt-2 text-sm text-cloud">
               Why this exists: {whyTaskExists(task)}
@@ -254,6 +303,20 @@ export default function TaskPage() {
             ) : null}
           </div>
           {actionError ? <p className="text-sm text-danger">{actionError}</p> : null}
+          {task.state === "retired" ? (
+            <section
+              data-retire-badge
+              aria-label="Retired"
+              className="rounded-2xl border border-steel/30 bg-abyss/60 px-4 py-3"
+            >
+              <h2 className="mb-1 font-mono text-xs uppercase tracking-wider text-muted">
+                Retired
+              </h2>
+              <p className="text-sm text-cloud">
+                {retiredReason ?? "no reason recorded"}
+              </p>
+            </section>
+          ) : null}
           {showAttention ? (
             <section
               data-blocked-reason

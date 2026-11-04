@@ -381,6 +381,31 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/knowledge/{key}/usage": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Knowledge Usage Lite
+         * @description Where one entry is applied: tasks citing any of its versions.
+         *
+         *     Counts distinct in-scope tasks whose knowledge_citations evidence names
+         *     knowledge:<id>@v<n>; last_used_at is the newest citing evidence.
+         *     Powers the Knowledge page usage line (brand pass 6 consumes it with
+         *     graceful fallback): unknown keys 404, unused entries read zero.
+         */
+        get: operations["knowledge_usage_lite_api_v1_knowledge__key__usage_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/knowledge/{kid}/confirm": {
         parameters: {
             query?: never;
@@ -693,6 +718,53 @@ export interface paths {
         put?: never;
         /** Record Result Lite */
         post: operations["record_result_lite_api_v1_tasks__tid__results_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/tasks/{tid}/retire": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Retire Task Lite
+         * @description Retire a task with a mandatory reason. The reason is stored as a
+         *     retire_note (the note column the reporter asked for) and the task
+         *     moves to the terminal retired state — done stays reserved for
+         *     verified work. Idempotent on idempotency_key; replaying a retired
+         *     task converges without a second note.
+         */
+        post: operations["retire_task_lite_api_v1_tasks__tid__retire_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/tasks/{tid}/seal": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Seal Task Lite
+         * @description (Re-)seal the hidden acceptance suite for one task. Idempotent:
+         *     a suite already sealed (evidence or disk) converges without spending
+         *     another model call. Seal failures return sealed:false with the reason
+         *     instead of raising — the task stays valid, the async hold persists.
+         */
+        post: operations["seal_task_lite_api_v1_tasks__tid__seal_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1255,6 +1327,31 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/knowledge/{key}/usage": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Knowledge Usage
+         * @description Where one entry is applied: tasks citing any of its versions.
+         *
+         *     Counts distinct in-scope tasks whose knowledge_citations evidence names
+         *     knowledge:<id>@v<n>; last_used_at is the newest citing evidence.
+         *     Powers the Knowledge page usage line (brand pass 6 consumes it with
+         *     graceful fallback): unknown keys 404, unused entries read zero.
+         */
+        get: operations["knowledge_usage_v1_knowledge__key__usage_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/knowledge/{kid}/confirm": {
         parameters: {
             query?: never;
@@ -1567,6 +1664,53 @@ export interface paths {
         put?: never;
         /** Record Result */
         post: operations["record_result_v1_tasks__tid__results_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/tasks/{tid}/retire": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Retire Task
+         * @description Retire a task with a mandatory reason. The reason is stored as a
+         *     retire_note (the note column the reporter asked for) and the task
+         *     moves to the terminal retired state — done stays reserved for
+         *     verified work. Idempotent on idempotency_key; replaying a retired
+         *     task converges without a second note.
+         */
+        post: operations["retire_task_v1_tasks__tid__retire_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/tasks/{tid}/seal": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Seal Task
+         * @description (Re-)seal the hidden acceptance suite for one task. Idempotent:
+         *     a suite already sealed (evidence or disk) converges without spending
+         *     another model call. Seal failures return sealed:false with the reason
+         *     instead of raising — the task stays valid, the async hold persists.
+         */
+        post: operations["seal_task_v1_tasks__tid__seal_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -2387,6 +2531,39 @@ export interface operations {
             };
         };
     };
+    knowledge_usage_lite_api_v1_knowledge__key__usage_get: {
+        parameters: {
+            query?: {
+                project?: string | null;
+            };
+            header?: never;
+            path: {
+                key: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     confirm_knowledge_lite_api_v1_knowledge__kid__confirm_post: {
         parameters: {
             query?: never;
@@ -3043,6 +3220,80 @@ export interface operations {
         };
     };
     record_result_lite_api_v1_tasks__tid__results_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                tid: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    [key: string]: unknown;
+                };
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    retire_task_lite_api_v1_tasks__tid__retire_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                tid: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    [key: string]: unknown;
+                };
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    seal_task_lite_api_v1_tasks__tid__seal_post: {
         parameters: {
             query?: never;
             header?: never;
@@ -4031,6 +4282,39 @@ export interface operations {
             };
         };
     };
+    knowledge_usage_v1_knowledge__key__usage_get: {
+        parameters: {
+            query?: {
+                project?: string | null;
+            };
+            header?: never;
+            path: {
+                key: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     confirm_knowledge_v1_knowledge__kid__confirm_post: {
         parameters: {
             query?: never;
@@ -4687,6 +4971,80 @@ export interface operations {
         };
     };
     record_result_v1_tasks__tid__results_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                tid: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    [key: string]: unknown;
+                };
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    retire_task_v1_tasks__tid__retire_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                tid: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    [key: string]: unknown;
+                };
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    seal_task_v1_tasks__tid__seal_post: {
         parameters: {
             query?: never;
             header?: never;

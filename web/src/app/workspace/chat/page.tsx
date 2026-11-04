@@ -126,13 +126,16 @@ type PlanAction = "convert" | "edit" | "keep";
 
 export default function ChatPage() {
   const router = useRouter();
-  const { project: sessionProject, projects, status: sessionStatus } = useSession();
-  const [project, setProject] = useState("");
-  const [projectTouched, setProjectTouched] = useState(false);
-  // Default to the logged-in tenant's first project, never a hard-coded
-  // name. Derived during render (no effect): the field stays editable and
-  // once touched it is left alone.
-  const shownProject = projectTouched || !sessionProject ? project : sessionProject;
+  const {
+    project: sessionProject,
+    projects,
+    setProject: setSessionProject,
+    status: sessionStatus,
+  } = useSession();
+  // Single source of truth: the session's active project (header switcher
+  // and this picker both write it, every surface reads it). Free text that
+  // is not a registered project never becomes the target.
+  const shownProject = sessionProject ?? "";
   const [message, setMessage] = useState("");
   const [turns, setTurns] = useState<Turn[]>([]);
   const [busy, setBusy] = useState(false);
@@ -333,8 +336,7 @@ export default function ChatPage() {
             id="chat-project-filter"
             value={shownProject}
             onChange={(v) => {
-              setProject(v);
-              setProjectTouched(true);
+              if (projects.some((p) => p.project === v)) setSessionProject(v);
             }}
             options={projects.map((p) => p.project)}
             ariaLabel="Filter chat by project — type to filter"
@@ -502,15 +504,28 @@ export default function ChatPage() {
                 ) : null}
                 {turn.status === "error" ? (
                   <div className="mt-3">
-                    <p className="text-sm text-danger">{turn.error}</p>
-                    <Button
-                      type="button"
-                      variant="secondary"
-                      className="mt-2"
-                      onClick={() => retry(turn.id)}
-                    >
-                      Retry
-                    </Button>
+                    <p className="text-sm text-danger">
+                      {turn.error.includes("csrf") || turn.error.includes("(403)")
+                        ? "Your sign-in changed in another tab. Sign in again, then retry."
+                        : turn.error}
+                    </p>
+                    {turn.error.includes("csrf") || turn.error.includes("(403)") ? (
+                      <Link
+                        href="/workspace/login"
+                        className="mt-2 inline-block rounded-lg border border-brand/40 bg-brand/10 px-3 py-1.5 text-sm text-brand-300 transition-colors hover:border-brand/70"
+                      >
+                        Sign in again
+                      </Link>
+                    ) : (
+                      <Button
+                        type="button"
+                        variant="secondary"
+                        className="mt-2"
+                        onClick={() => retry(turn.id)}
+                      >
+                        Retry
+                      </Button>
+                    )}
                   </div>
                 ) : null}
               </div>

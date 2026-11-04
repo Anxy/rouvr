@@ -10,9 +10,18 @@ export async function POST(req: Request) {
   const body = (await req.json().catch(() => ({}))) as {
     tenant?: string;
     project?: string;
+    title?: string;
+    code?: string;
+    description?: string;
+    domain?: string;
   };
   if (!body.project?.trim()) {
     return jsonThrough(422, { detail: "project name is required" });
+  }
+  const meta: Record<string, string> = {};
+  for (const field of ["title", "code", "description", "domain"] as const) {
+    const value = body[field]?.trim();
+    if (value) meta[field] = value;
   }
   const client = ledgerClient(incomingCookie(req));
   const csrf = req.headers.get("x-csrf-token") ?? "";
@@ -20,6 +29,7 @@ export async function POST(req: Request) {
     body: {
       ...(body.tenant?.trim() ? { tenant: body.tenant.trim() } : {}),
       project: body.project.trim(),
+      ...meta,
     } as never,
     headers: csrf ? { "x-csrf-token": csrf } : {},
   });

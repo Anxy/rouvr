@@ -256,6 +256,10 @@ export interface ProxyPaths {
           "application/json": {
             tenant: string;
             project: string;
+            title?: string;
+            code?: string;
+            description?: string;
+            domain?: string;
           };
         };
       };
@@ -266,6 +270,10 @@ export interface ProxyPaths {
               tenant: string;
               project: string;
               created_at?: string;
+              title?: string | null;
+              code?: string | null;
+              description?: string | null;
+              domain?: string | null;
             };
           };
         };
@@ -404,6 +412,10 @@ export interface TaskDetail extends TaskRow {
 export interface ProjectRow {
   tenant: string;
   project: string;
+  title?: string | null;
+  code?: string | null;
+  description?: string | null;
+  domain?: string | null;
 }
 
 export interface KnowledgeHit {

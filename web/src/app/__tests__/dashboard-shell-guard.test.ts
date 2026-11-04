@@ -93,6 +93,24 @@ test("unbuilt destinations render a Planned shell with working links only", () =
     dash.includes('redirect("/workspace")'),
     "removed dashboard route must redirect to the board",
   );
+  // Create-project collects real metadata (title/code/description/domain)
+  // and stores it through the ledger, not just a name label.
+  const projects = read("src/app/workspace/projects/page.tsx");
+  for (const label of [
+    "New project title",
+    "New project code",
+    "New project description",
+    "New project domain",
+  ]) {
+    assert.ok(
+      projects.includes(label),
+      `create-project modal must collect ${label}`,
+    );
+  }
+  assert.ok(
+    projects.includes("description") && projects.includes("setMeta"),
+    "projects page must store and render ledger metadata",
+  );
   // Tasks and Projects shipped as real pages (#192): they must no longer
   // render the Planned shell — each carries its own title marker instead.
   for (const [rel, marker] of [

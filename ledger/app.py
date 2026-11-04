@@ -403,6 +403,12 @@ def make_app(db_url: str = DB_URL) -> FastAPI:
         c.execute(text("CREATE TABLE IF NOT EXISTS projects(tenant TEXT NOT NULL REFERENCES tenants(tenant),"
                        " project TEXT NOT NULL, created_at TEXT NOT NULL,"
                        " PRIMARY KEY (tenant, project))"))
+        pcols = [r[1] for r in c.execute(text("PRAGMA table_info(projects)"))]
+        # Project metadata (UX create form): nullable, added without
+        # backfill — older rows simply read back nulls.
+        for col in ("title", "code", "description", "domain"):
+            if pcols and col not in pcols:
+                c.execute(text(f"ALTER TABLE projects ADD COLUMN {col} TEXT"))
         tcols = [r[1] for r in c.execute(text("PRAGMA table_info(tasks)"))]
         for col in ("tenant", "project"):
             if tcols and col not in tcols:
@@ -778,9 +784,19 @@ def make_app(db_url: str = DB_URL) -> FastAPI:
 
         Stack may create anywhere; a session owner may create inside its
         own tenant — the same owner-within-tenant rule task transitions
-        use. Anything else stays worker-only."""
+        use. Anything else stays worker-only. Optional metadata (title,
+        code, description, domain) is stored when provided and updated on
+        re-creation; unprovided fields keep their stored values."""
         ident = _identity(request)
         tenant, project = _scope(body)
+        meta = {}
+        for field in ("title", "code", "description", "domain"):
+            value = body.get(field)
+            if value is None:
+                continue
+            if not isinstance(value, str):
+                raise HTTPException(422, f"{field} must be a string")
+            meta[field] = value.strip() or None
         with eng.begin() as c:
             if ident != "supervisor":
                 if getattr(request.state, "session_role", None) != "owner":
@@ -789,9 +805,14 @@ def make_app(db_url: str = DB_URL) -> FastAPI:
                     raise HTTPException(403, f"project {project!r} is outside your tenant")
             if not row(c, "SELECT * FROM tenants WHERE tenant=:t", t=tenant):
                 raise HTTPException(404, f"tenant not registered: create {tenant!r} first")
+            cols = [r[1] for r in c.execute(text("PRAGMA table_info(projects)"))]
+            meta = {k: v for k, v in meta.items() if k in cols}
             c.execute(text("INSERT INTO projects(tenant,project,created_at) VALUES(:t,:p,:n)"
                            " ON CONFLICT(tenant,project) DO NOTHING"),
                       {"t": tenant, "p": project, "n": _now()})
+            for field, value in meta.items():
+                c.execute(text(f"UPDATE projects SET {field}=:v WHERE tenant=:t AND project=:p"),
+                          {"v": value, "t": tenant, "p": project})
             return row(c, "SELECT * FROM projects WHERE tenant=:t AND project=:p",
                        t=tenant, p=project)
 
@@ -802,7 +823,9 @@ def make_app(db_url: str = DB_URL) -> FastAPI:
         with eng.begin() as c:
             mine = _caller_tenant(request, c)
             want = mine if mine is not None else tenant
-            q = "SELECT tenant, project FROM projects"
+            cols = [r[1] for r in c.execute(text("PRAGMA table_info(projects)"))]
+            select = ["tenant", "project"] + [f for f in ("title", "code", "description", "domain") if f in cols]
+            q = f"SELECT {', '.join(select)} FROM projects"
             kw: dict = {}
             if want:
                 q += " WHERE tenant=:t"

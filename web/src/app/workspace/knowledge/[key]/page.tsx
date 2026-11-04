@@ -37,6 +37,16 @@ function usageLine(u: KnowledgeUsage | null | undefined): string {
   return `Applied to ${n} task${n === 1 ? "" : "s"} · Last used ${last}`;
 }
 
+// Backfilled entries often repeat the summary as the body's first line
+// (e.g. knowledge:1109) — render it once instead of twice.
+function dedupedBody(summary: string | null, body: string): string {
+  const s = (summary ?? "").trim();
+  if (!s) return body;
+  if (body.trim() === s) return "";
+  if (body.startsWith(s)) return body.slice(s.length).replace(/^\s+/, "");
+  return body;
+}
+
 export default function KnowledgeEntryPage({
   params,
 }: {
@@ -271,9 +281,14 @@ export default function KnowledgeEntryPage({
           {entry.summary ? (
             <p className="mt-3 text-sm leading-relaxed text-dim">{entry.summary}</p>
           ) : null}
-          <p className="mt-3 whitespace-pre-wrap text-sm leading-relaxed text-fog">
-            {entry.body}
-          </p>
+          {(() => {
+            const body = dedupedBody(entry.summary, entry.body);
+            return body ? (
+              <p className="mt-3 whitespace-pre-wrap text-sm leading-relaxed text-fog">
+                {body}
+              </p>
+            ) : null;
+          })()}
           {history.length > 1 ? (
             <section aria-label="Version history" className="mt-4 border-t border-line pt-3">
               <h2 className="mb-2 font-mono text-[10px] uppercase tracking-widest text-dim">

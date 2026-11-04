@@ -22,7 +22,9 @@ function newKey(): string {
 
 export default function TasksPage() {
   const router = useRouter();
-  const { projects, username } = useSession();
+  // Choosing a project here moves the whole workspace with it (header,
+  // sidebar, chat); "All projects" stays a tasks-only view.
+  const { projects, setProject: setSessionProject, username } = useSession();
   const [tasks, setTasks] = useState<TaskRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -339,7 +341,10 @@ export default function TasksPage() {
           onChange={(v) => {
             setProjectInput(v);
             if (v === "" || v === "All projects") setProjectFilter("All");
-            else if (projectOptions.includes(v)) setProjectFilter(v);
+            else if (projectOptions.includes(v)) {
+              setProjectFilter(v);
+              setSessionProject(v);
+            }
           }}
           onBlur={() => {
             if (!projectOptions.includes(projectInput) && projectInput !== "All projects") {

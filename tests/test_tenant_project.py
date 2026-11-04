@@ -107,7 +107,8 @@ def test_tenant_visibility_and_cross_tenant_denied(tmp_path, monkeypatch):
         r = c.get(f"/v1/tasks/{ta['id']}", headers=gus)
         assert r.status_code == 404
         assert c.get("/v1/projects", headers=amy).json()["projects"] == [
-            {"tenant": "acme", "project": "site"}]
+            {"tenant": "acme", "project": "site", "title": None, "code": None,
+             "description": None, "domain": None}]
         assert len(c.get("/v1/projects", headers=stack).json()["projects"]) == 2
 
 
@@ -161,3 +162,26 @@ def test_schema_comments_hold_no_semicolons():
     bad = [l for l in schema.read_text().splitlines()
            if l.strip().startswith("--") and ";" in l]
     assert not bad, bad
+
+
+def test_project_metadata_round_trip_and_idempotent_update(c):
+    _tenant(c, "acme")
+    # metadata stored on create and read back on list
+    r = c.post("/v1/projects", json={"tenant": "acme", "project": "site",
+                                     "title": "Site Revamp", "code": "SITE",
+                                     "description": "Marketing site", "domain": "web"})
+    assert r.status_code == 200, r.text
+    assert r.json()["title"] == "Site Revamp"
+    rows = c.get("/v1/projects", params={"tenant": "acme"}).json()["projects"]
+    site = next(p for p in rows if p["project"] == "site")
+    assert site["code"] == "SITE" and site["description"] == "Marketing site"
+    assert site["domain"] == "web"
+    # re-creation stays idempotent and updates provided fields only
+    r = c.post("/v1/projects", json={"tenant": "acme", "project": "site",
+                                     "description": "Marketing site v2"})
+    assert r.status_code == 200, r.text
+    assert r.json()["description"] == "Marketing site v2"
+    assert r.json()["title"] == "Site Revamp"
+    # non-string metadata refused
+    assert c.post("/v1/projects", json={"tenant": "acme", "project": "site",
+                                        "code": 7}).status_code == 422

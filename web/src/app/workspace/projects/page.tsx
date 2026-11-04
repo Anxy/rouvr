@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/Button";
 import { useSession } from "@/components/workspace/session";
-import { csrfHeaders, ws, type TaskRow } from "@/lib/api/workspace";
+import { csrfHeaders, ws, type ProjectRow, type TaskRow } from "@/lib/api/workspace";
 
 // Projects index: real tenant projects from GET /api/projects, with
 // open/blocked/done counts and last activity derived from the real task
@@ -34,10 +34,15 @@ export default function ProjectsPage() {
   const router = useRouter();
   const { tenant, refresh } = useSession();
   const [names, setNames] = useState<string[]>([]);
+  const [meta, setMeta] = useState<Record<string, ProjectRow>>({});
   const [tasks, setTasks] = useState<TaskRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [newName, setNewName] = useState("");
+  const [newTitle, setNewTitle] = useState("");
+  const [newCode, setNewCode] = useState("");
+  const [newDescription, setNewDescription] = useState("");
+  const [newDomain, setNewDomain] = useState("");
   const [creating, setCreating] = useState(false);
   const [createError, setCreateError] = useState("");
   const [query, setQuery] = useState("");
@@ -65,6 +70,7 @@ export default function ProjectsPage() {
         return;
       }
       setNames(pRes.data.projects.map((p) => p.project));
+      setMeta(Object.fromEntries(pRes.data.projects.map((p) => [p.project, p])));
       setTasks(tRes.data.items);
     } catch (err) {
       setError(err instanceof Error ? err.message : "projects failed");
@@ -114,8 +120,14 @@ export default function ProjectsPage() {
     const q = query.trim().toLowerCase();
     const all = [...new Set([...names, ...stats.keys()])].sort();
     if (!q) return all;
-    return all.filter((n) => n.toLowerCase().includes(q));
-  }, [names, stats, query]);
+    return all.filter((n) => {
+      if (n.toLowerCase().includes(q)) return true;
+      const m = meta[n];
+      return [m?.title, m?.code, m?.description, m?.domain].some((f) =>
+        (f ?? "").toLowerCase().includes(q),
+      );
+    });
+  }, [names, stats, meta, query]);
 
   // Client-side 10/page slice; the page clamps to the filtered length so
   // narrowing the search can never strand the grid on an empty page.
@@ -130,8 +142,18 @@ export default function ProjectsPage() {
     setCreating(true);
     setCreateError("");
     try {
+      const meta: Record<string, string> = {};
+      const pairs: Array<[string, string]> = [
+        ["title", newTitle],
+        ["code", newCode],
+        ["description", newDescription],
+        ["domain", newDomain],
+      ];
+      for (const [field, value] of pairs) {
+        if (value.trim()) meta[field] = value.trim();
+      }
       const { data, response } = await ws.POST("/api/projects", {
-        body: { tenant, project: name },
+        body: { tenant, project: name, ...meta },
         headers: csrfHeaders(),
       });
       if (response.status === 401) {
@@ -143,6 +165,10 @@ export default function ProjectsPage() {
         return;
       }
       setNewName("");
+      setNewTitle("");
+      setNewCode("");
+      setNewDescription("");
+      setNewDomain("");
       setShowCreate(false);
       refresh();
       await load();
@@ -201,6 +227,57 @@ export default function ProjectsPage() {
                   className="w-full rounded-xl border border-steel/40 bg-abyss/60 px-3 py-2 text-sm text-cloud placeholder:text-muted/60 focus:border-brand/60 focus:outline-none"
                 />
               </label>
+              <label className="block">
+                <span className="mb-1 block font-mono text-[11px] uppercase tracking-wider text-muted">
+                  Title
+                </span>
+                <input
+                  value={newTitle}
+                  onChange={(e) => setNewTitle(e.target.value)}
+                  placeholder="Display title…"
+                  aria-label="New project title"
+                  className="w-full rounded-xl border border-steel/40 bg-abyss/60 px-3 py-2 text-sm text-cloud placeholder:text-muted/60 focus:border-brand/60 focus:outline-none"
+                />
+              </label>
+              <div className="grid grid-cols-2 gap-3">
+                <label className="block">
+                  <span className="mb-1 block font-mono text-[11px] uppercase tracking-wider text-muted">
+                    Code
+                  </span>
+                  <input
+                    value={newCode}
+                    onChange={(e) => setNewCode(e.target.value)}
+                    placeholder="SHORT-CODE…"
+                    aria-label="New project code"
+                    className="w-full rounded-xl border border-steel/40 bg-abyss/60 px-3 py-2 text-sm text-cloud placeholder:text-muted/60 focus:border-brand/60 focus:outline-none"
+                  />
+                </label>
+                <label className="block">
+                  <span className="mb-1 block font-mono text-[11px] uppercase tracking-wider text-muted">
+                    Domain
+                  </span>
+                  <input
+                    value={newDomain}
+                    onChange={(e) => setNewDomain(e.target.value)}
+                    placeholder="e.g. web, ops…"
+                    aria-label="New project domain"
+                    className="w-full rounded-xl border border-steel/40 bg-abyss/60 px-3 py-2 text-sm text-cloud placeholder:text-muted/60 focus:border-brand/60 focus:outline-none"
+                  />
+                </label>
+              </div>
+              <label className="block">
+                <span className="mb-1 block font-mono text-[11px] uppercase tracking-wider text-muted">
+                  Description
+                </span>
+                <textarea
+                  value={newDescription}
+                  onChange={(e) => setNewDescription(e.target.value)}
+                  placeholder="What is this project about…"
+                  aria-label="New project description"
+                  rows={3}
+                  className="w-full rounded-xl border border-steel/40 bg-abyss/60 px-3 py-2 text-sm text-cloud placeholder:text-muted/60 focus:border-brand/60 focus:outline-none"
+                />
+              </label>
               {createError ? (
                 <p className="text-sm text-danger">{createError}</p>
               ) : null}
@@ -247,15 +324,35 @@ export default function ProjectsPage() {
           <ul className="grid gap-3 sm:grid-cols-2">
             {pageRows.map((name) => {
             const s = stats.get(name) ?? emptyStats();
+            const m = meta[name];
+            const heading = m?.title?.trim() ? m.title : name;
             return (
               <li
                 key={name}
                 className="rounded-2xl border border-steel/30 bg-navy/60 px-4 py-3"
               >
-                <h2 className="truncate text-base font-semibold text-white">
-                  {name}
-                </h2>
+                <div className="flex items-baseline gap-2">
+                  <h2 className="min-w-0 flex-1 truncate text-base font-semibold text-white">
+                    {heading}
+                  </h2>
+                  {m?.code?.trim() ? (
+                    <span className="shrink-0 rounded-full border border-line2 bg-panel2 px-2 py-0.5 font-mono text-[10px] uppercase tracking-wide text-cyan2">
+                      {m.code}
+                    </span>
+                  ) : null}
+                  {m?.domain?.trim() ? (
+                    <span className="shrink-0 font-mono text-[10px] text-dim">
+                      {m.domain}
+                    </span>
+                  ) : null}
+                </div>
+                {m?.description?.trim() ? (
+                  <p className="mt-1 line-clamp-2 text-[13px] leading-relaxed text-dim">
+                    {m.description}
+                  </p>
+                ) : null}
                 <p className="mt-1 font-mono text-[11px] text-muted">
+                  {m?.title?.trim() ? `${name} · ` : ""}
                   open {s.open} · attention {s.stuck} · done {s.done} ·
                   last activity {formatWhen(s.lastActivity)}
                 </p>

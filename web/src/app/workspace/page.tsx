@@ -224,7 +224,9 @@ function BoardSection({
 
 export default function BoardPage() {
   const router = useRouter();
-  const { projects } = useSession();
+  // Choosing a project here moves the whole workspace with it (header,
+  // sidebar, chat); "All projects" stays a board-only view.
+  const { projects, setProject: setSessionProject } = useSession();
   const [tasks, setTasks] = useState<TaskRow[]>([]);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
@@ -526,7 +528,10 @@ export default function BoardPage() {
           onChange={(v) => {
             setProjectInput(v);
             if (v === "" || v === "All projects") setProjectFilter("All");
-            else if (projectOptions.includes(v)) setProjectFilter(v);
+            else if (projectOptions.includes(v)) {
+              setProjectFilter(v);
+              setSessionProject(v);
+            }
           }}
           onBlur={() => {
             if (!projectOptions.includes(projectInput) && projectInput !== "All projects") {

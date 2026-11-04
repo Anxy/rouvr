@@ -4,6 +4,8 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
   BookOpen,
+  ClipboardList,
+  Folder,
   LayoutDashboard,
   LayoutGrid,
   ListTodo,
@@ -26,6 +28,8 @@ const NAV: { href: string; label: string; icon: LucideIcon }[] = [
   { href: "/workspace", label: "Board", icon: LayoutGrid },
   { href: "/workspace/dashboard", label: "Dashboard", icon: LayoutDashboard },
   { href: "/workspace/chat", label: "Chat", icon: MessageSquare },
+  { href: "/workspace/planner", label: "Planner", icon: ClipboardList },
+  { href: "/workspace/projects", label: "Projects", icon: Folder },
   { href: "/workspace/tasks", label: "Tasks", icon: ListTodo },
   { href: "/workspace/knowledge", label: "Knowledge", icon: BookOpen },
   { href: "/workspace/escalations", label: "Escalations", icon: Siren },

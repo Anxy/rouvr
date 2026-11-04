@@ -57,11 +57,37 @@ export interface ProxyPaths {
     post: {
       requestBody: {
         content: {
-          "application/json": { message: string; project: string; message_id?: string };
+          "application/json": {
+            message: string;
+            project: string;
+            message_id?: string;
+            autonomy?: string;
+            plan_action?: string;
+            plan_entry?: number;
+          };
         };
       };
       responses: {
         200: { content: { "text/event-stream": unknown } };
+        401: { content: { "application/json": { detail: string } } };
+        422: { content: { "application/json": { detail: string } } };
+      };
+    };
+  };
+  "/api/chat/autonomy": {
+    get: {
+      parameters: { query?: { project?: string } };
+      responses: {
+        200: { content: { "application/json": { autonomy: string } } };
+        401: { content: { "application/json": { detail: string } } };
+      };
+    };
+    post: {
+      requestBody: {
+        content: { "application/json": { project: string; autonomy: string } };
+      };
+      responses: {
+        200: { content: { "application/json": { autonomy: string } } };
         401: { content: { "application/json": { detail: string } } };
         422: { content: { "application/json": { detail: string } } };
       };
@@ -80,6 +106,36 @@ export interface ProxyPaths {
       };
     };
   };
+  "/api/knowledge/search": {
+    get: {
+      parameters: { query?: { q: string; project?: string; n?: string; full?: string } };
+      responses: {
+        200: { content: { "application/json": { items: KnowledgeHit[] } } };
+        401: { content: { "application/json": { detail: string } } };
+        422: { content: { "application/json": { detail: string } } };
+      };
+    };
+  };
+  "/api/knowledge/{key}": {
+    get: {
+      parameters: { path: { key: string } };
+      responses: {
+        200: { content: { "application/json": KnowledgeEntry } };
+        401: { content: { "application/json": { detail: string } } };
+        404: { content: { "application/json": { detail: string } } };
+      };
+    };
+  };
+  "/api/knowledge/{key}/history": {
+    get: {
+      parameters: { path: { key: string } };
+      responses: {
+        200: { content: { "application/json": { items: KnowledgeEntry[] } } };
+        401: { content: { "application/json": { detail: string } } };
+        404: { content: { "application/json": { detail: string } } };
+      };
+    };
+  };
 }
 
 export interface LoginReply {
@@ -90,6 +146,19 @@ export interface LoginReply {
   csrf_token: string;
 }
 
+// One step of the pipeline strip. Values come from the ledger, computed
+// ONLY from real rows (contracts / evidence kinds / link receipts / result
+// verdicts) — the strip never fetches per-task detail to derive them.
+export type PipelineFlag = "done" | "attention" | "pending";
+
+export interface PipelineState {
+  contract: PipelineFlag;
+  knowledge: PipelineFlag;
+  build: PipelineFlag;
+  review: PipelineFlag;
+  evidence: PipelineFlag;
+}
+
 export interface TaskRow {
   id: number;
   title: string;
@@ -98,6 +167,8 @@ export interface TaskRow {
   project: string;
   created_at: string;
   updated_at: string;
+  attention?: string;
+  pipeline?: PipelineState;
 }
 
 export interface TaskDetail extends TaskRow {
@@ -112,6 +183,25 @@ export interface TaskDetail extends TaskRow {
 export interface ProjectRow {
   tenant: string;
   project: string;
+}
+
+export interface KnowledgeHit {
+  slug: string;
+  title: string;
+  kind: string;
+  summary: string;
+  verified: number | boolean;
+  citation: string;
+}
+
+export interface KnowledgeEntry extends KnowledgeHit {
+  id: number;
+  tenant: string;
+  project: string;
+  body: string;
+  version: number;
+  author: string;
+  visibility: string;
 }
 
 export const ws = createClient<ProxyPaths>();

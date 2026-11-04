@@ -3,7 +3,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
-import { StatusPill } from "@/components/ui/StatusPill";
+import { TaskStatePill } from "@/components/ui/StatusPill";
+import { PipelineStrip } from "@/components/workspace/PipelineStrip";
 import { Button } from "@/components/ui/Button";
 import {
   csrfHeaders,
@@ -12,6 +13,14 @@ import {
   ws,
   type TaskDetail,
 } from "@/lib/api/workspace";
+import {
+  attentionFromEvidence,
+  collectKnowledgeRefs,
+  describeBlockedReason,
+  evidenceLabel,
+  formatEvidenceTime,
+  whyTaskExists,
+} from "@/lib/task-detail";
 
 interface LiveEvent {
   id: number;
@@ -33,6 +42,7 @@ export default function TaskPage() {
   const [error, setError] = useState("");
   const [actionError, setActionError] = useState("");
   const [busy, setBusy] = useState(false);
+  const [citeTitles, setCiteTitles] = useState<Record<string, string>>({});
   const abortRef = useRef<AbortController | null>(null);
 
   const load = useCallback(async () => {
@@ -119,6 +129,51 @@ export default function TaskPage() {
     return () => abort.abort();
   }, [id]);
 
+  // Derived display data: all real rows, no invented text.
+  const refs = task
+    ? collectKnowledgeRefs(task.contracts, task.receipts)
+    : { planSlugs: [] as string[], categories: [] as string[], citations: [] as string[] };
+  const reasonRaw = task ? attentionFromEvidence(task.evidence, task.attention) : null;
+  const reason = reasonRaw ? describeBlockedReason(reasonRaw) : null;
+  const showAttention =
+    task !== null &&
+    (task.state === "failed" || task.state === "blocked" || task.state === "needs_review");
+
+  // Citation titles resolve live via the knowledge endpoint; a citation
+  // whose entry is unreachable keeps its bare citation (no invented text).
+  useEffect(() => {
+    const ids = refs.citations
+      .map((c) => c.match(/^knowledge:(\d+)@v\d+$/)?.[1])
+      .filter((v): v is string => !!v && !(v in citeTitles));
+    if (ids.length === 0 || !task) return;
+    let cancelled = false;
+    void (async () => {
+      const titles: Record<string, string> = {};
+      for (const kid of [...new Set(ids)]) {
+        try {
+          const { data, response } = await ws.GET("/api/knowledge/{key}", {
+            params: { path: { key: kid } },
+          });
+          if (!response.ok || !data?.title) continue;
+          titles[`knowledge:${kid}@v${data.version}`] = data.title;
+          // The entry resolves forward to its latest version, so record
+          // the requested citation too when the version differs.
+          const want = refs.citations.find((c) => c.startsWith(`knowledge:${kid}@v`));
+          if (want && !titles[want]) titles[want] = data.title;
+        } catch {
+          /* unreachable entry: the bare citation still renders */
+        }
+      }
+      if (!cancelled && Object.keys(titles).length > 0) {
+        setCiteTitles((prev) => ({ ...prev, ...titles }));
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [task?.id, refs.citations.join("|")]);
+
   async function transition(to: string) {
     setActionError("");
     setBusy(true);
@@ -164,21 +219,14 @@ export default function TaskPage() {
           <div>
             <div className="mb-2 flex items-center gap-3">
               <span className="font-mono text-sm text-muted">#{task.id}</span>
-              <StatusPill
-                status={
-                  task.state === "done"
-                    ? "passed"
-                    : task.state === "needs_review"
-                      ? "review"
-                      : task.state === "failed" || task.state === "blocked"
-                        ? "failed"
-                        : task.state === "claimed"
-                          ? "running"
-                          : "queued"
-                }
-                label={task.state}
-              />
+              <TaskStatePill state={task.state} />
             </div>
+            {task.pipeline ? (
+              <PipelineStrip pipeline={task.pipeline} variant="full" />
+            ) : null}
+            <p data-why className="mt-2 text-sm text-cloud">
+              Why this exists: {whyTaskExists(task)}
+            </p>
             <h1 className="text-2xl font-semibold text-white">{task.title}</h1>
             <p className="mt-2 font-mono text-xs text-muted">
               {task.tenant} / {task.project} · by {task.created_by}
@@ -206,6 +254,66 @@ export default function TaskPage() {
             ) : null}
           </div>
           {actionError ? <p className="text-sm text-danger">{actionError}</p> : null}
+          {showAttention ? (
+            <section
+              data-blocked-reason
+              aria-label="Needs attention"
+              className="rounded-2xl border border-steel/30 bg-abyss/60 px-4 py-3"
+            >
+              <h2 className="mb-1 font-mono text-xs uppercase tracking-wider text-muted">
+                Needs attention
+              </h2>
+              <p data-reason-display className="text-sm text-cloud">
+                {reason ? reason.display : "reason unavailable"}
+              </p>
+              {RETRYABLE.has(task.state) ? (
+                <p
+                  data-retry-note
+                  className="mt-1 font-mono text-xs text-muted"
+                >
+                  Retry reopens it for a worker with the same contract.
+                </p>
+              ) : null}
+            </section>
+          ) : null}
+          {refs.planSlugs.length + refs.categories.length + refs.citations.length > 0 ? (
+            <section data-knowledge-badges aria-label="Knowledge applied">
+              <h2 className="mb-2 font-mono text-xs uppercase tracking-wider text-muted">
+                Knowledge applied
+              </h2>
+              <ul className="flex flex-wrap gap-2">
+                {refs.planSlugs.map((slug) => (
+                  <li
+                    key={`plan:${slug}`}
+                    data-plan-badge={slug}
+                    className="rounded-full border border-steel/40 bg-navy/60 px-3 py-1 font-mono text-xs text-cloud"
+                  >
+                    plan_slug:{slug}
+                  </li>
+                ))}
+                {refs.categories.map((category) => (
+                  <li
+                    key={`cat:${category}`}
+                    data-category-badge={category}
+                    className="rounded-full border border-steel/40 bg-navy/60 px-3 py-1 font-mono text-xs text-cloud"
+                  >
+                    category:{category}
+                  </li>
+                ))}
+                {refs.citations.map((citation) => (
+                  <li
+                    key={citation}
+                    data-citation-badge={citation}
+                    title={citeTitles[citation] ?? undefined}
+                    className="rounded-full border border-steel/40 bg-navy/60 px-3 py-1 font-mono text-xs text-cloud"
+                  >
+                    {citation}
+                    {citeTitles[citation] ? ` '${citeTitles[citation]}'` : null}
+                  </li>
+                ))}
+              </ul>
+            </section>
+          ) : null}
           <section>
             <h2 className="mb-2 font-mono text-xs uppercase tracking-wider text-muted">
               Live events
@@ -239,23 +347,37 @@ export default function TaskPage() {
             </section>
           ) : null}
           {task.evidence.length > 0 ? (
-            <section>
+            <section aria-label="Evidence timeline">
               <h2 className="mb-2 font-mono text-xs uppercase tracking-wider text-muted">
                 Evidence ({task.evidence.length})
               </h2>
-              <ul className="space-y-1.5">
+              <ol className="space-y-1.5">
                 {task.evidence.slice(-8).map((e) => (
                   <li
                     key={e.id}
+                    data-evidence-entry={e.id}
                     className="rounded-lg border border-steel/30 bg-abyss/60 px-3 py-2 font-mono text-xs text-cloud"
                   >
-                    <span className="text-muted">
-                      #{e.id} {e.kind}
-                    </span>{" "}
-                    {e.body.slice(0, 160)}
+                    <div className="flex items-baseline justify-between gap-3">
+                      <span className="text-muted">
+                        #{e.id} {e.kind}
+                      </span>
+                      <time dateTime={e.created_at} className="shrink-0 text-muted/60">
+                        {formatEvidenceTime(e.created_at)}
+                      </time>
+                    </div>
+                    <p className="mt-1 text-cloud">{evidenceLabel(e.kind, e.body)}</p>
+                    <details className="mt-1">
+                      <summary className="cursor-pointer text-[11px] text-muted">
+                        raw JSON
+                      </summary>
+                      <pre className="mt-1 overflow-x-auto whitespace-pre-wrap break-all text-[11px] text-muted">
+                        {e.body}
+                      </pre>
+                    </details>
                   </li>
                 ))}
-              </ul>
+              </ol>
             </section>
           ) : null}
         </div>

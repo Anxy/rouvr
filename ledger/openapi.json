@@ -123,7 +123,7 @@
   "paths": {
     "/api/v1/chat": {
       "post": {
-        "description": "Step 2: one supervised model turn -> slice with tasks, over SSE.\n\nStreams ``token`` events as the model responds, then a ``result``\nevent with the reply, created ids, and receipt source. A clarifying\nquestion (at most one) creates nothing; otherwise the slice task\n(contract = acceptance criteria), child tasks, slice-link evidence,\nand per-row ``chat:create`` receipts naming the message id are all\nwritten in one transaction with their ``task.created`` outbox rows.",
+        "description": "Step 2 + Slice C: one supervised model turn -> intake router, over SSE.\n\nStreams ``token`` events as the model responds, then a ``result``\nevent with the reply, created ids, and receipt source. A clarifying\nquestion (at most one) creates nothing; otherwise the slice task\n(contract = acceptance criteria), child tasks, slice-link evidence,\nand per-row ``chat:create`` receipts naming the message id are all\nwritten in one transaction with their ``task.created`` outbox rows.\n\nSlice C: a classified turn (intake block) routes chat (answer + log\nrow), knowledge (answer + entry), task (intake task first, then the\npipeline) or ambiguous (one question, defaulting to chat). A\nplan-shaped turn is ALWAYS saved as an unverified plan knowledge\nentry first, then the autonomy-gated confirm gate: ask (offer with\nConvert/Edit/Just-keep-it), or auto-convert for imperatives, free\nautonomy, and docs/research under only-important. plan_action turns\n(convert/edit/keep, or a plain yes/no/edit reply to a pending\noffer) never call the model. Every classification is recorded with\nwho/when/level and is reclassifiable by appending.",
         "operationId": "chat_lite_api_v1_chat_post",
         "requestBody": {
           "content": {
@@ -158,6 +158,276 @@
           }
         },
         "summary": "Chat Lite"
+      }
+    },
+    "/api/v1/chat/autonomy": {
+      "get": {
+        "description": "Autonomy level for the plan confirm gate (session/user setting;\ndefault ask-for-everything when no row).",
+        "operationId": "get_chat_autonomy_lite_api_v1_chat_autonomy_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "project",
+            "required": true,
+            "schema": {
+              "title": "Project",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "tenant",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Tenant"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Chat Autonomy Lite"
+      },
+      "post": {
+        "description": "Record the session/user autonomy level for the scope.",
+        "operationId": "set_chat_autonomy_lite_api_v1_chat_autonomy_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": true,
+                "title": "Body",
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Set Chat Autonomy Lite"
+      }
+    },
+    "/api/v1/chat/classifications": {
+      "get": {
+        "description": "Classification rows for the scope, oldest first, with created_ids\nparsed. Reclassifications appear as additional rows (reclass_of).",
+        "operationId": "list_classifications_lite_api_v1_chat_classifications_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "project",
+            "required": true,
+            "schema": {
+              "title": "Project",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "tenant",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Tenant"
+            }
+          },
+          {
+            "in": "query",
+            "name": "message_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Message Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Classifications Lite"
+      }
+    },
+    "/api/v1/chat/reclassify": {
+      "post": {
+        "description": "Reclassify a turn: appends a new classification row pointing at\nthe prior one (reclass_of). History is never rewritten or deleted.",
+        "operationId": "reclassify_turn_lite_api_v1_chat_reclassify_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": true,
+                "title": "Body",
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Reclassify Turn Lite"
+      }
+    },
+    "/api/v1/chat/turns": {
+      "get": {
+        "description": "Append-only conversation log for the scope (never hard-deleted).",
+        "operationId": "list_chat_turns_lite_api_v1_chat_turns_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "project",
+            "required": true,
+            "schema": {
+              "title": "Project",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "tenant",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Tenant"
+            }
+          },
+          {
+            "in": "query",
+            "name": "message_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Message Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Chat Turns Lite"
       }
     },
     "/api/v1/events": {
@@ -1978,7 +2248,7 @@
     },
     "/v1/chat": {
       "post": {
-        "description": "Step 2: one supervised model turn -> slice with tasks, over SSE.\n\nStreams ``token`` events as the model responds, then a ``result``\nevent with the reply, created ids, and receipt source. A clarifying\nquestion (at most one) creates nothing; otherwise the slice task\n(contract = acceptance criteria), child tasks, slice-link evidence,\nand per-row ``chat:create`` receipts naming the message id are all\nwritten in one transaction with their ``task.created`` outbox rows.",
+        "description": "Step 2 + Slice C: one supervised model turn -> intake router, over SSE.\n\nStreams ``token`` events as the model responds, then a ``result``\nevent with the reply, created ids, and receipt source. A clarifying\nquestion (at most one) creates nothing; otherwise the slice task\n(contract = acceptance criteria), child tasks, slice-link evidence,\nand per-row ``chat:create`` receipts naming the message id are all\nwritten in one transaction with their ``task.created`` outbox rows.\n\nSlice C: a classified turn (intake block) routes chat (answer + log\nrow), knowledge (answer + entry), task (intake task first, then the\npipeline) or ambiguous (one question, defaulting to chat). A\nplan-shaped turn is ALWAYS saved as an unverified plan knowledge\nentry first, then the autonomy-gated confirm gate: ask (offer with\nConvert/Edit/Just-keep-it), or auto-convert for imperatives, free\nautonomy, and docs/research under only-important. plan_action turns\n(convert/edit/keep, or a plain yes/no/edit reply to a pending\noffer) never call the model. Every classification is recorded with\nwho/when/level and is reclassifiable by appending.",
         "operationId": "chat_v1_chat_post",
         "requestBody": {
           "content": {
@@ -2013,6 +2283,276 @@
           }
         },
         "summary": "Chat"
+      }
+    },
+    "/v1/chat/autonomy": {
+      "get": {
+        "description": "Autonomy level for the plan confirm gate (session/user setting;\ndefault ask-for-everything when no row).",
+        "operationId": "get_chat_autonomy_v1_chat_autonomy_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "project",
+            "required": true,
+            "schema": {
+              "title": "Project",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "tenant",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Tenant"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Chat Autonomy"
+      },
+      "post": {
+        "description": "Record the session/user autonomy level for the scope.",
+        "operationId": "set_chat_autonomy_v1_chat_autonomy_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": true,
+                "title": "Body",
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Set Chat Autonomy"
+      }
+    },
+    "/v1/chat/classifications": {
+      "get": {
+        "description": "Classification rows for the scope, oldest first, with created_ids\nparsed. Reclassifications appear as additional rows (reclass_of).",
+        "operationId": "list_classifications_v1_chat_classifications_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "project",
+            "required": true,
+            "schema": {
+              "title": "Project",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "tenant",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Tenant"
+            }
+          },
+          {
+            "in": "query",
+            "name": "message_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Message Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Classifications"
+      }
+    },
+    "/v1/chat/reclassify": {
+      "post": {
+        "description": "Reclassify a turn: appends a new classification row pointing at\nthe prior one (reclass_of). History is never rewritten or deleted.",
+        "operationId": "reclassify_turn_v1_chat_reclassify_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": true,
+                "title": "Body",
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Reclassify Turn"
+      }
+    },
+    "/v1/chat/turns": {
+      "get": {
+        "description": "Append-only conversation log for the scope (never hard-deleted).",
+        "operationId": "list_chat_turns_v1_chat_turns_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "project",
+            "required": true,
+            "schema": {
+              "title": "Project",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "tenant",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Tenant"
+            }
+          },
+          {
+            "in": "query",
+            "name": "message_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Message Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Chat Turns"
       }
     },
     "/v1/events": {

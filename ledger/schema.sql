@@ -106,7 +106,7 @@ CREATE TABLE IF NOT EXISTS knowledge_entries (
   id            INTEGER PRIMARY KEY,
   tenant        TEXT NOT NULL,
   project       TEXT NOT NULL,
-  kind          TEXT NOT NULL,  -- user_profile|project_profile|note|decision|rule|snapshot
+  kind          TEXT NOT NULL,  -- user_profile|project_profile|note|decision|rule|snapshot|skill
   title         TEXT NOT NULL,
   body          TEXT NOT NULL,
   version       INTEGER NOT NULL DEFAULT 1,
@@ -153,3 +153,49 @@ CREATE TABLE IF NOT EXISTS outbox (
   created_at TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS outbox_tenant_id ON outbox(tenant, id);
+-- Slice C intake router: append-only conversation log (per tenant/project,
+-- one row per turn, never hard-deleted, no DELETE path touches it).
+CREATE TABLE IF NOT EXISTS chat_turns (
+  id          INTEGER PRIMARY KEY,
+  tenant      TEXT NOT NULL,  -- S022: partition scope, mandatory, no default
+  project     TEXT NOT NULL,  -- S022: partition scope, mandatory, no default
+  message_id  TEXT NOT NULL,  -- client turn id (retries reuse it)
+  message     TEXT NOT NULL,  -- user text for this turn
+  reply       TEXT NOT NULL,  -- assistant reply text for this turn
+  class       TEXT NOT NULL DEFAULT '',  -- intake class or '' for legacy turns
+  created_at  TEXT NOT NULL,
+  FOREIGN KEY (tenant, project) REFERENCES projects(tenant, project)
+);
+CREATE INDEX IF NOT EXISTS chat_turns_scope ON chat_turns(tenant, project, id);
+-- Slice C intake router: every classification the intake classifier makes,
+-- with its confidence, created ids and the autonomy decision (who/when/
+-- level). Reclassifiable by appending (reclass_of points at the prior row)
+-- and never hard-deleted.
+CREATE TABLE IF NOT EXISTS intake_classifications (
+  id              INTEGER PRIMARY KEY,
+  tenant          TEXT NOT NULL,
+  project         TEXT NOT NULL,
+  turn_id         TEXT NOT NULL,  -- message_id of the classified turn
+  class           TEXT NOT NULL,  -- chat|knowledge|task|ambiguous
+  confidence      REAL NOT NULL DEFAULT 0.5,
+  category        TEXT NOT NULL DEFAULT '',  -- feature|bugfix|research|ops|docs or ''
+  created_ids     TEXT NOT NULL DEFAULT '{}',  -- JSON: knowledge/slice/tasks ids + decision
+  autonomy_level  TEXT NOT NULL DEFAULT 'ask-for-everything',
+  decided_by      TEXT NOT NULL DEFAULT '',
+  decided_at      TEXT NOT NULL DEFAULT '',
+  reclass_of      INTEGER REFERENCES intake_classifications(id),
+  created_at      TEXT NOT NULL,
+  FOREIGN KEY (tenant, project) REFERENCES projects(tenant, project)
+);
+CREATE INDEX IF NOT EXISTS intake_class_scope_turn ON intake_classifications(tenant, project, turn_id);
+-- Slice C plan confirm gate: autonomy level per tenant/project
+-- (session/user setting, default ask-for-everything when no row).
+CREATE TABLE IF NOT EXISTS chat_autonomy (
+  tenant      TEXT NOT NULL,
+  project     TEXT NOT NULL,
+  level       TEXT NOT NULL,  -- ask-for-everything|only-important|free
+  updated_by  TEXT NOT NULL,
+  updated_at  TEXT NOT NULL,
+  PRIMARY KEY (tenant, project),
+  FOREIGN KEY (tenant, project) REFERENCES projects(tenant, project)
+);

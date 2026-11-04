@@ -61,6 +61,11 @@ API).
 | `/api/v1/workers/heartbeat` | POST | `POST /v1/workers/heartbeat` (`worker_heartbeat`) | stack-only |
 | `/api/v1/events` | GET | `GET /v1/events` (`events`) | SSE replay, tenant-scoped |
 | `/api/v1/chat` | POST | `POST /v1/chat` (`chat`) | SSE model turn, slice+tasks, task cards |
+| `/api/v1/chat/autonomy` | GET | `GET /v1/chat/autonomy` (`get_chat_autonomy`) | Plan-gate autonomy level, default ask-for-everything |
+| `/api/v1/chat/autonomy` | POST | `POST /v1/chat/autonomy` (`set_chat_autonomy`) | Record session/user autonomy level |
+| `/api/v1/chat/reclassify` | POST | `POST /v1/chat/reclassify` (`reclassify_turn`) | Append a reclassification row (never rewrites) |
+| `/api/v1/chat/turns` | GET | `GET /v1/chat/turns` (`list_chat_turns`) | Append-only conversation log |
+| `/api/v1/chat/classifications` | GET | `GET /v1/chat/classifications` (`list_classifications`) | Intake classification rows |
 
 Contract tests: `ledger/test_lite_contract.py` (alias identity,
 functional parity, error parity, auth parity, OpenAPI coverage).

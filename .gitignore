@@ -36,3 +36,6 @@ lane/tools/canary_lane_config.py
 
 .cache/
 e2e/recordings/*.webm
+
+# UI polish before/after screenshots (review artifacts, never committed)
+e2e/screens/

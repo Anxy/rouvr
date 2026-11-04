@@ -431,6 +431,31 @@ def make_app(db_url: str = DB_URL) -> FastAPI:
                 c.execute(text(f"ALTER TABLE knowledge_entries ADD COLUMN {col} {ddl}"))
         c.execute(text("CREATE VIRTUAL TABLE IF NOT EXISTS knowledge_fts USING fts5(title, body)"))
         _knowledge_search_schema(c)
+        # Slice C intake router on pre-existing databases (schema.sql covers fresh).
+        c.execute(text("CREATE TABLE IF NOT EXISTS chat_turns ("
+                       "id INTEGER PRIMARY KEY, tenant TEXT NOT NULL, project TEXT NOT NULL,"
+                       "message_id TEXT NOT NULL, message TEXT NOT NULL, reply TEXT NOT NULL,"
+                       "class TEXT NOT NULL DEFAULT '', created_at TEXT NOT NULL)"))
+        tcols2 = [r[1] for r in c.execute(text("PRAGMA table_info(chat_turns)"))]
+        if tcols2 and "class" not in tcols2:
+            c.execute(text("ALTER TABLE chat_turns ADD COLUMN class TEXT NOT NULL DEFAULT ''"))
+        c.execute(text("CREATE INDEX IF NOT EXISTS chat_turns_scope"
+                       " ON chat_turns(tenant, project, id)"))
+        c.execute(text("CREATE TABLE IF NOT EXISTS intake_classifications ("
+                       "id INTEGER PRIMARY KEY, tenant TEXT NOT NULL, project TEXT NOT NULL,"
+                       "turn_id TEXT NOT NULL, class TEXT NOT NULL,"
+                       "confidence REAL NOT NULL DEFAULT 0.5, category TEXT NOT NULL DEFAULT '',"
+                       "created_ids TEXT NOT NULL DEFAULT '{}',"
+                       "autonomy_level TEXT NOT NULL DEFAULT 'ask-for-everything',"
+                       "decided_by TEXT NOT NULL DEFAULT '', decided_at TEXT NOT NULL DEFAULT '',"
+                       "reclass_of INTEGER REFERENCES intake_classifications(id),"
+                       "created_at TEXT NOT NULL)"))
+        c.execute(text("CREATE INDEX IF NOT EXISTS intake_class_scope_turn"
+                       " ON intake_classifications(tenant, project, turn_id)"))
+        c.execute(text("CREATE TABLE IF NOT EXISTS chat_autonomy ("
+                       "tenant TEXT NOT NULL, project TEXT NOT NULL, level TEXT NOT NULL,"
+                       "updated_by TEXT NOT NULL, updated_at TEXT NOT NULL,"
+                       "PRIMARY KEY (tenant, project))"))
         c.execute(text("CREATE TABLE IF NOT EXISTS external_identities ("
                        "provider TEXT NOT NULL, subject TEXT NOT NULL,"
                        "username TEXT NOT NULL REFERENCES users(username),"
@@ -934,7 +959,7 @@ def make_app(db_url: str = DB_URL) -> FastAPI:
     # inside every query so titles/snippets cannot leak. Visibility:
     # restricted (creator or named members), company (same tenant),
     # public (any signed-in user, never anonymous).
-    KNOWLEDGE_KINDS = {"user_profile", "project_profile", "note", "decision", "rule", "snapshot"}
+    KNOWLEDGE_KINDS = {"user_profile", "project_profile", "note", "decision", "rule", "snapshot", "skill"}
     KNOWLEDGE_VIS = {"restricted", "company", "public"}
     _LATEST = ("k.id NOT IN (SELECT supersedes_id FROM knowledge_entries"
                " WHERE supersedes_id IS NOT NULL)")
@@ -1010,14 +1035,14 @@ def make_app(db_url: str = DB_URL) -> FastAPI:
             return identity in _allowed_list(k.get("allowed_users"))
         return False
 
-    def _knowledge_or_404(c, kid, identity):
+    def _knowledge_or_404(c, kid, identity, request=None):
         k = row(c, "SELECT * FROM knowledge_entries WHERE id=:i", i=kid)
         if not k:
             raise HTTPException(404, "knowledge entry not found")
         if identity == "supervisor":
             return k
         try:
-            caller_tenant = _tenant_of(c, identity)
+            caller_tenant = _caller_tenant(request, c) if request is not None else _tenant_of(c, identity)
         except HTTPException:
             caller_tenant = None  # sentinel hyeve:<sub>: public only
             if (k.get("visibility") or "company") != "public":
@@ -1136,7 +1161,7 @@ def make_app(db_url: str = DB_URL) -> FastAPI:
                 mine = None
             else:
                 try:
-                    mine = _tenant_of(c, ident)
+                    mine = _caller_tenant(request, c)
                 except HTTPException:
                     # A valid upstream identity is not a Rouvr principal until
                     # onboarding binds it to a local user and tenant.
@@ -1220,7 +1245,7 @@ def make_app(db_url: str = DB_URL) -> FastAPI:
                 # Latest-only: a superseded id resolves forward to the
                 # current version instead of surfacing the stale row.
                 # Full history stays available via /history.
-                k = _knowledge_or_404(c, kid, ident)
+                k = _knowledge_or_404(c, kid, ident, request)
                 seen = {k["id"]}
                 while True:
                     nxt = row(c, "SELECT id FROM knowledge_entries"
@@ -1228,7 +1253,7 @@ def make_app(db_url: str = DB_URL) -> FastAPI:
                     if not nxt or nxt["id"] in seen:
                         break
                     seen.add(nxt["id"])
-                    k = _knowledge_or_404(c, nxt["id"], ident)
+                    k = _knowledge_or_404(c, nxt["id"], ident, request)
                 return _krow(k)
             kw: dict = {"s": key}
             psql = ""
@@ -1242,7 +1267,7 @@ def make_app(db_url: str = DB_URL) -> FastAPI:
                 visible = rows
             else:
                 try:
-                    mine = _tenant_of(c, ident)
+                    mine = _caller_tenant(request, c)
                 except HTTPException:
                     mine = None
                 visible = []
@@ -1265,7 +1290,7 @@ def make_app(db_url: str = DB_URL) -> FastAPI:
                 raise HTTPException(404, "knowledge entry not found")
             else:
                 raise HTTPException(409, f"slug {key!r} is ambiguous across tenants")
-            return _krow(_knowledge_or_404(c, pick["id"], ident))
+            return _krow(_knowledge_or_404(c, pick["id"], ident, request))
 
     @app.get("/v1/knowledge/{kid}/history")
     def knowledge_history(kid: int, request: Request):
@@ -1273,7 +1298,7 @@ def make_app(db_url: str = DB_URL) -> FastAPI:
         is the point: nothing here is ever rewritten, only superseded."""
         ident = _identity(request)
         with eng.begin() as c:
-            head = _knowledge_or_404(c, kid, ident)
+            head = _knowledge_or_404(c, kid, ident, request)
             chain, seen, cur = [], {head["id"]}, head
             while cur:
                 chain.insert(0, _krow(cur))
@@ -1284,7 +1309,7 @@ def make_app(db_url: str = DB_URL) -> FastAPI:
                 cur = row(c, "SELECT * FROM knowledge_entries WHERE id=:i", i=nxt)
                 if cur:
                     try:
-                        _knowledge_or_404(c, cur["id"], ident)
+                        _knowledge_or_404(c, cur["id"], ident, request)
                     except HTTPException:
                         raise HTTPException(404, "knowledge entry not found")
             return {"items": chain}
@@ -1297,12 +1322,12 @@ def make_app(db_url: str = DB_URL) -> FastAPI:
         if not title or not kbody.strip():
             raise HTTPException(422, "title and body are required")
         with eng.begin() as c:
-            old = _knowledge_or_404(c, kid, ident)
+            old = _knowledge_or_404(c, kid, ident, request)
             if row(c, "SELECT id FROM knowledge_entries WHERE supersedes_id=:i", i=kid):
                 raise HTTPException(409, "entry already superseded: version the latest instead")
             if ident != "supervisor":
                 try:
-                    caller_tenant = _tenant_of(c, ident)
+                    caller_tenant = _caller_tenant(request, c)
                 except HTTPException:
                     caller_tenant = None
                 if caller_tenant != old["tenant"]:
@@ -1331,7 +1356,7 @@ def make_app(db_url: str = DB_URL) -> FastAPI:
     def confirm_knowledge(kid: int, request: Request):
         ident = _identity(request)
         with eng.begin() as c:
-            k = _knowledge_or_404(c, kid, ident)
+            k = _knowledge_or_404(c, kid, ident, request)
             if ident != "supervisor" and ident != k.get("author"):
                 raise HTTPException(403, "only the creator or an admin confirms")
             c.execute(text("UPDATE knowledge_entries SET verified=1 WHERE id=:i"), {"i": kid})
@@ -1383,7 +1408,7 @@ def make_app(db_url: str = DB_URL) -> FastAPI:
                 text("SELECT supersedes_id FROM knowledge_entries WHERE supersedes_id IS NOT NULL")
             ).mappings()}
             rows = [r for r in rows if r["id"] not in sup]
-            seen = [r for r in rows if _can_see(r, ident, _tenant_of(c, ident))]
+            seen = [r for r in rows if _can_see(r, ident, _caller_tenant(request, c))]
             lines = [f"- {r['title']} ({'knowledge:' + str(r['id']) + '@v' + str(r['version'])})"
                      for r in reversed(seen)]
             cbody = "Compact of verified entries:\n" + ("\n".join(lines) if lines else "(none)") \
@@ -1420,7 +1445,7 @@ def make_app(db_url: str = DB_URL) -> FastAPI:
                 text("SELECT supersedes_id FROM knowledge_entries WHERE supersedes_id IS NOT NULL")
             ).mappings()}
             rows = [_krow(r) for r in rows if r["id"] not in sup
-                    and _can_see(r, ident, _tenant_of(c, ident))]
+                    and _can_see(r, ident, _caller_tenant(request, c))]
         root = Path(os.environ.get("ROUVR_DATA_DIR", ".data")) / "knowledge-snapshots"
         root.mkdir(parents=True, exist_ok=True)
         ts = _now().replace(":", "").replace("+", "")
@@ -1468,7 +1493,7 @@ def make_app(db_url: str = DB_URL) -> FastAPI:
                 mine = None
             else:
                 try:
-                    mine = _tenant_of(c, ident)
+                    mine = _caller_tenant(request, c)
                 except HTTPException:
                     mine = None
             rows = [dict(r) for r in c.execute(text(
@@ -1500,7 +1525,7 @@ def make_app(db_url: str = DB_URL) -> FastAPI:
                 {"t": tenant, "p": project}).mappings()]
             sup = {r["supersedes_id"] for r in rows if r.get("supersedes_id")}
             latest = [r for r in rows if r["id"] not in sup
-                      and _can_see(r, ident, _tenant_of(c, ident))]
+                      and _can_see(r, ident, _caller_tenant(request, c))]
         suggestions: list = []
         seen_title: dict = {}
         for r in latest:
@@ -1650,7 +1675,7 @@ def make_app(db_url: str = DB_URL) -> FastAPI:
 
     @app.post("/v1/chat")
     def chat(body: dict, request: Request):
-        """Step 2: one supervised model turn -> slice with tasks, over SSE.
+        """Step 2 + Slice C: one supervised model turn -> intake router, over SSE.
 
         Streams ``token`` events as the model responds, then a ``result``
         event with the reply, created ids, and receipt source. A clarifying
@@ -1658,6 +1683,17 @@ def make_app(db_url: str = DB_URL) -> FastAPI:
         (contract = acceptance criteria), child tasks, slice-link evidence,
         and per-row ``chat:create`` receipts naming the message id are all
         written in one transaction with their ``task.created`` outbox rows.
+
+        Slice C: a classified turn (intake block) routes chat (answer + log
+        row), knowledge (answer + entry), task (intake task first, then the
+        pipeline) or ambiguous (one question, defaulting to chat). A
+        plan-shaped turn is ALWAYS saved as an unverified plan knowledge
+        entry first, then the autonomy-gated confirm gate: ask (offer with
+        Convert/Edit/Just-keep-it), or auto-convert for imperatives, free
+        autonomy, and docs/research under only-important. plan_action turns
+        (convert/edit/keep, or a plain yes/no/edit reply to a pending
+        offer) never call the model. Every classification is recorded with
+        who/when/level and is reclassifiable by appending.
         """
         from fastapi.responses import StreamingResponse
         message = body.get("message", "")
@@ -1670,6 +1706,16 @@ def make_app(db_url: str = DB_URL) -> FastAPI:
         if not isinstance(message_id, str) or not message_id.strip():
             raise HTTPException(422, "message_id must be a string")
         message_id = message_id.strip()
+        autonomy_override = body.get("autonomy")
+        if autonomy_override is not None and autonomy_override not in _chatmod.AUTONOMY_LEVELS:
+            raise HTTPException(422, f"autonomy must be one of {list(_chatmod.AUTONOMY_LEVELS)}")
+        plan_action = body.get("plan_action")
+        if plan_action is not None and plan_action not in ("convert", "edit", "keep"):
+            raise HTTPException(422, "plan_action must be convert, edit or keep")
+        plan_entry = body.get("plan_entry")
+        if plan_entry is not None and (isinstance(plan_entry, bool)
+                                       or not isinstance(plan_entry, int)):
+            raise HTTPException(422, "plan_entry must be an integer knowledge id")
         try:
             provider = _chatmod.provider_from_env()
         except (ValueError, RuntimeError) as e:
@@ -1681,6 +1727,692 @@ def make_app(db_url: str = DB_URL) -> FastAPI:
         def _frame(event: str, payload: dict) -> str:
             return f"event: {event}\ndata: {json.dumps(payload)}\n\n"
 
+        # ---- Slice C intake router helpers (share the chat closure scope:
+        # tenant, project, message_id, provider, autonomy_override). Every
+        # helper takes an open connection; yields happen outside `with`
+        # blocks so transactions never span SSE frames.
+        def _chat_level(c) -> str:
+            """Effective autonomy: per-turn override, stored setting, default."""
+            if autonomy_override is not None:
+                return autonomy_override
+            r = row(c, "SELECT level FROM chat_autonomy WHERE tenant=:t AND project=:p",
+                    t=tenant, p=project)
+            if r and r.get("level") in _chatmod.AUTONOMY_LEVELS:
+                return r["level"]
+            return _chatmod.DEFAULT_AUTONOMY
+
+        def _log_turn(c, cls: str, reply: str) -> None:
+            """One append-only conversation-log row per turn. No DELETE path
+            touches chat_turns: history is never hard-deleted."""
+            c.execute(text("INSERT INTO chat_turns(tenant,project,message_id,message,reply,class,"
+                           "created_at) VALUES(:t,:p,:m,:g,:r,:c,:n)"),
+                      {"t": tenant, "p": project, "m": message_id, "g": message.strip(),
+                       "r": reply, "c": cls or "", "n": _now()})
+
+        def _record_class(c, ident: str, level: str, cls: str, conf: float,
+                          cat: str | None, created: dict, reclass_of=None) -> dict:
+            rid = c.execute(text("INSERT INTO intake_classifications(tenant,project,turn_id,class,"
+                                 "confidence,category,created_ids,autonomy_level,decided_by,"
+                                 "decided_at,reclass_of,created_at)"
+                                 " VALUES(:t,:p,:u,:c,:f,:g,:d,:l,:b,:a,:r,:n)"),
+                            {"t": tenant, "p": project, "u": message_id, "c": cls,
+                             "f": conf, "g": cat or "", "d": json.dumps(created),
+                             "l": level, "b": ident, "a": _now(), "r": reclass_of,
+                             "n": _now()}).lastrowid
+            return row(c, "SELECT * FROM intake_classifications WHERE id=:i", i=rid)
+
+        def _contract_body(criteria, task_title, category, plan_slug, slice_id=None):
+            """write-task-contract shape: acceptance criteria plus the intake
+            category and plan link. Extra keys are additive: legacy readers
+            index acceptance_criteria only."""
+            body = {"acceptance_criteria": list(criteria)}
+            if task_title is not None:
+                body["task"] = task_title
+            if slice_id is not None:
+                body["slice_id"] = slice_id
+            if category:
+                body["category"] = category
+            if plan_slug:
+                body["plan_slug"] = plan_slug
+            return body
+
+        def _plan_entries(c) -> list:
+            """Latest-version plan entries (tagged "plan"), newest first."""
+            rows = [dict(r) for r in c.execute(text(
+                "SELECT * FROM knowledge_entries WHERE tenant=:t AND project=:p"
+                " AND tags LIKE '%\"plan\"%' ORDER BY id DESC"),
+                {"t": tenant, "p": project}).mappings()]
+            sup = {r["supersedes_id"] for r in rows if r.get("supersedes_id")}
+            return [r for r in rows if r["id"] not in sup]
+
+        def _decided_plan_ids(c) -> set:
+            """Plan entries already converted or kept (from classification rows)."""
+            out = set()
+            for r in c.execute(text("SELECT created_ids FROM intake_classifications"
+                                    " WHERE tenant=:t AND project=:p ORDER BY id DESC LIMIT 200"),
+                               {"t": tenant, "p": project}).mappings():
+                try:
+                    d = json.loads(r["created_ids"])
+                except ValueError:
+                    continue
+                if isinstance(d, dict) and (d.get("converted") or d.get("kept")) \
+                        and isinstance(d.get("plan_entry"), int):
+                    out.add(d["plan_entry"])
+            return out
+
+        def _pending_plan(c):
+            """Newest plan entry with no convert/keep decision, or None."""
+            decided = _decided_plan_ids(c)
+            for e in _plan_entries(c):
+                if e["id"] not in decided:
+                    return e
+            return None
+
+        def _plan_entry_for_turn(c):
+            """Plan entry already saved for this turn id (resend dedupe)."""
+            want = f"turn-{message_id}"
+            for e in _plan_entries(c):
+                try:
+                    tags = json.loads(e.get("tags") or "[]")
+                except ValueError:
+                    tags = []
+                if want in tags:
+                    return e
+            return None
+
+        def _resolve_plan_entry(c, explicit):
+            """Explicit plan_entry id (scoped + plan-tagged + latest) or the
+            pending offer. Returns None when nothing resolves."""
+            if explicit is not None:
+                e = row(c, "SELECT * FROM knowledge_entries WHERE id=:i", i=explicit)
+                if not e or e["tenant"] != tenant or e["project"] != project:
+                    return None
+                try:
+                    tags = json.loads(e.get("tags") or "[]")
+                except ValueError:
+                    tags = []
+                if "plan" not in tags:
+                    return None
+                nxt = row(c, "SELECT id FROM knowledge_entries WHERE supersedes_id=:i",
+                          i=e["id"])
+                if nxt:
+                    return None  # superseded: version the latest instead
+                return e
+            return _pending_plan(c)
+
+        def _parse_plan_body(entry):
+            try:
+                d = json.loads(entry["body"])
+            except ValueError:
+                return None
+            if not isinstance(d, dict) or not isinstance(d.get("slice"), dict) \
+                    or not isinstance(d.get("tasks"), list):
+                return None
+            return d
+
+        def _save_plan_entry(c, ident, spec, tasks, category, cls):
+            """A plan/proposal is ALWAYS saved as an unverified knowledge
+            entry (source = turn id, plan slug) before anything else."""
+            titles = [t["title"] for t in tasks]
+            summary = f"{len(titles)} steps: " + ", ".join(titles[:5])
+            if len(titles) > 5:
+                summary += f" (+{len(titles) - 5} more)"
+            return _knowledge_insert(
+                c, tenant, project, "note", f"Plan: {spec['title']}",
+                json.dumps({"source": message_id, "category": category, "class": cls,
+                            "slice": spec, "tasks": tasks}),
+                ident, tags=["plan", f"turn-{message_id}"], summary=summary[:160])
+
+        def _offer_result(entry, tasks, cls, level, reply, category):
+            return {"message_id": message_id, "reply": reply, "question": None,
+                    "slice": None, "tasks": [], "created": 0,
+                    "badge": {"kind": "saved", "label": f"Saved: {entry['slug']}"},
+                    "offer": {"plan_entry_id": entry["id"], "plan_slug": entry["slug"],
+                              "task_titles": [t["title"] for t in tasks],
+                              "category": category or "feature"},
+                    "classification": cls, "autonomy": level}
+
+        def _confirm_entry(c, ident, entry) -> None:
+            """Existing confirm path semantics: only the creator or an admin
+            confirms; sets verified + emits knowledge.confirmed."""
+            if ident != "supervisor" and ident != entry.get("author"):
+                raise HTTPException(403, "only the creator or an admin confirms")
+            c.execute(text("UPDATE knowledge_entries SET verified=1 WHERE id=:i"),
+                      {"i": entry["id"]})
+            _emit(c, entry["tenant"], entry["project"], "knowledge.confirmed", None,
+                  {"id": entry["id"],
+                   "citation": f"knowledge:{entry['id']}@v{entry['version']}"})
+
+        def _task_card(c, t):
+            """Chat card payload: id/title/state plus the same pipeline
+            flags the list endpoint carries, computed from real rows.
+            Result sets are small (one slice), so per-task queries are fine."""
+            contracts = [dict(r) for r in c.execute(text(
+                "SELECT * FROM contracts WHERE task_id=:i ORDER BY id"),
+                {"i": t["id"]}).mappings()]
+            evidence = [dict(r) for r in c.execute(text(
+                "SELECT * FROM evidence WHERE task_id=:i ORDER BY id"),
+                {"i": t["id"]}).mappings()]
+            receipts = [dict(r) for r in c.execute(text(
+                "SELECT * FROM receipts WHERE task_id=:i ORDER BY id"),
+                {"i": t["id"]}).mappings()]
+            verdicts = [r["verdict"] for r in c.execute(text(
+                "SELECT verdict FROM results WHERE task_id=:i ORDER BY id"),
+                {"i": t["id"]}).mappings()]
+            return {"id": t["id"], "title": t["title"], "state": t.get("state"),
+                    "pipeline": _pipeline_flags(t.get("state"), contracts,
+                                               evidence, receipts, verdicts)}
+
+        def _existing_intake_task(c):
+            """Task already created from this turn id (resend dedupe). Prefers
+            the plain intake task (no plan slug) over plan-convert rows that
+            share the chat:create key space. Audit rows are still appended."""
+            rows = [dict(r) for r in c.execute(text(
+                "SELECT t.*, r.body AS _rbody FROM tasks t"
+                " JOIN receipts r ON r.task_id=t.id"
+                " WHERE r.idempotency_key=:m AND r.action='chat:create'"
+                " AND t.tenant=:t AND t.project=:p ORDER BY t.id"),
+                {"m": message_id, "t": tenant, "p": project}).mappings()]
+            plain, fallback = None, None
+            for rr in rows:
+                body = rr.pop("_rbody")
+                if fallback is None:
+                    fallback = rr
+                try:
+                    slug = (json.loads(body or "{}") or {}).get("plan_slug")
+                except ValueError:
+                    slug = None
+                if slug is None and plain is None:
+                    plain = rr
+            return plain if plain is not None else fallback
+
+        def _entry_for_turn_id(c):
+            """Non-plan knowledge entry already saved for this turn id (resend
+            dedupe). Plan entries resolve through the offer flow instead."""
+            want = f"turn-{message_id}"
+            for e in [dict(r) for r in c.execute(text(
+                    "SELECT * FROM knowledge_entries WHERE tenant=:t AND project=:p"
+                    " ORDER BY id DESC"),
+                    {"t": tenant, "p": project}).mappings()]:
+                try:
+                    tags = json.loads(e.get("tags") or "[]")
+                except ValueError:
+                    continue
+                if want in tags and "plan" not in tags:
+                    nxt = row(c, "SELECT id FROM knowledge_entries"
+                                 " WHERE supersedes_id=:i", i=e["id"])
+                    if not nxt:
+                        return e
+            return None
+
+        def _create_intake_task(c, ident, msg_id, model_name, title, intent, criteria,
+                                category, plan_slug):
+            """One task with category + contract (the task branch: created
+            FIRST, state open = queued for pickup, then the pipeline)."""
+            n = _now()
+            tid = c.execute(text("INSERT INTO tasks(title,intent,state,created_at,updated_at,"
+                                 "created_by,tenant,project) VALUES(:t,:i,'open',:n,:n,:by,:tn,:p)"),
+                            {"t": title, "i": intent, "n": n,
+                             "by": ident, "tn": tenant, "p": project}).lastrowid
+            _emit(c, tenant, project, "task.created", tid,
+                  {"task_id": tid, "title": title, "state": "open"})
+            s, h = _canon(_contract_body(criteria, title, category, plan_slug))
+            c.execute(text("INSERT INTO contracts(task_id,body,sha256,created_at)"
+                           " VALUES(:i,:b,:h,:n)"), {"i": tid, "b": s, "h": h, "n": n})
+            s, _ = _canon({"source": msg_id, "role": "task", "model": model_name,
+                           "category": category, "plan_slug": plan_slug})
+            c.execute(text("INSERT INTO receipts(task_id,idempotency_key,action,body,created_at)"
+                           " VALUES(:i,:k,'chat:create',:b,:n)"),
+                      {"i": tid, "k": msg_id, "b": s, "n": n})
+            return row(c, "SELECT * FROM tasks WHERE id=:i", i=tid)
+
+        def _materialize_plan(c, ident, msg_id, model_name, spec, tasks, category,
+                              plan_slug):
+            """One slice plus one task per step, each with category +
+            contract, linked to the plan slug."""
+            n = _now()
+            sid = c.execute(text("INSERT INTO tasks(title,intent,state,created_at,updated_at,"
+                                 "created_by,tenant,project) VALUES(:t,:i,'open',:n,:n,:by,:tn,:p)"),
+                            {"t": spec["title"], "i": spec["intent"], "n": n,
+                             "by": ident, "tn": tenant, "p": project}).lastrowid
+            _emit(c, tenant, project, "task.created", sid,
+                  {"task_id": sid, "title": spec["title"], "state": "open"})
+            s, h = _canon(_contract_body(spec["acceptance_criteria"], None,
+                                          category, plan_slug))
+            c.execute(text("INSERT INTO contracts(task_id,body,sha256,created_at)"
+                           " VALUES(:i,:b,:h,:n)"), {"i": sid, "b": s, "h": h, "n": n})
+            kids = []
+            for t in tasks:
+                kid = c.execute(text("INSERT INTO tasks(title,intent,state,created_at,updated_at,"
+                                     "created_by,tenant,project) VALUES(:t,:i,'open',:n,:n,:by,:tn,:p)"),
+                                {"t": t["title"], "i": t["intent"], "n": n,
+                                 "by": ident, "tn": tenant, "p": project}).lastrowid
+                _emit(c, tenant, project, "task.created", kid,
+                      {"task_id": kid, "title": t["title"], "state": "open"})
+                s, h = _canon(_contract_body(spec["acceptance_criteria"], t["title"],
+                                              category, plan_slug, slice_id=sid))
+                c.execute(text("INSERT INTO contracts(task_id,body,sha256,created_at)"
+                               " VALUES(:i,:b,:h,:n)"), {"i": kid, "b": s, "h": h, "n": n})
+                kids.append(kid)
+            for kid in kids:
+                s, h = _canon({"slice_id": sid, "source": msg_id, "plan_slug": plan_slug})
+                c.execute(text("INSERT INTO evidence(task_id,kind,body,sha256,created_at)"
+                               " VALUES(:i,'slice_member',:b,:h,:n)"),
+                          {"i": kid, "b": s, "h": h, "n": n})
+            for tid, role in [(sid, "slice")] + [(k, "task") for k in kids]:
+                s, _ = _canon({"source": msg_id, "role": role, "slice_id": sid,
+                               "model": model_name, "plan_slug": plan_slug,
+                               "category": category})
+                c.execute(text("INSERT INTO receipts(task_id,idempotency_key,action,body,created_at)"
+                               " VALUES(:i,:k,'chat:create',:b,:n)"),
+                          {"i": tid, "k": msg_id, "b": s, "n": n})
+            s, h = _canon({"source": msg_id, "children": kids, "plan_slug": plan_slug})
+            c.execute(text("INSERT INTO evidence(task_id,kind,body,sha256,created_at)"
+                           " VALUES(:i,'slice',:b,:h,:n)"),
+                      {"i": sid, "b": s, "h": h, "n": n})
+            slice_row = row(c, "SELECT * FROM tasks WHERE id=:i", i=sid)
+            task_rows = [row(c, "SELECT * FROM tasks WHERE id=:i", i=k) for k in kids]
+            return slice_row, task_rows
+
+        def _do_convert(c, ident, msg_id, model_name, entry, level, cls, conf, cat):
+            """Convert = confirm the plan entry, then one slice + one task
+            per step. Idempotent on the plan entry: the plan:convert receipt
+            replays the same slice so double-click/double-send yields one."""
+            spec_d = _parse_plan_body(entry)
+            if spec_d is None:
+                raise HTTPException(422, "plan entry body is not a plan")
+            spec, tasks = spec_d["slice"], spec_d["tasks"]
+            category = spec_d.get("category") or cat or "feature"
+            own_cls = spec_d.get("class") if spec_d.get("class") in _chatmod.INTAKE_CLASSES \
+                else "task"
+            rep = row(c, "SELECT * FROM receipts WHERE idempotency_key=:k"
+                         " AND action='plan:convert'",
+                      k=f"plan-convert:{entry['id']}")
+            first_row = None
+            if rep is not None:
+                try:
+                    rb = json.loads(rep["body"])
+                except ValueError:
+                    rb = {}
+                slice_row = row(c, "SELECT * FROM tasks WHERE id=:i",
+                                i=rb.get("slice_id", rep["task_id"]))
+                if slice_row is None:
+                    raise HTTPException(409, "plan was converted but its slice is gone")
+                all_rows = [row(c, "SELECT * FROM tasks WHERE id=:i", i=i)
+                            for i in (rb.get("task_ids") or [])]
+                all_rows = [t for t in all_rows if t]
+                replayed = True
+            else:
+                _confirm_entry(c, ident, entry)
+                if own_cls == "task" or cls == "task":
+                    first_row = _create_intake_task(
+                        c, ident, msg_id, model_name, spec["title"], spec["intent"],
+                        spec["acceptance_criteria"], category, entry["slug"])
+                slice_row, kid_rows = _materialize_plan(
+                    c, ident, msg_id, model_name, spec, tasks, category, entry["slug"])
+                all_rows = ([first_row] if first_row else []) + kid_rows
+                s, _ = _canon({"plan_entry": entry["id"], "plan_slug": entry["slug"],
+                               "message_id": msg_id, "slice_id": slice_row["id"],
+                               "task_ids": [t["id"] for t in all_rows]})
+                c.execute(text("INSERT INTO receipts(task_id,idempotency_key,action,body,created_at)"
+                               " VALUES(:i,:k,'plan:convert',:b,:n)"),
+                          {"i": slice_row["id"], "k": f"plan-convert:{entry['id']}",
+                           "b": s, "n": _now()})
+                replayed = False
+            lines = []
+            # head = the intake-first task when the plan originated from a
+            # task-class (imperative) turn: fresh converts know it directly,
+            # replays re-derive it (first row that is neither the slice nor
+            # one of its slice_member children).
+            head = first_row
+            if head is None and replayed and all_rows \
+                    and all_rows[0]["id"] != slice_row["id"] \
+                    and not _is_slice_child(c, all_rows[0]["id"], slice_row["id"]):
+                head = all_rows[0]
+            if head is not None:
+                lines.append(f"Task #{head['id']} {head['title']} (open).")
+            lines.append(f"Converted plan '{entry['slug']}' into Slice #{slice_row['id']}"
+                         f" {slice_row['title']}: {len(all_rows) - (1 if head else 0)} task(s).")
+            lines.append(_chatmod.render_cards(
+                slice_row, [t for t in all_rows if t["id"] != slice_row["id"]]))
+            if replayed:
+                lines.append("(already converted — showing the existing slice.)")
+            reply = "\n".join(lines)
+            _log_turn(c, "task", reply)
+            created = {"plan_entry": entry["id"], "plan_slug": entry["slug"],
+                       "slice": slice_row["id"],
+                       "tasks": [t["id"] for t in all_rows if t["id"] != slice_row["id"]]}
+            if head is not None:
+                created["task"] = head["id"]
+            if replayed:
+                created["replayed"] = True
+            else:
+                created["confirmed"] = True
+            _record_class(c, ident, level, "task", conf, category, created)
+            kids_only = [t for t in all_rows if t["id"] != slice_row["id"]]
+            badge_id = head["id"] if head is not None else slice_row["id"]
+            return {"message_id": message_id, "reply": reply, "question": None,
+                    "slice": {"id": slice_row["id"], "title": slice_row["title"]},
+                    "tasks": [_task_card(c, t) for t in all_rows],
+                    "created": 1 + len(all_rows),
+                    "badge": {"kind": "task", "label": f"Task #{badge_id}"},
+                    "classification": "task", "autonomy": level}
+
+        def _is_slice_child(c, tid, sid) -> bool:
+            for r in c.execute(text("SELECT body FROM evidence WHERE task_id=:i"
+                                    " AND kind='slice_member'"), {"i": tid}).mappings():
+                try:
+                    if json.loads(r["body"]).get("slice_id") == sid:
+                        return True
+                except ValueError:
+                    continue
+            return False
+
+        def _run_plan_action(action):
+            """Convert/Edit/Just-keep-it on a plan offer. Never calls the
+            model for convert/keep; edit runs exactly one revision round.
+            Returns SSE frame strings (token + result, or error)."""
+            ident = _identity(request)
+            model_name = provider["model"]
+            with eng.begin() as c:
+                level = _chat_level(c)
+            if action == "edit":
+                rev_spec, rev_tasks = None, None
+                try:
+                    maybe = _chatmod.parse_intake_turn(message.strip())
+                except ValueError:
+                    maybe = None
+                if maybe is not None and maybe["slice"] is not None:
+                    rev_spec, rev_tasks = maybe["slice"], maybe["tasks"]
+                else:
+                    with eng.begin() as c:
+                        entry = _resolve_plan_entry(c, plan_entry)
+                        cur = _parse_plan_body(entry) if entry is not None else None
+                    if entry is None or cur is None:
+                        return [_frame("error", {"detail":
+                            "no pending plan to edit — say what you want planned first"})]
+                    rev_messages = [
+                        {"role": "system", "content": _chatmod.REVISE_PROMPT},
+                        {"role": "user", "content":
+                         "Current plan JSON:\n" + json.dumps(cur)
+                         + "\n\nRevision note:\n" + message.strip()}]
+                    try:
+                        rev_text = _chatmod.complete_once(rev_messages, provider)
+                    except RuntimeError as e:
+                        return [_frame("error", {"detail": f"model request failed: {e}"})]
+                    try:
+                        rev = _chatmod.parse_intake_turn(rev_text)
+                    except ValueError as e:
+                        return [_frame("error", {"detail": f"unusable revision: {e}"})]
+                    if rev["slice"] is None:
+                        return [_frame("error", {"detail":
+                            "unusable revision: no plan in the revised turn"})]
+                    rev_spec, rev_tasks = rev["slice"], rev["tasks"]
+                try:
+                    with eng.begin() as c:
+                        entry = _resolve_plan_entry(c, plan_entry)
+                        if entry is None:
+                            raise HTTPException(404, "no pending plan to edit")
+                        old_d = _parse_plan_body(entry) or {}
+                        cls0 = old_d.get("class")
+                        if cls0 not in _chatmod.INTAKE_CLASSES:
+                            cls0 = "task"
+                        cat0 = old_d.get("category")
+                        if cat0 not in _chatmod.TASK_CATEGORIES:
+                            cat0 = None
+                        try:
+                            allowed = json.loads(entry.get("allowed_users") or "[]")
+                        except ValueError:
+                            allowed = []
+                        new_entry = _knowledge_insert(
+                            c, tenant, project, entry["kind"], entry["title"],
+                            json.dumps({"source": message_id, "category": cat0,
+                                        "class": cls0, "slice": rev_spec,
+                                        "tasks": rev_tasks}),
+                            ident, version=entry["version"] + 1, supersedes=entry["id"],
+                            visibility=entry.get("visibility") or "company",
+                            allowed=allowed, slug=entry["slug"],
+                            tags=["plan", f"turn-{message_id}"],
+                            summary=(f"{len(rev_tasks)} steps: "
+                                     + ", ".join(t["title"] for t in rev_tasks[:5]))[:160],
+                            slug_chain=[entry["slug"]])
+                        reply = _chatmod.OFFER_TEMPLATE.format(
+                            n=len(rev_tasks),
+                            titles=", ".join(t["title"] for t in rev_tasks))
+                        _log_turn(c, cls0, reply)
+                        _record_class(c, ident, level, cls0, 1.0, cat0,
+                                      {"plan_entry": new_entry["id"],
+                                       "revised_from": entry["id"], "offered": True})
+                        result = _offer_result(new_entry, rev_tasks, cls0, level,
+                                               reply, cat0)
+                except HTTPException as e:
+                    return [_frame("error", {"detail": str(e.detail)})]
+                return [_frame("token", {"text": reply}), _frame("result", result)]
+            try:
+                with eng.begin() as c:
+                    entry = _resolve_plan_entry(c, plan_entry)
+                    if entry is None:
+                        raise HTTPException(404, "no pending plan — say what you want"
+                                                 " planned first")
+                    if action == "keep":
+                        reply = (f"Kept as knowledge only (Saved: {entry['slug']})"
+                                 " — no tasks created.")
+                        _log_turn(c, "knowledge", reply)
+                        _record_class(c, ident, level, "knowledge", 1.0, None,
+                                      {"plan_entry": entry["id"], "kept": True})
+                        result = {"message_id": message_id, "reply": reply,
+                                  "question": None, "slice": None, "tasks": [],
+                                  "created": 0,
+                                  "badge": {"kind": "saved",
+                                            "label": f"Saved: {entry['slug']}"},
+                                  "classification": "knowledge", "autonomy": level}
+                    else:  # convert
+                        spec_d0 = _parse_plan_body(entry) or {}
+                        cls0 = spec_d0.get("class")
+                        if cls0 not in _chatmod.INTAKE_CLASSES:
+                            cls0 = "task"
+                        cat0 = spec_d0.get("category")
+                        if cat0 not in _chatmod.TASK_CATEGORIES:
+                            cat0 = None
+                        result = _do_convert(c, ident, message_id, model_name,
+                                             entry, level, cls0, 1.0, cat0)
+                        reply = result["reply"]
+            except HTTPException as e:
+                return [_frame("error", {"detail": str(e.detail)})]
+            return [_frame("token", {"text": reply}), _frame("result", result)]
+
+        def _chat_identity_block(c, scope_tenant: str | None) -> str:
+            """Live per-request identity bundle: tenant/project, tool names
+            from the live MCP registry, skill catalogue, open work, verified
+            rules. Uses the closure's authoritative scope (already resolved
+            by _session_scope, fail closed); the supervisor identity sees all
+            tenants exactly like the read paths below."""
+            ident = _identity(request)
+            mine = scope_tenant if ident != "supervisor" else None
+            try:
+                tools = _chatmod.live_tool_manifest()
+            except Exception:
+                tools = []
+            sup = {s["supersedes_id"] for s in [dict(x) for x in c.execute(text(
+                "SELECT supersedes_id FROM knowledge_entries"
+                " WHERE supersedes_id IS NOT NULL")).mappings()]}
+            tcond = "" if mine is None else " AND tenant=:t"
+            tkw = {} if mine is None else {"t": mine}
+            skills = []
+            for r in [dict(x) for x in c.execute(text(
+                    "SELECT * FROM knowledge_entries WHERE kind='skill'"
+                    f"{tcond} ORDER BY id DESC LIMIT 20"), tkw).mappings()]:
+                if r["id"] in sup:
+                    continue
+                if not _can_see(r, ident, mine):
+                    continue
+                blurb = (r.get("summary") or r.get("body") or "").strip().splitlines()
+                skills.append({"slug": r.get("slug") or "",
+                               "title": r["title"],
+                               "blurb": (blurb[0][:100] if blurb else "")})
+                if len(skills) >= 8:
+                    break
+            open_rows = [dict(x) for x in c.execute(text(
+                "SELECT id, title FROM tasks WHERE state='open'"
+                f"{' AND tenant=:t' if mine is not None else ''}"
+                " ORDER BY id DESC LIMIT 5"), tkw).mappings()]
+            open_count = c.execute(text(
+                "SELECT COUNT(*) FROM tasks WHERE state='open'"
+                f"{' AND tenant=:t' if mine is not None else ''}"), tkw).scalar()
+            rules = []
+            for r in [dict(x) for x in c.execute(text(
+                    "SELECT * FROM knowledge_entries WHERE kind='rule'"
+                    " AND verified=1"
+                    f"{tcond} ORDER BY id DESC LIMIT 20"), tkw).mappings()]:
+                if r["id"] in sup:
+                    continue
+                if not _can_see(r, ident, mine):
+                    continue
+                rules.append(f"knowledge:{r['id']}@v{r['version']}")
+                if len(rules) >= 5:
+                    break
+            return _chatmod.identity_block(
+                tools, skills, open_count or 0,
+                [t["title"] for t in open_rows], rules,
+                tenant if mine is None else mine, project)
+
+        def _run_intake_turn(turn, turn_text, retries):
+            """One classified model turn: route chat/knowledge/task/ambiguous,
+            or the plan confirm gate for plan-shaped turns. Returns SSE
+            frame strings (token + result, or error)."""
+            ident = _identity(request)
+            model_name = provider["model"]
+            intake = turn["intake"]
+            cls, conf = intake["class"], intake["confidence"]
+            cat = intake["category"]
+            msg_text = message.strip()
+            if turn["question"] is not None:
+                with eng.begin() as c:
+                    level = _chat_level(c)
+                    _log_turn(c, cls, turn["question"])
+                    _record_class(c, ident, level, cls, conf, cat, {})
+                result = {"message_id": message_id, "reply": turn["question"],
+                          "question": turn["question"],
+                          "slice": None, "tasks": [], "created": 0,
+                          "badge": {"kind": "logged", "label": "Logged"},
+                          "classification": cls, "autonomy": level}
+                return [_frame("result", result)]
+            if turn["slice"] is not None:
+                spec, tasks = turn["slice"], turn["tasks"]
+                try:
+                    with eng.begin() as c:
+                        level = _chat_level(c)
+                        entry = _plan_entry_for_turn(c)
+                        if entry is None:
+                            entry = _save_plan_entry(c, ident, spec, tasks, cat, cls)
+                        auto = cls == "task" or level == "free" or (
+                            level == "only-important"
+                            and (cat or "feature") in _chatmod.AUTO_CONVERT_CATEGORIES)
+                        if auto:
+                            result = _do_convert(c, ident, message_id, model_name,
+                                                 entry, level, cls, conf, cat)
+                            reply = result["reply"]
+                        else:
+                            reply = ((turn["answer"] + "\n\n")
+                                     if turn["answer"].strip() else "") \
+                                + _chatmod.OFFER_TEMPLATE.format(
+                                    n=len(tasks),
+                                    titles=", ".join(t["title"] for t in tasks))
+                            _log_turn(c, cls, reply)
+                            _record_class(c, ident, level, cls, conf, cat,
+                                          {"plan_entry": entry["id"], "offered": True})
+                            result = _offer_result(entry, tasks, cls, level, reply,
+                                                   cat)
+                except HTTPException as e:
+                    return [_frame("error", {"detail": str(e.detail)})]
+                return [_frame("token", {"text": reply}), _frame("result", result)]
+            if cls == "knowledge":
+                ko = turn["knowledge"] or {}
+                kind = ko.get("kind") or "note"
+                if kind not in KNOWLEDGE_KINDS:
+                    kind = "note"
+                src = turn["answer"] or msg_text
+                title = (ko.get("title") or "").strip() \
+                    or (src.strip().splitlines()[0][:60] if src.strip() else "")
+                bodyk = (ko.get("body") or "").strip() or src
+                if not title or not bodyk.strip():
+                    return [_frame("error", {"detail":
+                        "unusable model turn: knowledge needs a title and a body"})]
+                try:
+                    with eng.begin() as c:
+                        level = _chat_level(c)
+                        krow = _entry_for_turn_id(c)
+                        replayed = krow is not None
+                        if krow is None:
+                            krow = _knowledge_insert(c, tenant, project, kind, title,
+                                                     bodyk, ident,
+                                                     tags=[kind, f"turn-{message_id}"])
+                        reply = ((turn["answer"] + "\n")
+                                 if turn["answer"].strip() else "") \
+                            + f"Saved: {krow['slug']}" \
+                            + (" (already saved.)" if replayed else "")
+                        _log_turn(c, "knowledge", reply)
+                        _record_class(c, ident, level, "knowledge", conf, cat,
+                                      {"knowledge": [krow["id"]],
+                                       **({"replayed": True} if replayed else {})})
+                        result = {"message_id": message_id, "reply": reply,
+                                  "question": None, "slice": None, "tasks": [],
+                                  "created": 0,
+                                  "badge": {"kind": "saved",
+                                            "label": f"Saved: {krow['slug']}"},
+                                  "knowledge": {"id": krow["id"], "slug": krow["slug"]},
+                                  "classification": "knowledge", "autonomy": level}
+                except HTTPException as e:
+                    return [_frame("error", {"detail": str(e.detail)})]
+                return [_frame("token", {"text": reply}), _frame("result", result)]
+            if cls == "task":
+                spec = turn["task"] or {"title": msg_text[:80], "intent": msg_text}
+                criteria = turn["contract"]["acceptance_criteria"] if turn["contract"] \
+                    else [f"Satisfy the request: {msg_text[:160]}"]
+                category = cat or "feature"
+                try:
+                    with eng.begin() as c:
+                        level = _chat_level(c)
+                        trow = _existing_intake_task(c)
+                        replayed = trow is not None
+                        if trow is None:
+                            trow = _create_intake_task(c, ident, message_id, model_name,
+                                                       spec["title"], spec["intent"],
+                                                       criteria, category, None)
+                        reply = ((turn["answer"] + "\n")
+                                 if turn["answer"].strip() else "") \
+                            + f"Task #{trow['id']} {trow['title']} (open)." \
+                            + (" (already created — showing the existing task.)"
+                               if replayed else "")
+                        _log_turn(c, "task", reply)
+                        _record_class(c, ident, level, "task", conf, category,
+                                      {"task": trow["id"],
+                                       **({"replayed": True} if replayed else {})})
+                        result = {"message_id": message_id, "reply": reply,
+                                  "question": None, "slice": None,
+                                  "tasks": [_task_card(c, trow)],
+                                  "created": 1,
+                                  "badge": {"kind": "task",
+                                            "label": f"Task #{trow['id']}"},
+                                  "classification": "task", "autonomy": level}
+                except HTTPException as e:
+                    return [_frame("error", {"detail": str(e.detail)})]
+                return [_frame("token", {"text": reply}), _frame("result", result)]
+            # chat, or ambiguous with no question defaulting to chat.
+            reply = turn["answer"]
+            if not reply.strip():
+                return [_frame("error", {"detail":
+                    "unusable model turn: chat needs an answer"})]
+            with eng.begin() as c:
+                level = _chat_level(c)
+                _log_turn(c, cls, reply)
+                _record_class(c, ident, level, cls, conf, cat, {})
+            result = {"message_id": message_id, "reply": reply, "question": None,
+                      "slice": None, "tasks": [], "created": 0,
+                      "badge": {"kind": "logged", "label": "Logged"},
+                      "classification": cls, "autonomy": level}
+            return [_frame("result", result)]
+
         def _events():
             # Non-streaming turns: the reasoning model behind the Model API
             # burns most of a streaming budget thinking and yields zero
@@ -1688,8 +2420,38 @@ def make_app(db_url: str = DB_URL) -> FastAPI:
             # emitted as a single real token event, then the result event —
             # the SSE contract and the chat UI are unchanged.
             import time as _time
+            # Plan actions (Convert/Edit/Just-keep-it buttons, or a plain
+            # yes/no/convert reply to a pending offer) never call the model:
+            # an explicit plan_action wins, otherwise a matching message
+            # resolves the pending offer when one exists.
+            msg_text = message.strip()
+            action = plan_action
+            if action is None:
+                norm = msg_text.lower()
+                if norm in _chatmod.PLAN_YES or norm in _chatmod.PLAN_NO \
+                        or norm in _chatmod.PLAN_EDIT:
+                    with eng.begin() as c:
+                        has_pending = _pending_plan(c) is not None
+                    if has_pending:
+                        action = ("convert" if norm in _chatmod.PLAN_YES
+                                  else "keep" if norm in _chatmod.PLAN_NO else "edit")
+            if action is not None:
+                for _chunk in _run_plan_action(action):
+                    yield _chunk
+                return
+            try:
+                with eng.begin() as c:
+                    ident_block = _chat_identity_block(c, tenant)
+            except HTTPException:
+                raise
+            except Exception as e:  # identity context is enhancement, never a gate
+                __import__("logging").getLogger(__name__).warning(
+                    "chat identity block skipped: %r", e)
+                ident_block = None
+            system_prompt = _chatmod.SYSTEM_PROMPT + (
+                "\n" + ident_block if ident_block else "")
             turn_messages = [
-                {"role": "system", "content": _chatmod.SYSTEM_PROMPT},
+                {"role": "system", "content": system_prompt},
                 {"role": "user", "content": message.strip()}]
             retries = 0
             turn_text = ""
@@ -1708,11 +2470,24 @@ def make_app(db_url: str = DB_URL) -> FastAPI:
                     yield _frame("token", {"text": turn_text})
                     break
             try:
+                turn = _chatmod.parse_intake_turn(turn_text)
+            except ValueError as e:
+                yield _frame("error", {"detail": f"unusable model turn: {e}"})
+                return
+            if turn["intake"] is not None:
+                for _chunk in _run_intake_turn(turn, turn_text, retries):
+                    yield _chunk
+                return
+            # Legacy turn (no intake block): exact Step-2 behavior, plus a
+            # conversation-log row.
+            try:
                 plan = _chatmod.parse_chat_plan(turn_text)
             except ValueError as e:
                 yield _frame("error", {"detail": f"unusable model turn: {e}"})
                 return
             if plan["question"] is not None:
+                with eng.begin() as c:
+                    _log_turn(c, "", plan["question"])
                 yield _frame("result", {"message_id": message_id,
                                         "reply": plan["question"], "question": plan["question"],
                                         "slice": None, "tasks": [], "created": 0})
@@ -1765,15 +2540,324 @@ def make_app(db_url: str = DB_URL) -> FastAPI:
                           {"i": sid, "b": s, "h": h, "n": n})
                 slice_row = row(c, "SELECT * FROM tasks WHERE id=:i", i=sid)
                 task_rows = [row(c, "SELECT * FROM tasks WHERE id=:i", i=k) for k in kids]
+                cards = [_task_card(c, t) for t in task_rows]
             reply = (f"Slice #{slice_row['id']} {slice_row['title']}: "
                      f"{len(task_rows)} task(s).\n" + _chatmod.render_cards(slice_row, task_rows))
+            with eng.begin() as c:
+                _log_turn(c, "", reply)
             yield _frame("result", {"message_id": message_id, "reply": reply,
                                     "question": None,
                                     "slice": {"id": slice_row["id"], "title": slice_row["title"]},
-                                    "tasks": [{"id": t["id"], "title": t["title"]} for t in task_rows],
+                                    "tasks": cards,
                                     "created": 1 + len(task_rows)})
 
         return StreamingResponse(_events(), media_type="text/event-stream")
+
+    @app.get("/v1/chat/autonomy")
+    def get_chat_autonomy(request: Request, project: str, tenant: str | None = None):
+        """Autonomy level for the plan confirm gate (session/user setting;
+        default ask-for-everything when no row)."""
+        ident = _identity(request)
+        with eng.begin() as c:
+            scope = {"project": project}
+            if tenant is not None:
+                scope["tenant"] = tenant
+            t, p = _session_scope(request, c, scope)
+            _registered(c, t, p)
+            r = row(c, "SELECT level FROM chat_autonomy WHERE tenant=:t AND project=:p",
+                    t=t, p=p)
+            level = r["level"] if r and r.get("level") in _chatmod.AUTONOMY_LEVELS \
+                else _chatmod.DEFAULT_AUTONOMY
+            return {"tenant": t, "project": p, "autonomy": level,
+                    "default": r is None, "user": ident}
+
+    @app.post("/v1/chat/autonomy")
+    def set_chat_autonomy(body: dict, request: Request):
+        """Record the session/user autonomy level for the scope."""
+        level = body.get("autonomy", body.get("level"))
+        if level not in _chatmod.AUTONOMY_LEVELS:
+            raise HTTPException(422, f"autonomy must be one of {list(_chatmod.AUTONOMY_LEVELS)}")
+        ident = _identity(request)
+        with eng.begin() as c:
+            t, p = _session_scope(request, c, body)
+            _registered(c, t, p)
+            c.execute(text("INSERT INTO chat_autonomy(tenant,project,level,updated_by,updated_at)"
+                           " VALUES(:t,:p,:l,:b,:n)"
+                           " ON CONFLICT(tenant,project) DO UPDATE SET level=:l,"
+                           " updated_by=:b, updated_at=:n"),
+                      {"t": t, "p": p, "l": level, "b": ident, "n": _now()})
+            return {"tenant": t, "project": p, "autonomy": level, "updated_by": ident}
+
+    @app.post("/v1/chat/reclassify")
+    def reclassify_turn(body: dict, request: Request):
+        """Reclassify a turn: appends a new classification row pointing at
+        the prior one (reclass_of). History is never rewritten or deleted."""
+        msg_id = body.get("message_id", body.get("turn_id"))
+        if not isinstance(msg_id, str) or not msg_id.strip():
+            raise HTTPException(422, "message_id is required")
+        cls = body.get("class")
+        if cls not in _chatmod.INTAKE_CLASSES:
+            raise HTTPException(422, f"class must be one of {list(_chatmod.INTAKE_CLASSES)}")
+        try:
+            conf = float(body.get("confidence", 0.5))
+        except (TypeError, ValueError):
+            raise HTTPException(422, "confidence must be a number")
+        conf = max(0.0, min(1.0, conf))
+        cat = body.get("category")
+        if cat is not None and cat not in _chatmod.TASK_CATEGORIES:
+            raise HTTPException(422, f"category must be one of {list(_chatmod.TASK_CATEGORIES)}")
+        ident = _identity(request)
+        with eng.begin() as c:
+            t, p = _session_scope(request, c, body)
+            _registered(c, t, p)
+            prior = row(c, "SELECT * FROM intake_classifications"
+                           " WHERE tenant=:t AND project=:p AND turn_id=:u"
+                           " ORDER BY id DESC LIMIT 1", t=t, p=p, u=msg_id.strip())
+            if prior is None:
+                raise HTTPException(404, "no classification for that turn")
+            rid = c.execute(text("INSERT INTO intake_classifications(tenant,project,turn_id,class,"
+                                 "confidence,category,created_ids,autonomy_level,decided_by,"
+                                 "decided_at,reclass_of,created_at)"
+                                 " VALUES(:t,:p,:u,:c,:f,:g,:d,:l,:b,:a,:r,:n)"),
+                            {"t": t, "p": p, "u": msg_id.strip(), "c": cls, "f": conf,
+                             "g": cat or "", "d": prior["created_ids"],
+                             "l": prior["autonomy_level"], "b": ident, "a": _now(),
+                             "r": prior["id"], "n": _now()}).lastrowid
+            out = row(c, "SELECT * FROM intake_classifications WHERE id=:i", i=rid)
+            try:
+                out["created_ids"] = json.loads(out.get("created_ids") or "{}")
+            except ValueError:
+                out["created_ids"] = {}
+            return out
+
+    @app.get("/v1/chat/turns")
+    def list_chat_turns(request: Request, project: str, tenant: str | None = None,
+                         message_id: str | None = None):
+        """Append-only conversation log for the scope (never hard-deleted)."""
+        with eng.begin() as c:
+            scope = {"project": project}
+            if tenant is not None:
+                scope["tenant"] = tenant
+            t, p = _session_scope(request, c, scope)
+            _registered(c, t, p)
+            q = "SELECT * FROM chat_turns WHERE tenant=:t AND project=:p"
+            kw: dict = {"t": t, "p": p}
+            if message_id:
+                q += " AND message_id=:m"
+                kw["m"] = message_id
+            items = [dict(r) for r in c.execute(text(q + " ORDER BY id"), kw).mappings()]
+            return {"items": items}
+
+    @app.get("/v1/chat/classifications")
+    def list_classifications(request: Request, project: str, tenant: str | None = None,
+                             message_id: str | None = None):
+        """Classification rows for the scope, oldest first, with created_ids
+        parsed. Reclassifications appear as additional rows (reclass_of)."""
+        with eng.begin() as c:
+            scope = {"project": project}
+            if tenant is not None:
+                scope["tenant"] = tenant
+            t, p = _session_scope(request, c, scope)
+            _registered(c, t, p)
+            q = "SELECT * FROM intake_classifications WHERE tenant=:t AND project=:p"
+            kw: dict = {"t": t, "p": p}
+            if message_id:
+                q += " AND turn_id=:m"
+                kw["m"] = message_id
+            items = []
+            for r in c.execute(text(q + " ORDER BY id"), kw).mappings():
+                d = dict(r)
+                try:
+                    d["created_ids"] = json.loads(d.get("created_ids") or "{}")
+                except ValueError:
+                    d["created_ids"] = {}
+                items.append(d)
+            return {"items": items}
+
+    # States where a task list row must carry WHY it needs attention, and the
+    # evidence kinds that explain it. Derived per row from the existing
+    # evidence table (no schema migration): the latest escalation/review
+    # evidence body, truncated to one short string.
+    _ATTENTION_STATES = {"failed", "blocked", "needs_review"}
+    _ATTENTION_KINDS = ("escalation", "reviewer", "review", "review_note")
+
+    def _fence_text(fence: object) -> tuple[str | None, str | None]:
+        """Split an evidence fence like 'escalate:attempt-3:rework_exhausted'.
+
+        Returns (code, attempt): human-readable code plus the attempt number
+        when present, both None when the fence carries neither."""
+        if not isinstance(fence, str) or not fence.strip():
+            return None, None
+        parts = fence.strip().split(":")
+        code = parts[-1].replace("_", " ").strip() or None
+        attempt = None
+        for part in parts:
+            m = re.match(r"attempt-(\d+)$", part.strip())
+            if m:
+                attempt = m.group(1)
+                break
+        return code, attempt
+
+    def _attention_reason(raw: str | None) -> str | None:
+        if raw is None:
+            return None
+        try:
+            parsed = json.loads(raw)
+        except ValueError:
+            parsed = raw
+        text = None
+        attempt = None
+        if isinstance(parsed, dict):
+            payload = parsed.get("payload")
+            if isinstance(payload, dict):
+                for key in ("reason", "note", "message", "text", "verdict"):
+                    val = payload.get(key)
+                    if isinstance(val, str) and val.strip():
+                        text = val.strip()
+                        break
+            if text is None:
+                for key in ("reason", "note", "message", "text", "verdict"):
+                    val = parsed.get(key)
+                    if isinstance(val, str) and val.strip():
+                        text = val.strip()
+                        break
+            code, attempt = _fence_text(parsed.get("fence"))
+            if text is None:
+                text = code
+        else:
+            text = parsed if isinstance(parsed, str) else json.dumps(parsed)
+            text = text.strip() if isinstance(text, str) else text
+        if not text:
+            return None
+        text = text.replace("_", " ")
+        if attempt and attempt not in text:
+            text = f"{text} (attempt {attempt})"
+        return text[:200] if len(text) > 200 else text
+
+    # ---- P1 pipeline strip: five steps computed ONLY from real ledger rows.
+    # Mapping (the web PipelineStrip renders these flags verbatim):
+    #   contract : done when >= 1 row in contracts (acceptance_criteria live
+    #     here). Otherwise pending.
+    #   knowledge: done when a contract body carries plan_slug/category, or a
+    #     chat:create / plan:convert receipt body does (intake plan linkage).
+    #     Direct POST /v1/tasks rows have neither -> pending (honest).
+    #   build    : done when worker output exists — evidence kind in
+    #     step/tests/test_output/criteria, or a row in results (attempt
+    #     verdict). attention when the latest result verdict is negative
+    #     (that blocks the approve gate). Otherwise pending.
+    #   review   : done when reviewer-kind evidence (reviewer/review/review_note)
+    #     exists (latest verdict non-negative), or the task is done (approval
+    #     requires a passing verify on needs_review). attention when the latest
+    #     reviewer verdict is negative. Otherwise pending.
+    #   evidence : done when >= 1 evidence row exists (the approve gate counts
+    #     rows, not kinds). A count cannot fail, so no attention state.
+    # There is no pr_record/head-SHA evidence kind in this ledger; build and
+    # review are derived from the kinds above, which is what intake, workers,
+    # and the verify gate actually write.
+    _PIPELINE_BUILD_KINDS = frozenset({"step", "tests", "test_output", "criteria"})
+    _PIPELINE_REVIEW_KINDS = ("reviewer", "review", "review_note")
+    _PIPELINE_LINK_ACTIONS = frozenset({"chat:create", "plan:convert"})
+    _PIPELINE_NEGATIVE = frozenset({"fail", "failed", "failure",
+                                    "request_changes", "changes_requested",
+                                    "reject", "rejected", "error"})
+
+    def _pipeline_json(raw) -> dict:
+        if isinstance(raw, dict):
+            return raw
+        if isinstance(raw, str):
+            try:
+                parsed = json.loads(raw)
+            except ValueError:
+                return {}
+            return parsed if isinstance(parsed, dict) else {}
+        return {}
+
+    def _pipeline_verdict(body: dict):
+        v = body.get("verdict")
+        if not isinstance(v, str):
+            payload = body.get("payload")
+            if isinstance(payload, dict):
+                v = payload.get("verdict")
+        if not isinstance(v, str) or not v.strip():
+            return None
+        return v.strip().lower()
+
+    def _pipeline_flags(state, contracts, evidence, receipts, result_verdicts) -> dict:
+        flags = {"contract": "pending", "knowledge": "pending",
+                 "build": "pending", "review": "pending",
+                 "evidence": "pending"}
+        contracts = list(contracts or [])
+        evidence = list(evidence or [])
+        receipts = list(receipts or [])
+        if contracts:
+            flags["contract"] = "done"
+        for c in contracts:
+            b = _pipeline_json(c.get("body"))
+            if b.get("plan_slug") or b.get("category"):
+                flags["knowledge"] = "done"
+                break
+        if flags["knowledge"] != "done":
+            for r in receipts:
+                if r.get("action") not in _PIPELINE_LINK_ACTIONS:
+                    continue
+                b = _pipeline_json(r.get("body"))
+                if b.get("plan_slug") or b.get("category"):
+                    flags["knowledge"] = "done"
+                    break
+        late = [str(v).strip().lower() for v in (result_verdicts or [])]
+        if any(e.get("kind") in _PIPELINE_BUILD_KINDS for e in evidence) or late:
+            flags["build"] = "done"
+        if late and late[-1] in _PIPELINE_NEGATIVE:
+            flags["build"] = "attention"
+        reviewer_verdicts = [_pipeline_verdict(_pipeline_json(e.get("body")))
+                             for e in evidence
+                             if e.get("kind") in _PIPELINE_REVIEW_KINDS]
+        reviewer_verdicts = [v for v in reviewer_verdicts if v is not None]
+        if reviewer_verdicts:
+            flags["review"] = ("attention"
+                               if reviewer_verdicts[-1] in _PIPELINE_NEGATIVE
+                               else "done")
+        elif state == "done":
+            # Approval requires a passing verify on needs_review: a done task
+            # was reviewed, even if the reviewer note itself is gone.
+            flags["review"] = "done"
+        if evidence:
+            flags["evidence"] = "done"
+        return flags
+
+    def _attach_pipeline(c, items) -> None:
+        """Attach the pipeline object to list rows (batched, no N+1)."""
+        ids = [d["id"] for d in items if "id" in d]
+        blank = {i: {"contracts": [], "evidence": [],
+                      "receipts": [], "verdicts": []} for i in ids}
+        for n in range(0, len(ids), 500):
+            chunk = ids[n:n + 500]
+            ph = ",".join(f":p{j}" for j in range(len(chunk)))
+            kw = {f"p{j}": v for j, v in enumerate(chunk)}
+            for r in c.execute(text(
+                    f"SELECT task_id, body FROM contracts WHERE task_id IN ({ph})"),
+                    kw).mappings():
+                blank[r["task_id"]]["contracts"].append(r)
+            for r in c.execute(text(
+                    "SELECT task_id, kind, substr(body,1,400) AS body"
+                    f" FROM evidence WHERE task_id IN ({ph})"), kw).mappings():
+                blank[r["task_id"]]["evidence"].append(r)
+            for r in c.execute(text(
+                    "SELECT task_id, action, substr(body,1,400) AS body"
+                    f" FROM receipts WHERE task_id IN ({ph})"
+                    " AND action IN ('chat:create','plan:convert')"),
+                    kw).mappings():
+                blank[r["task_id"]]["receipts"].append(r)
+            for r in c.execute(text(
+                    f"SELECT task_id, verdict FROM results WHERE task_id IN ({ph})"
+                    " ORDER BY id"), kw).mappings():
+                blank[r["task_id"]]["verdicts"].append(r["verdict"])
+        for d in items:
+            b = blank.get(d.get("id"), {"contracts": [], "evidence": [],
+                                        "receipts": [], "verdicts": []})
+            d["pipeline"] = _pipeline_flags(d.get("state"), b["contracts"],
+                                            b["evidence"], b["receipts"],
+                                            b["verdicts"])
 
     @app.get("/v1/tasks")
     def list_tasks(request: Request, state: str | None = None, tenant: str | None = None):
@@ -1781,7 +2865,10 @@ def make_app(db_url: str = DB_URL) -> FastAPI:
         with eng.begin() as c:
             mine = _caller_tenant(request, c)
             want = mine if mine is not None else tenant  # S022: users see their own tenant
-            q, kw = "SELECT * FROM tasks", {}
+            kinds = ",".join(f"'{k}'" for k in _ATTENTION_KINDS)
+            q, kw = ("SELECT tasks.*, (SELECT e.body FROM evidence e WHERE e.task_id=tasks.id"
+                     f" AND e.kind IN ({kinds}) ORDER BY e.id DESC LIMIT 1) AS _attention_body"
+                     " FROM tasks"), {}
             conds = []
             if state:
                 conds.append("state=:s"); kw["s"] = state
@@ -1789,7 +2876,15 @@ def make_app(db_url: str = DB_URL) -> FastAPI:
                 conds.append("tenant=:t"); kw["t"] = want
             if conds:
                 q += " WHERE " + " AND ".join(conds)
-            return {"items": [dict(r) for r in c.execute(text(q + " ORDER BY id"), kw).mappings()]}
+            items = []
+            for r in c.execute(text(q + " ORDER BY id"), kw).mappings():
+                d = dict(r)
+                raw = d.pop("_attention_body", None)
+                d["attention"] = (_attention_reason(raw)
+                                  if d.get("state") in _ATTENTION_STATES else None)
+                items.append(d)
+            _attach_pipeline(c, items)
+            return {"items": items}
 
     @app.get("/v1/tasks/{tid}")
     def get_task(tid: int, request: Request):
@@ -1797,7 +2892,19 @@ def make_app(db_url: str = DB_URL) -> FastAPI:
             t = _own_or_stack(c, tid, request)
             t["contracts"] = [dict(r) for r in c.execute(text("SELECT * FROM contracts WHERE task_id=:i ORDER BY id"), {"i": tid}).mappings()]
             t["evidence"] = [dict(r) for r in c.execute(text("SELECT * FROM evidence WHERE task_id=:i ORDER BY id"), {"i": tid}).mappings()]
+            kinds = ",".join(f"'{k}'" for k in _ATTENTION_KINDS)
+            raw = c.execute(text("SELECT e.body FROM evidence e WHERE e.task_id=:i"
+                                 f" AND e.kind IN ({kinds}) ORDER BY e.id DESC LIMIT 1"),
+                            {"i": tid}).scalar()
+            t["attention"] = (_attention_reason(raw)
+                              if t.get("state") in _ATTENTION_STATES else None)
             t["receipts"] = [dict(r) for r in c.execute(text("SELECT * FROM receipts WHERE task_id=:i ORDER BY id"), {"i": tid}).mappings()]
+            verdicts = [r["verdict"] for r in c.execute(
+                text("SELECT verdict FROM results WHERE task_id=:i ORDER BY id"),
+                {"i": tid}).mappings()]
+            t["pipeline"] = _pipeline_flags(t.get("state"), t["contracts"],
+                                            t["evidence"], t["receipts"],
+                                            verdicts)
             return t
 
     @app.post("/v1/tasks/{tid}/contracts")
@@ -1861,6 +2968,10 @@ def make_app(db_url: str = DB_URL) -> FastAPI:
         with eng.begin() as c:
             t = _own_or_stack(c, tid, request)
             kind = body.get("kind", "note")
+            dup = row(c, "SELECT * FROM evidence WHERE task_id=:i AND kind=:k AND sha256=:h",
+                      i=tid, k=kind, h=h)
+            if dup:
+                return {**dict(dup), "replayed": True}
             rid = c.execute(text("INSERT INTO evidence(task_id,kind,body,sha256,created_at) VALUES(:i,:k,:b,:h,:n)"),
                             {"i": tid, "k": kind, "b": s, "h": h, "n": _now()}).lastrowid
             parsed = json.loads(s)

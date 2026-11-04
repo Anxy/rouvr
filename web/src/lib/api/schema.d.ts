@@ -15,7 +15,7 @@ export interface paths {
         put?: never;
         /**
          * Chat Lite
-         * @description Step 2: one supervised model turn -> slice with tasks, over SSE.
+         * @description Step 2 + Slice C: one supervised model turn -> intake router, over SSE.
          *
          *     Streams ``token`` events as the model responds, then a ``result``
          *     event with the reply, created ids, and receipt source. A clarifying
@@ -23,8 +23,106 @@ export interface paths {
          *     (contract = acceptance criteria), child tasks, slice-link evidence,
          *     and per-row ``chat:create`` receipts naming the message id are all
          *     written in one transaction with their ``task.created`` outbox rows.
+         *
+         *     Slice C: a classified turn (intake block) routes chat (answer + log
+         *     row), knowledge (answer + entry), task (intake task first, then the
+         *     pipeline) or ambiguous (one question, defaulting to chat). A
+         *     plan-shaped turn is ALWAYS saved as an unverified plan knowledge
+         *     entry first, then the autonomy-gated confirm gate: ask (offer with
+         *     Convert/Edit/Just-keep-it), or auto-convert for imperatives, free
+         *     autonomy, and docs/research under only-important. plan_action turns
+         *     (convert/edit/keep, or a plain yes/no/edit reply to a pending
+         *     offer) never call the model. Every classification is recorded with
+         *     who/when/level and is reclassifiable by appending.
          */
         post: operations["chat_lite_api_v1_chat_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/chat/autonomy": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Chat Autonomy Lite
+         * @description Autonomy level for the plan confirm gate (session/user setting;
+         *     default ask-for-everything when no row).
+         */
+        get: operations["get_chat_autonomy_lite_api_v1_chat_autonomy_get"];
+        put?: never;
+        /**
+         * Set Chat Autonomy Lite
+         * @description Record the session/user autonomy level for the scope.
+         */
+        post: operations["set_chat_autonomy_lite_api_v1_chat_autonomy_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/chat/classifications": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Classifications Lite
+         * @description Classification rows for the scope, oldest first, with created_ids
+         *     parsed. Reclassifications appear as additional rows (reclass_of).
+         */
+        get: operations["list_classifications_lite_api_v1_chat_classifications_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/chat/reclassify": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Reclassify Turn Lite
+         * @description Reclassify a turn: appends a new classification row pointing at
+         *     the prior one (reclass_of). History is never rewritten or deleted.
+         */
+        post: operations["reclassify_turn_lite_api_v1_chat_reclassify_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/chat/turns": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Chat Turns Lite
+         * @description Append-only conversation log for the scope (never hard-deleted).
+         */
+        get: operations["list_chat_turns_lite_api_v1_chat_turns_get"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -808,7 +906,7 @@ export interface paths {
         put?: never;
         /**
          * Chat
-         * @description Step 2: one supervised model turn -> slice with tasks, over SSE.
+         * @description Step 2 + Slice C: one supervised model turn -> intake router, over SSE.
          *
          *     Streams ``token`` events as the model responds, then a ``result``
          *     event with the reply, created ids, and receipt source. A clarifying
@@ -816,8 +914,106 @@ export interface paths {
          *     (contract = acceptance criteria), child tasks, slice-link evidence,
          *     and per-row ``chat:create`` receipts naming the message id are all
          *     written in one transaction with their ``task.created`` outbox rows.
+         *
+         *     Slice C: a classified turn (intake block) routes chat (answer + log
+         *     row), knowledge (answer + entry), task (intake task first, then the
+         *     pipeline) or ambiguous (one question, defaulting to chat). A
+         *     plan-shaped turn is ALWAYS saved as an unverified plan knowledge
+         *     entry first, then the autonomy-gated confirm gate: ask (offer with
+         *     Convert/Edit/Just-keep-it), or auto-convert for imperatives, free
+         *     autonomy, and docs/research under only-important. plan_action turns
+         *     (convert/edit/keep, or a plain yes/no/edit reply to a pending
+         *     offer) never call the model. Every classification is recorded with
+         *     who/when/level and is reclassifiable by appending.
          */
         post: operations["chat_v1_chat_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/chat/autonomy": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Chat Autonomy
+         * @description Autonomy level for the plan confirm gate (session/user setting;
+         *     default ask-for-everything when no row).
+         */
+        get: operations["get_chat_autonomy_v1_chat_autonomy_get"];
+        put?: never;
+        /**
+         * Set Chat Autonomy
+         * @description Record the session/user autonomy level for the scope.
+         */
+        post: operations["set_chat_autonomy_v1_chat_autonomy_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/chat/classifications": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Classifications
+         * @description Classification rows for the scope, oldest first, with created_ids
+         *     parsed. Reclassifications appear as additional rows (reclass_of).
+         */
+        get: operations["list_classifications_v1_chat_classifications_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/chat/reclassify": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Reclassify Turn
+         * @description Reclassify a turn: appends a new classification row pointing at
+         *     the prior one (reclass_of). History is never rewritten or deleted.
+         */
+        post: operations["reclassify_turn_v1_chat_reclassify_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/chat/turns": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Chat Turns
+         * @description Append-only conversation log for the scope (never hard-deleted).
+         */
+        get: operations["list_chat_turns_v1_chat_turns_get"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -1574,6 +1770,174 @@ export interface operations {
                 };
             };
         };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_chat_autonomy_lite_api_v1_chat_autonomy_get: {
+        parameters: {
+            query: {
+                project: string;
+                tenant?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    set_chat_autonomy_lite_api_v1_chat_autonomy_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    [key: string]: unknown;
+                };
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_classifications_lite_api_v1_chat_classifications_get: {
+        parameters: {
+            query: {
+                project: string;
+                tenant?: string | null;
+                message_id?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    reclassify_turn_lite_api_v1_chat_reclassify_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    [key: string]: unknown;
+                };
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_chat_turns_lite_api_v1_chat_turns_get: {
+        parameters: {
+            query: {
+                project: string;
+                tenant?: string | null;
+                message_id?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
         responses: {
             /** @description Successful Response */
             200: {
@@ -3070,6 +3434,174 @@ export interface operations {
                 };
             };
         };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_chat_autonomy_v1_chat_autonomy_get: {
+        parameters: {
+            query: {
+                project: string;
+                tenant?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    set_chat_autonomy_v1_chat_autonomy_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    [key: string]: unknown;
+                };
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_classifications_v1_chat_classifications_get: {
+        parameters: {
+            query: {
+                project: string;
+                tenant?: string | null;
+                message_id?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    reclassify_turn_v1_chat_reclassify_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    [key: string]: unknown;
+                };
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_chat_turns_v1_chat_turns_get: {
+        parameters: {
+            query: {
+                project: string;
+                tenant?: string | null;
+                message_id?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
         responses: {
             /** @description Successful Response */
             200: {

@@ -39,6 +39,9 @@ export default function WorkspaceLoginPage() {
   return (
     <div className="mx-auto w-full max-w-md">
       <h1 className="text-2xl font-semibold text-white">Sign in to Rouvr</h1>
+      <p className="mt-2 text-sm text-cloud">
+        An autonomous AI colleague that turns conversations into accountable work.
+      </p>
       <p className="mt-2 text-sm text-muted">
         Local account on this ledger. The session cookie is httponly; state-changing calls send
         the CSRF token issued at login.

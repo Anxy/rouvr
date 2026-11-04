@@ -106,7 +106,7 @@ def knowledge_create(tenant: str, project: str, kind: str, title: str, body: str
                      visibility: str = "company", allowed_users: list[str] | None = None,
                      slug: str = "", tags: list[str] | None = None, summary: str = "") -> dict:
     """Store a Knowledge Lite entry (append-only; kinds: user_profile,
-    project_profile, note, decision, rule, snapshot). Visibility is
+    project_profile, note, decision, rule, snapshot, skill). Visibility is
     restricted|company|public (default company); the creator sets it.
     slug/tags/summary are optional: slug auto-derives kebab-case from the
     title (stable across versions), summary defaults to the first body line.

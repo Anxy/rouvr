@@ -35,6 +35,80 @@ Most agent frameworks trust the agent's final message. Rouvr doesn't:
 6. **Close with receipts.** The timeline shows each leg's principal, SHA, message id and verdict, then `done`.
 7. **Day 2.** The scheduled run reports *"Done. No action needed."*
 
+## Built during the hackathon
+
+Two supervisor-chat moments, run against the live stack (ledger on `:8221`,
+web workspace on `:3000`, model `muse-spark-1.3-contributor`):
+
+**A — Self-description from live sources.** The supervisor never recites a
+hand-written capability list. At startup `scripts/supervisor_context.py`
+builds its context from live sources only: the capabilities manifest is the
+actual `@mcp.tool` registry in `rouvr/mcp_server.py` (26 tools:
+`workhub_*`, `knowledge_*`, `rouvr_start_task`, `rouvr_schedule(_ops)`),
+plus the open-tasks summary, the skill catalogue (knowledge entries of kind
+`skill`), and the top verified knowledge rules.
+
+Recorded web-chat turns (admin, project `supervisor/slice-e-demo-probe`,
+web `:3000` → ledger `:8221`): `who are you and what can you do` →
+classification `chat` (0.99), badge `Logged`, `created: 0`, reply *"I am
+an AI assistant. …"* (turns #1–2). Honest finding at the time: the reply
+was generic — it named none of the 26 manifest tools — so chat-turn
+self-description was ungrounded even though startup context was live.
+Follow-up live run 2026-11-03 (turn #3, message `fr-self-001`,
+classification `chat` 0.98, badge `Logged`, `created: 0`) closed the gap:
+the reply is now *"I am the Rouvr supervisor for tenant 'supervisor',
+project 'slice-e-demo-probe'. … Tools: workhub_create_tenant,
+workhub_create_project, … rouvr_schedule_ops."* — all 26 live tool names.
+The per-request identity block (`IDENTITY_MARKER` in `ledger/chat.py`,
+built from the live `@mcp.tool` registry plus skill catalogue, open tasks
+and verified rules) shipped after the mismatch. Verified live, not staged.
+
+**C — Intake, offer, Convert.** Every turn is classified
+(`chat`/`knowledge`/`task`/`ambiguous`, with confidence and category
+recorded). A plan-shaped turn first saves an **unverified** plan knowledge
+entry (`source` = turn message id) and asks, creating nothing yet: reply
+`Shall I turn this into an actionable plan? It becomes {n} tasks:
+{titles}.`, badge `Saved: plan-<slug>`, task count unchanged. Convert (the
+button, or a plain `yes`/`convert` reply) confirms the entry, then creates
+one slice task plus one task per step — each with its category, its
+acceptance contract, and a `plan_slug` link back to the entry — and answers
+with `Task #N` badges on every created reply. Contract:
+`tests/test_chat_intake.py` (17 passed). The supervisor then starts each
+task's pipeline separately with `rouvr_start_task`; Convert itself leaves
+tasks open.
+
+Slice-E live run 2026-11-03: the plan turn (`propose a plan for simple
+auth`, message `fr-plan-001`) did **not** take the ask path — the model
+classified it `task` (0.85, `feature`), and per contract
+(`test_intake_task_plan_creates_first_then_pipeline`) a task-class plan
+auto-converts even under ask-for-everything. Plan entry
+`plan-simple-auth-plan` (`knowledge:1202@v1`, tags `plan,
+turn-fr-plan-001`) was saved and immediately confirmed (`verified: 1`);
+slice #153 plus head task #152 plus step tasks #154–157 were created
+(`created: 6`, badge `Task #152`); every `chat:create` receipt names source
+`fr-plan-001` and model `muse-spark-1.3-contributor`. One steering retry
+toward the ask path produced only model errors, so the Convert offer shape
+(badge `Saved: plan-<slug>`, zero tasks created) remains contract-verified
+only — the live offer→Convert recording is still pending. Model flakiness
+during the run: alternating HTTP 402 Payment Required and empty-200 turns
+across repeated sends (the server retries empty turns 2× per call before
+failing the turn).
+
+Pipeline: the supervisor started each step task's workflow separately
+(`rouvr-task-supervisor-154-2eb47c28f26c1607`,
+`-155-e9aa8df82c054081`, `-156-e84849e2c98a33ec7`,
+`-157-dd1061efd7f8a558`). All four fail-closed at assign within a minute:
+claimed by `svc-sup-coder`, then `blocked` with `escalation` evidence
+`escalate:attempt-1:E_CONTRACT` plus a `temporal_handoff` receipt. Root
+cause, corroborated two ways (ledger evidence + filesystem): no exec spec
+for the probe project and no hidden suite for chat-created tasks (suites
+are sealed only by `workhub_create_task` via test_author). No coder
+workspace, no muse session, no grant file and no test run happened; the
+reviewer stage (skill `knowledge:1199@v1`) was never reached — there was no
+diff to review. Head task #152 and slice #153 left `open`. No rework
+rounds: the failure is deterministic infrastructure, identical for all
+four — re-running would mint leases without a new signal.
+
 ## Architecture
 
 ```mermaid

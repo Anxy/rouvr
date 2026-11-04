@@ -1,0 +1,10 @@
+{
+  "description": "Autonomous AI engineering platform that transforms conversations into executable projects. Orchestrates AI agents to plan, execute, verify and deliver work with full visibility and control.",
+  "robots": {
+    "index": false
+  },
+  "accessibility": {
+    "addBypassLinks": false,
+    "ignoreReducedMotion": false
+  }
+}

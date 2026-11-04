@@ -242,6 +242,28 @@ def test_owner_approve_requires_verified_review(user_client):
     assert "needs_review" in r.text, r.text
 
 
+def test_session_owner_can_create_project_in_own_tenant(user_client):
+    c = TestClient(user_client.app, cookies=_login(user_client).cookies)
+    r = c.post("/api/v1/projects", json={"tenant": "demo", "project": "site-2"},
+               headers={"Origin": "http://testserver"})
+    assert r.status_code == 200, (r.status_code, r.text)
+    assert r.json()["project"] == "site-2"
+    # idempotent: creating it again converges
+    r = c.post("/api/v1/projects", json={"tenant": "demo", "project": "site-2"},
+               headers={"Origin": "http://testserver"})
+    assert r.status_code == 200, (r.status_code, r.text)
+
+
+def test_session_owner_cannot_create_project_in_foreign_tenant(app):
+    stack = TestClient(app)
+    headers = {"x-rouvr-token": "stack-secret"}
+    stack.post("/v1/tenants", json={"tenant": "acme"}, headers=headers).raise_for_status()
+    c = TestClient(app, cookies=_login(TestClient(app)).cookies)
+    r = c.post("/api/v1/projects", json={"tenant": "acme", "project": "site"},
+               headers={"Origin": "http://testserver"})
+    assert r.status_code == 403, (r.status_code, r.text)
+
+
 def test_session_owner_cannot_touch_foreign_tenant(app):
     stack = TestClient(app)
     headers = {"x-rouvr-token": "stack-secret"}

@@ -205,9 +205,16 @@ test("knowledge page searches, filters and shows detail with history", () => {
     page.includes("citation") && page.includes("verified"),
     "knowledge results must show title/kind/verified pill/citation",
   );
+  // Detail moved to the inner page: the index links out, the inner page
+  // shows the body plus version history.
   assert.ok(
-    page.includes("Version history") && page.includes("/history"),
-    "knowledge detail must show the body plus version history",
+    page.includes("/workspace/knowledge/${citationId(hit.citation)}"),
+    "knowledge cards must link to the entry inner page",
+  );
+  const inner = read("src/app/workspace/knowledge/[key]/page.tsx");
+  assert.ok(
+    inner.includes("Version history") && inner.includes("/history"),
+    "knowledge inner page must show the body plus version history",
   );
   // P5 contract change (ledger proof 2026-11-03: q=the with no project
   // returned items on :8221 while q=the&project=demo returned {"items":[]};

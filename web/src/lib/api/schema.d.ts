@@ -528,6 +528,10 @@ export interface paths {
         /**
          * Create Project Lite
          * @description Register a project under an existing tenant (S022). Idempotent.
+         *
+         *     Stack may create anywhere; a session owner may create inside its
+         *     own tenant — the same owner-within-tenant rule task transitions
+         *     use. Anything else stays worker-only.
          */
         post: operations["create_project_lite_api_v1_projects_post"];
         delete?: never;
@@ -568,7 +572,13 @@ export interface paths {
         delete?: never;
         options?: never;
         head?: never;
-        patch?: never;
+        /**
+         * Edit Task Lite
+         * @description Edit title/intent of an unclaimed open task. Requires idempotency_key;
+         *     replays return the first receipt. Claimed/leased or non-open tasks
+         *     refuse with 409 — editing live work would fork the worker's context.
+         */
+        patch: operations["edit_task_lite_api_v1_tasks__tid__patch"];
         trace?: never;
     };
     "/api/v1/tasks/{tid}/assignments/claim": {
@@ -1474,6 +1484,10 @@ export interface paths {
         /**
          * Create Project
          * @description Register a project under an existing tenant (S022). Idempotent.
+         *
+         *     Stack may create anywhere; a session owner may create inside its
+         *     own tenant — the same owner-within-tenant rule task transitions
+         *     use. Anything else stays worker-only.
          */
         post: operations["create_project_v1_projects_post"];
         delete?: never;
@@ -1514,7 +1528,13 @@ export interface paths {
         delete?: never;
         options?: never;
         head?: never;
-        patch?: never;
+        /**
+         * Edit Task
+         * @description Edit title/intent of an unclaimed open task. Requires idempotency_key;
+         *     replays return the first receipt. Claimed/leased or non-open tasks
+         *     refuse with 409 — editing live work would fork the worker's context.
+         */
+        patch: operations["edit_task_v1_tasks__tid__patch"];
         trace?: never;
     };
     "/v1/tasks/{tid}/assignments/claim": {
@@ -2911,6 +2931,43 @@ export interface operations {
             cookie?: never;
         };
         requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    edit_task_lite_api_v1_tasks__tid__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                tid: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    [key: string]: unknown;
+                };
+            };
+        };
         responses: {
             /** @description Successful Response */
             200: {
@@ -4662,6 +4719,43 @@ export interface operations {
             cookie?: never;
         };
         requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    edit_task_v1_tasks__tid__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                tid: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    [key: string]: unknown;
+                };
+            };
+        };
         responses: {
             /** @description Successful Response */
             200: {

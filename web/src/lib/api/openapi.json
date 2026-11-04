@@ -1335,7 +1335,7 @@
         "summary": "List Projects Lite"
       },
       "post": {
-        "description": "Register a project under an existing tenant (S022). Idempotent.",
+        "description": "Register a project under an existing tenant (S022). Idempotent.\n\nStack may create anywhere; a session owner may create inside its\nown tenant \u2014 the same owner-within-tenant rule task transitions\nuse. Anything else stays worker-only.",
         "operationId": "create_project_lite_api_v1_projects_post",
         "requestBody": {
           "content": {
@@ -1503,6 +1503,54 @@
           }
         },
         "summary": "Get Task Lite"
+      },
+      "patch": {
+        "description": "Edit title/intent of an unclaimed open task. Requires idempotency_key;\nreplays return the first receipt. Claimed/leased or non-open tasks\nrefuse with 409 \u2014 editing live work would fork the worker's context.",
+        "operationId": "edit_task_lite_api_v1_tasks__tid__patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "tid",
+            "required": true,
+            "schema": {
+              "title": "Tid",
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": true,
+                "title": "Body",
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Edit Task Lite"
       }
     },
     "/api/v1/tasks/{tid}/assignments/claim": {
@@ -3598,7 +3646,7 @@
         "summary": "List Projects"
       },
       "post": {
-        "description": "Register a project under an existing tenant (S022). Idempotent.",
+        "description": "Register a project under an existing tenant (S022). Idempotent.\n\nStack may create anywhere; a session owner may create inside its\nown tenant \u2014 the same owner-within-tenant rule task transitions\nuse. Anything else stays worker-only.",
         "operationId": "create_project_v1_projects_post",
         "requestBody": {
           "content": {
@@ -3766,6 +3814,54 @@
           }
         },
         "summary": "Get Task"
+      },
+      "patch": {
+        "description": "Edit title/intent of an unclaimed open task. Requires idempotency_key;\nreplays return the first receipt. Claimed/leased or non-open tasks\nrefuse with 409 \u2014 editing live work would fork the worker's context.",
+        "operationId": "edit_task_v1_tasks__tid__patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "tid",
+            "required": true,
+            "schema": {
+              "title": "Tid",
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": true,
+                "title": "Body",
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Edit Task"
       }
     },
     "/v1/tasks/{tid}/assignments/claim": {

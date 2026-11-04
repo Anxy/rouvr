@@ -93,17 +93,18 @@ test("unbuilt destinations render a Planned shell with working links only", () =
     dash.includes('redirect("/workspace")'),
     "removed dashboard route must redirect to the board",
   );
-  for (const [rel, title, action] of [
-    ["src/app/workspace/tasks/page.tsx", "Tasks", "View tasks on the Board"],
-    ["src/app/workspace/projects/page.tsx", "Projects", "Back to Board"],
+  // Tasks and Projects shipped as real pages (#192): they must no longer
+  // render the Planned shell — each carries its own title marker instead.
+  for (const [rel, marker] of [
+    ["src/app/workspace/tasks/page.tsx", "New task"],
+    ["src/app/workspace/projects/page.tsx", "Create project"],
   ] as const) {
     const page = read(rel);
-    assert.ok(page.includes("<Planned"), `${rel} must render the Planned shell`);
-    assert.ok(page.includes(`"${title}"`), `${rel} must title itself ${title}`);
-    assert.ok(!page.includes("<button"), `${rel} must render no buttons`);
+    assert.ok(!page.includes("<Planned"), `${rel} must not render the Planned shell`);
+    assert.ok(page.includes(marker), `${rel} must render its manager UI (${marker})`);
     assert.ok(
-      page.includes(action) && page.includes('"/workspace"'),
-      `${rel} must link onward ("${action}") instead of stranding the visitor`,
+      page.includes('"/workspace"'),
+      `${rel} must link onward instead of stranding the visitor`,
     );
   }
 });
@@ -113,10 +114,25 @@ test("the shell's only button is the working Sign out", () => {
   assert.equal(
     (layout.match(/<button/g) ?? []).length,
     1,
-    "shell must render exactly one button (Sign out); context and profile rows stay static",
+    "shell must render exactly one button (Sign out inside the user menu); context and sidebar profile rows stay static",
   );
   assert.ok(layout.includes("Sign out"), "shell must offer Sign out");
   assert.ok(layout.includes("void logout()"), "Sign out must call the session logout");
+});
+
+test("user menu and footer are live, never decorative", () => {
+  const layout = read("src/app/workspace/layout.tsx");
+  assert.ok(layout.includes("data-user-menu"), "header avatar must open the user menu");
+  assert.ok(layout.includes("Profile"), "menu must show the profile block");
+  assert.ok(
+    layout.includes('"/workspace/chat"') && layout.includes("Help"),
+    "menu Help must link to the working chat",
+  );
+  assert.ok(layout.includes("data-footer"), "shell must render a footer");
+  assert.ok(
+    layout.includes('aria-label="Footer"'),
+    "footer links must live in a labelled nav",
+  );
 });
 
 // --- greeting wiring ---------------------------------------------------------------
@@ -204,6 +220,7 @@ test("shell slice keeps theme tokens, no hard-coded colour, no hand fetch", () =
     "src/components/workspace/Planned.tsx",
     "src/app/workspace/dashboard/page.tsx",
     "src/app/workspace/tasks/page.tsx",
+    "src/app/workspace/projects/page.tsx",
   ]) {
     const src = read(rel);
     assert.ok(!/#[0-9a-fA-F]{3,8}/.test(src), `${rel} must not hard-code hex colours`);

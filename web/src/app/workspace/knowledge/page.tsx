@@ -1,11 +1,11 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/Button";
 import {
   ws,
-  type KnowledgeEntry,
   type KnowledgeHit,
   type KnowledgeUsage,
 } from "@/lib/api/workspace";
@@ -22,8 +22,8 @@ import {
 // kind folders aside, and clickable doc cards in a grid. Every number and
 // list comes from the ledger. Per-row usage (applied-task count + last use)
 // loads lazily per visible shortlist row; a row that cannot source usage
-// renders an em dash, never an invented number. Opening a card loads the
-// full entry plus its version history below the grid.
+// renders an em dash, never an invented number. Opening a card navigates
+// to the entry's own inner page (full body plus version history).
 
 const PAGE_SIZE = "50";
 
@@ -61,9 +61,6 @@ export default function KnowledgePage() {
   const [error, setError] = useState("");
   const [searched, setSearched] = useState(false);
   const [busy, setBusy] = useState(false);
-  const [selected, setSelected] = useState<KnowledgeEntry | null>(null);
-  const [history, setHistory] = useState<KnowledgeEntry[]>([]);
-  const [detailError, setDetailError] = useState("");
   const defaultRan = useRef(false);
   const usageRun = useRef(0);
 
@@ -100,10 +97,7 @@ export default function KnowledgePage() {
       if (!query.trim() || busy) return;
       setBusy(true);
       setError("");
-      setSelected(null);
-      setHistory([]);
       setUsage({});
-      setDetailError("");
       try {
         const { data, response } = await ws.GET("/api/knowledge/search", {
           params: {
@@ -142,34 +136,6 @@ export default function KnowledgePage() {
     defaultRan.current = true;
     void search();
   }, [search]);
-
-  const open = useCallback(
-    async (hit: KnowledgeHit) => {
-      const id = citationId(hit.citation);
-      setDetailError("");
-      setSelected(null);
-      setHistory([]);
-      try {
-        const [detail, hist] = await Promise.all([
-          ws.GET("/api/knowledge/{key}", { params: { path: { key: id } } }),
-          ws.GET("/api/knowledge/{key}/history", { params: { path: { key: id } } }),
-        ]);
-        if (detail.response.status === 401 || hist.response.status === 401) {
-          router.push("/workspace/login");
-          return;
-        }
-        if (!detail.response.ok || !detail.data) {
-          setDetailError(`entry not found (${detail.response.status})`);
-          return;
-        }
-        setSelected(detail.data);
-        if (hist.response.ok && hist.data) setHistory(hist.data.items);
-      } catch (err) {
-        setDetailError(err instanceof Error ? err.message : "entry load failed");
-      }
-    },
-    [router],
-  );
 
   const visible = useMemo(
     () =>
@@ -272,10 +238,9 @@ export default function KnowledgePage() {
                 const version = citationVersion(hit.citation);
                 return (
                   <li key={hit.citation}>
-                    <button
-                      type="button"
+                    <Link
                       data-doc-card={hit.citation}
-                      onClick={() => void open(hit)}
+                      href={`/workspace/knowledge/${citationId(hit.citation)}`}
                       className="block h-full w-full rounded-2xl border border-line bg-panel p-4 text-left transition-colors hover:border-brand/60"
                     >
                       <div className="flex items-center gap-2">
@@ -306,7 +271,7 @@ export default function KnowledgePage() {
                           ? usageLine(usage[hit.citation])
                           : "Usage loading…"}
                       </p>
-                    </button>
+                    </Link>
                   </li>
                 );
               })}
@@ -315,57 +280,6 @@ export default function KnowledgePage() {
             <p className="rounded-2xl border border-line bg-panel p-6 text-center text-sm text-muted">
               No knowledge entries loaded yet — entries are {EMPTY_GUIDE}.
             </p>
-          ) : null}
-          {detailError ? <p className="mt-4 text-sm text-danger">{detailError}</p> : null}
-          {selected ? (
-            <article
-              data-entry-detail
-              className="mt-5 rounded-2xl border border-line bg-panel p-5"
-            >
-              <div className="mb-2 flex flex-wrap items-center gap-2">
-                <h2 className="min-w-0 flex-1 text-base font-semibold text-white">
-                  {selected.title}
-                </h2>
-                <span className="font-mono text-[11px] text-dim">{selected.kind}</span>
-                <span data-version className="font-mono text-[11px] text-dim">
-                  v{selected.version}
-                </span>
-                <VerifiedPill verified={isVerified(selected)} />
-              </div>
-              <p className="mb-1 font-mono text-[11px] text-dim">{selected.citation}</p>
-              <p className="mb-3 font-mono text-[11px] text-cyan2">
-                {usageLine(
-                  selected.citation in usage ? usage[selected.citation] : null,
-                )}
-              </p>
-              <p className="whitespace-pre-wrap text-sm leading-relaxed text-fog">
-                {selected.body}
-              </p>
-              {history.length > 1 ? (
-                <section
-                  aria-label="Version history"
-                  className="mt-4 border-t border-line pt-3"
-                >
-                  <h3 className="mb-2 font-mono text-[10px] uppercase tracking-widest text-dim">
-                    Version history
-                  </h3>
-                  <ol className="space-y-1.5">
-                    {history.map((v) => (
-                      <li
-                        key={v.citation}
-                        className="flex items-center gap-2 font-mono text-xs text-dim"
-                      >
-                        <span className="text-fog">{v.citation}</span>
-                        <span className="min-w-0 flex-1 truncate font-sans text-xs">
-                          {v.title}
-                        </span>
-                        <VerifiedPill verified={isVerified(v)} />
-                      </li>
-                    ))}
-                  </ol>
-                </section>
-              ) : null}
-            </article>
           ) : null}
         </div>
       </div>

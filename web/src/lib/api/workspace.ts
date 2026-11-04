@@ -27,6 +27,24 @@ export interface ProxyPaths {
         401: { content: { "application/json": { detail: string } } };
       };
     };
+    post: {
+      requestBody: {
+        content: {
+          "application/json": {
+            title: string;
+            intent?: string;
+            project?: string;
+            acceptance_criteria: string[];
+          };
+        };
+      };
+      responses: {
+        200: { content: { "application/json": TaskRow } };
+        401: { content: { "application/json": { detail: string } } };
+        404: { content: { "application/json": { detail: string } } };
+        422: { content: { "application/json": { detail: string } } };
+      };
+    };
   };
   "/api/tasks/{id}": {
     get: {
@@ -35,6 +53,53 @@ export interface ProxyPaths {
         200: { content: { "application/json": TaskDetail } };
         401: { content: { "application/json": { detail: string } } };
         404: { content: { "application/json": { detail: string } } };
+      };
+    };
+    patch: {
+      parameters: { path: { id: string } };
+      requestBody: {
+        content: {
+          "application/json": {
+            title?: string;
+            intent?: string;
+            idempotency_key: string;
+          };
+        };
+      };
+      responses: {
+        200: {
+          content: {
+            "application/json": {
+              replayed: boolean;
+              task_id: number;
+              title?: string;
+              intent?: string;
+            };
+          };
+        };
+        401: { content: { "application/json": { detail: string } } };
+        404: { content: { "application/json": { detail: string } } };
+        409: { content: { "application/json": { detail: string } } };
+        422: { content: { "application/json": { detail: string } } };
+      };
+    };
+  };
+  "/api/tasks/{id}/retire": {
+    post: {
+      parameters: { path: { id: string } };
+      requestBody: {
+        content: { "application/json": { reason: string; idempotency_key: string } };
+      };
+      responses: {
+        200: {
+          content: {
+            "application/json": { replayed: boolean; task_id: number };
+          };
+        };
+        401: { content: { "application/json": { detail: string } } };
+        404: { content: { "application/json": { detail: string } } };
+        409: { content: { "application/json": { detail: string } } };
+        422: { content: { "application/json": { detail: string } } };
       };
     };
   };
@@ -160,6 +225,30 @@ export interface ProxyPaths {
       responses: {
         200: { content: { "application/json": { projects: ProjectRow[] } } };
         401: { content: { "application/json": { detail: string } } };
+      };
+    };
+    post: {
+      requestBody: {
+        content: {
+          "application/json": {
+            tenant: string;
+            project: string;
+          };
+        };
+      };
+      responses: {
+        200: {
+          content: {
+            "application/json": {
+              tenant: string;
+              project: string;
+              created_at?: string;
+            };
+          };
+        };
+        401: { content: { "application/json": { detail: string } } };
+        404: { content: { "application/json": { detail: string } } };
+        422: { content: { "application/json": { detail: string } } };
       };
     };
   };

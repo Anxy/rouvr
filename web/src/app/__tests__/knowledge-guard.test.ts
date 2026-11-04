@@ -96,21 +96,39 @@ test("folders aside tallies the loaded shortlist as showing N", () => {
 test("no ledger endpoint for totals; search/detail/history/usage only", () => {
   const page = read(PAGE);
   assert.ok(page.includes('"/api/knowledge/search"'));
-  assert.ok(page.includes('"/api/knowledge/{key}"'));
   assert.ok(page.includes('"/api/knowledge/{key}/usage"'));
   assert.ok(
     !page.includes("/api/knowledge/counts"),
     "page must not fetch a counts endpoint",
   );
+  assert.ok(
+    !page.includes('"/api/knowledge/{key}/history"'),
+    "index must not load history; the inner page does",
+  );
   assert.equal(
     (page.match(/ws\.GET\(/g) ?? []).length,
-    4,
-    "page fetches exactly four endpoints: search, detail, history, usage",
+    2,
+    "index fetches exactly two endpoints (search + usage); detail/history live on the inner page",
   );
   assert.ok(
     !page.includes("/v1/knowledge"),
     "page must go through the proxy, never the ledger directly",
   );
+  // Cards navigate to the inner page instead of opening inline detail.
+  assert.ok(
+    page.includes("/workspace/knowledge/${citationId(hit.citation)}"),
+    "doc cards must link to the entry inner page",
+  );
+  assert.ok(!page.includes("data-entry-detail"), "inline detail must be gone");
+  const inner = read("src/app/workspace/knowledge/[key]/page.tsx");
+  assert.ok(inner.includes('"/api/knowledge/{key}"'), "inner page loads the entry");
+  assert.ok(
+    inner.includes('"/api/knowledge/{key}/history"'),
+    "inner page loads version history",
+  );
+  assert.ok(inner.includes('"/api/knowledge/{key}/usage"'), "inner page loads usage");
+  assert.ok(inner.includes("data-entry-detail"), "inner page keeps the detail marker");
+  assert.ok(inner.includes("Back to knowledge"), "inner page must link back");
 });
 
 // --- empty state -------------------------------------------------------------------
@@ -168,8 +186,9 @@ test("versions render from data; usage renders from the usage endpoint or em das
     page.includes("citationVersion"),
     "list versions must parse from the ledger citation",
   );
+  const inner = read("src/app/workspace/knowledge/[key]/page.tsx");
   assert.ok(
-    page.includes("v{selected.version}"),
+    inner.includes("v{entry.version}"),
     "detail version must render the entry's real version field",
   );
   assert.ok(
@@ -191,7 +210,11 @@ test("versions render from data; usage renders from the usage endpoint or em das
 // --- theme ------------------------------------------------------------------------------
 
 test("knowledge slice keeps theme tokens, no hard-coded colour", () => {
-  for (const rel of [PAGE, "src/lib/knowledge.ts"]) {
+  for (const rel of [
+    PAGE,
+    "src/app/workspace/knowledge/[key]/page.tsx",
+    "src/lib/knowledge.ts",
+  ]) {
     const src = read(rel);
     assert.ok(!/#[0-9a-fA-F]{3,8}/.test(src), `${rel} must not hard-code hex colours`);
   }

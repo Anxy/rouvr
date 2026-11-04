@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
   BookOpen,
+  ChevronDown,
   ClipboardList,
   Folder,
   LayoutGrid,
@@ -20,9 +21,9 @@ import { shellGreeting } from "@/lib/greeting";
 
 // Figma shell port (sidebar + topbar, 68px brand/topbar bands, 242px rail):
 // contract IA in Figma order, theme tokens only, every control live — the
-// context card and profile rows are static (no fake switcher/menu), and the
-// only buttons are the sun/moon theme toggle plus Sign out (working logout)
-// on an authenticated session.
+// context card and sidebar profile row are static, the header avatar opens
+// a native-disclosure user menu (profile info, Help & support into chat,
+// working Sign out), and a footer links the real destinations.
 const NAV: { href: string; label: string; icon: LucideIcon }[] = [
   { href: "/workspace", label: "Board", icon: LayoutGrid },
   { href: "/workspace/chat", label: "Chat", icon: MessageSquare },
@@ -167,13 +168,9 @@ function AppShell({ children }: { children: React.ReactNode }) {
                 <p className="truncate text-[9px] text-dim">{tenant ?? ""}</p>
               </div>
             </div>
-            <button
-              type="button"
-              onClick={() => void logout()}
-              className="mt-2 h-9 w-full rounded-lg border border-line bg-panel2 text-[11px] font-medium text-dim transition-colors hover:border-line2 hover:text-fog"
-            >
-              Sign out
-            </button>
+            <p className="mt-2 px-1 text-[9px] text-dim">
+              Account options live in the user menu, top right.
+            </p>
           </div>
         ) : null}
       </aside>
@@ -204,15 +201,68 @@ function AppShell({ children }: { children: React.ReactNode }) {
             {authed && username ? (
               <>
                 <span aria-hidden className="h-[22px] w-px bg-line" />
-                <span className="flex items-center gap-2 text-[11px] text-dim">
-                  <Avatar name={username} size={26} />
-                  <span className="max-w-32 truncate">{username}</span>
-                </span>
+                <details className="relative" data-user-menu>
+                  <summary
+                    aria-label={`Account menu for ${username}`}
+                    className="flex cursor-pointer list-none items-center gap-2 rounded-lg px-1 py-1 text-[11px] text-dim transition-colors hover:text-fog [&::-webkit-details-marker]:hidden"
+                  >
+                    <Avatar name={username} size={26} />
+                    <span className="max-w-32 truncate">{username}</span>
+                    <ChevronDown size={14} aria-hidden className="opacity-70" />
+                  </summary>
+                  <div className="absolute right-0 top-full z-30 mt-2 w-60 rounded-xl border border-line bg-panel p-2 shadow-xl">
+                    <div className="border-b border-line px-3 py-2">
+                      <p className="text-[9px] font-semibold uppercase tracking-widest text-dim">
+                        Profile
+                      </p>
+                      <p className="mt-1 truncate text-xs font-semibold text-fog">{username}</p>
+                      <p className="truncate font-mono text-[10px] text-dim">
+                        {tenant ? `${tenant}${project ? ` / ${project}` : ""}` : "—"}
+                      </p>
+                    </div>
+                    <Link
+                      href="/workspace/chat"
+                      className="mt-1 flex items-center gap-2 rounded-lg px-3 py-2 text-xs text-dim transition-colors hover:bg-panel2 hover:text-fog"
+                    >
+                      <MessageSquare size={14} aria-hidden />
+                      Help &amp; support — ask the pack
+                    </Link>
+                    <button
+                      type="button"
+                      onClick={() => void logout()}
+                      className="mt-1 flex w-full items-center rounded-lg px-3 py-2 text-left text-xs text-dim transition-colors hover:bg-panel2 hover:text-fog"
+                    >
+                      Sign out
+                    </button>
+                  </div>
+                </details>
               </>
             ) : null}
           </div>
         </header>
         <main className="mx-auto w-full max-w-[1600px] px-8 py-[30px]">{children}</main>
+        <footer
+          data-footer
+          className="mx-auto flex w-full max-w-[1600px] flex-wrap items-center gap-x-4 gap-y-1 border-t border-line px-8 py-4"
+        >
+          <p className="font-mono text-[10px] uppercase tracking-widest text-dim">
+            rouvr — your pack is working
+          </p>
+          <nav aria-label="Footer" className="flex flex-wrap items-center gap-x-3 gap-y-1">
+            {NAV.map((item) => (
+              <Link
+                key={item.href}
+                href={item.href}
+                className="font-mono text-[10px] text-dim transition-colors hover:text-fog"
+              >
+                {item.label}
+              </Link>
+            ))}
+          </nav>
+          {authed && username ? (
+            <p className="ml-auto font-mono text-[10px] text-dim">signed in as {username}</p>
+          ) : null}
+        </footer>
       </div>
     </div>
   );

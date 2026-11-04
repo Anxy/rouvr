@@ -774,10 +774,19 @@ def make_app(db_url: str = DB_URL) -> FastAPI:
 
     @app.post("/v1/projects")
     def create_project(body: dict, request: Request):
-        """Register a project under an existing tenant (S022). Idempotent."""
-        _stack_only(_identity(request))
+        """Register a project under an existing tenant (S022). Idempotent.
+
+        Stack may create anywhere; a session owner may create inside its
+        own tenant — the same owner-within-tenant rule task transitions
+        use. Anything else stays worker-only."""
+        ident = _identity(request)
         tenant, project = _scope(body)
         with eng.begin() as c:
+            if ident != "supervisor":
+                if getattr(request.state, "session_role", None) != "owner":
+                    raise HTTPException(403, "worker-only operation")
+                if tenant != _caller_tenant(request, c):
+                    raise HTTPException(403, f"project {project!r} is outside your tenant")
             if not row(c, "SELECT * FROM tenants WHERE tenant=:t", t=tenant):
                 raise HTTPException(404, f"tenant not registered: create {tenant!r} first")
             c.execute(text("INSERT INTO projects(tenant,project,created_at) VALUES(:t,:p,:n)"
@@ -3319,6 +3328,50 @@ def make_app(db_url: str = DB_URL) -> FastAPI:
             return {"sealed": sealed[0][0],
                     "reason": None if sealed[0][0] else sealed[0][1],
                     "task_id": tid}
+
+    @app.patch("/v1/tasks/{tid}")
+    def edit_task(tid: int, body: dict, request: Request):
+        """Edit title/intent of an unclaimed open task. Requires idempotency_key;
+        replays return the first receipt. Claimed/leased or non-open tasks
+        refuse with 409 — editing live work would fork the worker's context."""
+        key = body.get("idempotency_key")
+        if not key:
+            raise HTTPException(422, "idempotency_key is required")
+        title = body.get("title")
+        intent = body.get("intent")
+        if title is not None and not str(title).strip():
+            raise HTTPException(422, "title must not be blank")
+        if intent is not None and not str(intent).strip():
+            raise HTTPException(422, "intent must not be blank")
+        if title is None and intent is None:
+            raise HTTPException(422, "nothing to edit: pass title and/or intent")
+        with eng.begin() as c:
+            prior = row(c, "SELECT * FROM receipts WHERE task_id=:i AND idempotency_key=:k", i=tid, k=key)
+            if prior:
+                if prior.get("action") != "edit":
+                    raise HTTPException(409, f"idempotency key already used for {prior.get('action')}")
+                return {"replayed": True, "receipt": prior}
+            t = _own_or_stack(c, tid, request)
+            if t["state"] != "open":
+                raise HTTPException(409, f"only open tasks are editable (state is {t['state']})")
+            lease = row(c, "SELECT * FROM leases WHERE task_id=:i", i=tid)
+            if lease and lease.get("expires_at") and lease["expires_at"] > _now():
+                raise HTTPException(409, f"task is claimed by {lease['holder']}")
+            updates, kw = [], {"i": tid, "n": _now()}
+            if title is not None:
+                updates.append("title=:t")
+                kw["t"] = str(title).strip()
+            if intent is not None:
+                updates.append("intent=:d")
+                kw["d"] = str(intent).strip()
+            updates.append("updated_at=:n")
+            c.execute(text(f"UPDATE tasks SET {', '.join(updates)} WHERE id=:i"), kw)
+            s, h = _canon({"title": kw.get("t", t["title"]), "intent": kw.get("d", t.get("intent"))})
+            c.execute(text("INSERT INTO receipts(task_id,idempotency_key,action,body,created_at)"
+                           " VALUES(:i,:k,'edit',:b,:n)"),
+                      {"i": tid, "k": key, "b": s, "n": _now()})
+            return {"replayed": False, "task_id": tid,
+                    "title": kw.get("t", t["title"]), "intent": kw.get("d", t.get("intent"))}
 
     @app.post("/v1/tasks/{tid}/retire")
     def retire_task(tid: int, body: dict, request: Request):

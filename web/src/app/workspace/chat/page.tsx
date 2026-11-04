@@ -88,6 +88,7 @@ const EXAMPLE_PROMPTS = [
   "What is blocked right now and why?",
   "Turn this thread into a plan I can convert",
   "Which tasks are waiting for review?",
+  "Prepare a plan from this conversation",
 ];
 
 // Rotating help text under the composer: one labelled example at a time,

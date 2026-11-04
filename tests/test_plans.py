@@ -143,9 +143,66 @@ def test_plan_chat_convert_then_approve_replays(stack, session_client):
     assert len(session_client.get("/api/v1/tasks").json()["items"]) == n
 
 
+def test_plan_approve_then_chat_convert_replays(stack, session_client):
+    # the user-demanded order: UI Approve first, chat Convert after must
+    # replay the same slice, never a second one.
+    entry = _plan_entry(session_client, slug="approve-first")
+    r = session_client.post("/api/v1/plans/approve-first/approve")
+    assert r.status_code == 200, r.text
+    slice_id = r.json()["slice"]["id"]
+    n = len(session_client.get("/api/v1/tasks").json()["items"])
+    r = session_client.post("/api/v1/chat", json={"message": "convert it",
+                                                  "project": "demo", "tenant": "demo",
+                                                  "message_id": "plan-loop-convert-2",
+                                                  "plan_action": "convert",
+                                                  "plan_entry": entry["id"]})
+    assert r.status_code == 200, r.text
+    got = session_client.get("/api/v1/plans/approve-first").json()
+    assert got["status"] == "materialized", got
+    assert got["slice"]["id"] == slice_id, got
+    assert len(session_client.get("/api/v1/tasks").json()["items"]) == n
+
+
+def test_plan_execute_dispatch(stack):
+    entry = _plan_entry(stack, slug="exec-plan")
+    # draft plans refuse dispatch: approve first
+    r = stack.post("/api/v1/plans/exec-plan/execute", json={})
+    assert r.status_code == 422, r.text
+    stack.post("/api/v1/plans/exec-plan/approve").raise_for_status()
+
+    # dispatch without a worker: tasks stay open and claimable, event filed
+    r = stack.post("/api/v1/plans/exec-plan/execute", json={})
+    assert r.status_code == 200, r.text
+    res = r.json()
+    assert res["status"] == "materialized"
+    assert len(res["dispatched"]) == 2 and res["assigned"] == []
+    assert res["contested"] == [] and res["execute_event"] > 0
+    assert all(t["worker"] is None for t in res["tasks"])
+
+    # dispatch with a worker assigns each chain task, idempotently
+    r = stack.post("/api/v1/plans/exec-plan/execute",
+                   json={"worker": "e2e-worker"})
+    assert r.status_code == 200, r.text
+    res = r.json()
+    assert sorted(res["assigned"]) == sorted(res["dispatched"])
+    assert all(t["state"] == "claimed" for t in res["tasks"])
+    assert all(t["worker"] == "e2e-worker" for t in res["tasks"])
+    again = stack.post("/api/v1/plans/exec-plan/execute",
+                       json={"worker": "e2e-worker"}).json()
+    assert sorted(again["assigned"]) == sorted(res["dispatched"])
+    assert again["contested"] == []
+
+    # a rival worker cannot steal the live leases
+    rival = stack.post("/api/v1/plans/exec-plan/execute",
+                       json={"worker": "rival"}).json()
+    assert rival["assigned"] == []
+    assert sorted(rival["contested"]) == sorted(res["dispatched"])
+
+
 def test_plan_endpoints_fail_closed(stack, session_client):
     assert stack.get("/api/v1/plans/nope", params={"tenant": "demo"}).status_code == 404
     assert stack.post("/api/v1/plans/nope/approve").status_code == 404
+    assert stack.post("/api/v1/plans/nope/execute", json={}).status_code == 404
     # non-plan entries are not plans: untagged slugs 404 ...
     r = stack.post("/api/v1/knowledge", json={"kind": "note", "title": "Plain",
                                               "body": "just a note", "tenant": "demo",

@@ -439,6 +439,21 @@ export interface ProxyPaths {
       };
     };
   };
+  "/api/plans/{slug}/execute": {
+    post: {
+      parameters: { path: { slug: string } };
+      requestBody: {
+        content: { "application/json": { worker?: string } };
+      };
+      responses: {
+        200: { content: { "application/json": PlanExecuteResult } };
+        401: { content: { "application/json": { detail: string } } };
+        403: { content: { "application/json": { detail: string } } };
+        404: { content: { "application/json": { detail: string } } };
+        422: { content: { "application/json": { detail: string } } };
+      };
+    };
+  };
   "/api/knowledge/{key}/versions": {
     post: {
       parameters: { path: { key: string } };
@@ -552,6 +567,16 @@ export interface PlanTaskCard {
   title: string;
   state: string;
   link: string;
+  worker?: string | null;
+  lease_expires_at?: string | null;
+}
+
+export interface PlanExecuteResult extends PlanDetail {
+  execute_event: number;
+  worker: string | null;
+  dispatched: number[];
+  assigned: number[];
+  contested: number[];
 }
 
 export interface PlanDetail {

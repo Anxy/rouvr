@@ -1568,6 +1568,56 @@
         "summary": "Approve Plan Lite"
       }
     },
+    "/api/v1/plans/{slug}/execute": {
+      "post": {
+        "description": "Dispatch a materialized plan: 422 unless the plan:convert receipt\nexists. Chain tasks are already claimable when open; an optional\n``worker`` principal assigns each unassigned open chain task\nserver-side with the same conflict rules as the claim endpoint\n(idempotent per plan entry + task, contested tasks reported, never\nforced). Always emits plan.execute so the dispatch itself is\nobservable; worker presence comes from live leases on the chain.",
+        "operationId": "execute_plan_lite_api_v1_plans__slug__execute_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "slug",
+            "required": true,
+            "schema": {
+              "title": "Slug",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": true,
+                "title": "Body",
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Execute Plan Lite"
+      }
+    },
     "/api/v1/projects": {
       "get": {
         "description": "Projects visible to the caller: its own tenant, or all for stack.\nArchived projects are hidden unless include_archived is set.",
@@ -4241,6 +4291,56 @@
           }
         },
         "summary": "Approve Plan"
+      }
+    },
+    "/v1/plans/{slug}/execute": {
+      "post": {
+        "description": "Dispatch a materialized plan: 422 unless the plan:convert receipt\nexists. Chain tasks are already claimable when open; an optional\n``worker`` principal assigns each unassigned open chain task\nserver-side with the same conflict rules as the claim endpoint\n(idempotent per plan entry + task, contested tasks reported, never\nforced). Always emits plan.execute so the dispatch itself is\nobservable; worker presence comes from live leases on the chain.",
+        "operationId": "execute_plan_v1_plans__slug__execute_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "slug",
+            "required": true,
+            "schema": {
+              "title": "Slug",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": true,
+                "title": "Body",
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Execute Plan"
       }
     },
     "/v1/projects": {

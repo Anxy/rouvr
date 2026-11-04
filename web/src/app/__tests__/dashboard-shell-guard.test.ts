@@ -268,7 +268,40 @@ test("planner opens a thread from the real plan entry, hands off to chat", () =>
     "every plan must hand off to the chat thread",
   );
   assert.ok(
+    page.includes("data-plan-approve") && page.includes("/api/plans/{slug}/approve"),
+    "planner must approve through the idempotent approve proxy",
+  );
+  assert.ok(
+    page.includes("data-plan-execute") && page.includes("/workspace/execute?plan="),
+    "materialized plans must link to the execution view",
+  );
+  assert.ok(
+    page.includes("data-plan-request-changes"),
+    "every plan must offer a request-changes path back to chat",
+  );
+  assert.ok(
     !page.includes("fet" + "ch(") && !page.includes("XMLHttp" + "Request"),
     "planner must not hand-write fetch",
+  );
+});
+
+test("execute view polls the derived chain and dispatches honestly", () => {
+  const page = read("src/app/workspace/execute/page.tsx");
+  assert.ok(page.includes("data-execute-chain"), "execute must mark its chain");
+  assert.ok(
+    page.includes("data-dispatch") && page.includes("/api/plans/{slug}/execute"),
+    "dispatch must go through the execute proxy",
+  );
+  assert.ok(
+    page.includes("data-waiting-worker"),
+    "an idle chain must say it is waiting for a worker",
+  );
+  assert.ok(
+    page.includes("3000") && page.includes("clearInterval"),
+    "polling must tick every 3s and stop on unmount",
+  );
+  assert.ok(
+    !page.includes("fet" + "ch(") && !page.includes("XMLHttp" + "Request"),
+    "execute must not hand-write fetch",
   );
 });

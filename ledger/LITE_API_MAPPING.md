@@ -43,6 +43,7 @@ API).
 | `/api/v1/knowledge/{kid}/pin` | POST | `POST /v1/knowledge/{kid}/pin` (`pin_knowledge`) | rank boost like verified |
 | `/api/v1/plans/{slug}` | GET | `GET /v1/plans/{slug}` (`get_plan`) | draft/agreed/materialized + chain |
 | `/api/v1/plans/{slug}/approve` | POST | `POST /v1/plans/{slug}/approve` (`approve_plan`) | confirm + materialize, idempotent |
+| `/api/v1/plans/{slug}/execute` | POST | `POST /v1/plans/{slug}/execute` (`execute_plan`) | dispatch materialized chain, optional worker assign |
 | `/api/v1/knowledge/store` | POST | `POST /v1/knowledge/store` (`knowledge_store`) | session store |
 | `/api/v1/knowledge/compact` | POST | `POST /v1/knowledge/compact` (`knowledge_compact`) | session compact |
 | `/api/v1/knowledge/snapshot` | POST | `POST /v1/knowledge/snapshot` (`knowledge_snapshot`) | snapshot |

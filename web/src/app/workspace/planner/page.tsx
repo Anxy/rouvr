@@ -4,7 +4,12 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/Button";
-import { ws, type KnowledgeHit } from "@/lib/api/workspace";
+import {
+  csrfHeaders,
+  ws,
+  type KnowledgeHit,
+  type PlanDetail,
+} from "@/lib/api/workspace";
 import { isVerified } from "@/lib/knowledge";
 
 // Planner: the work surface. Plans are the plan knowledge entries the chat
@@ -58,16 +63,79 @@ export default function PlannerPage() {
   const [openCitation, setOpenCitation] = useState<string | null>(null);
   const [thread, setThread] = useState<PlanThread | null>(null);
   const [threadError, setThreadError] = useState("");
+  const [openSlug, setOpenSlug] = useState<string | null>(null);
+  const [detail, setDetail] = useState<PlanDetail | null>(null);
+  const [detailError, setDetailError] = useState("");
+  const [actionBusy, setActionBusy] = useState(false);
+  const [actionMsg, setActionMsg] = useState("");
+
+  async function loadDetail(slug: string) {
+    setDetailError("");
+    try {
+      const { data, response } = await ws.GET("/api/plans/{slug}", {
+        params: { path: { slug } },
+      });
+      if (response.status === 401) {
+        router.push("/workspace/login");
+        return;
+      }
+      if (!response.ok || !data) {
+        setDetailError("plan status unavailable");
+        return;
+      }
+      setDetail(data);
+    } catch (err) {
+      setDetailError(err instanceof Error ? err.message : "plan status failed");
+    }
+  }
+
+  async function approvePlan(slug: string) {
+    setActionBusy(true);
+    setActionMsg("");
+    try {
+      const { data, response } = await ws.POST("/api/plans/{slug}/approve", {
+        params: { path: { slug } },
+        headers: csrfHeaders(),
+      });
+      if (response.status === 401) {
+        router.push("/workspace/login");
+        return;
+      }
+      if (!response.ok || !data) {
+        const detail = await response.text().catch(() => "");
+        setActionMsg(detail || `approve failed (${response.status})`);
+        return;
+      }
+      setDetail(data);
+      setActionMsg(
+        data.replayed
+          ? "Already materialized — same slice, no duplicate tasks."
+          : `Materialized: slice #${data.slice?.id} with ${data.tasks.length} tasks.`,
+      );
+    } catch (err) {
+      setActionMsg(err instanceof Error ? err.message : "approve failed");
+    } finally {
+      setActionBusy(false);
+    }
+  }
 
   async function openPlan(hit: KnowledgeHit) {
     if (openCitation === hit.citation) {
       setOpenCitation(null);
       setThread(null);
+      setDetail(null);
+      setOpenSlug(null);
+      setActionMsg("");
       return;
     }
     setOpenCitation(hit.citation);
     setThread(null);
     setThreadError("");
+    setDetail(null);
+    setDetailError("");
+    setActionMsg("");
+    setOpenSlug(hit.slug);
+    void loadDetail(hit.slug);
     const m = hit.citation.match(/^knowledge:(\d+)@v\d+$/);
     if (!m) {
       setThreadError("cannot open this plan");
@@ -250,6 +318,58 @@ export default function PlannerPage() {
                         {thread.raw.slice(0, 2000)}
                       </pre>
                     )}
+                    {openSlug ? (
+                      <div className="mt-3 border-t border-line pt-3">
+                        {detailError ? (
+                          <p className="text-sm text-danger">{detailError}</p>
+                        ) : detail ? (
+                          <p className="font-mono text-[11px] text-dim" data-plan-status>
+                            Status: {detail.status}
+                            {detail.slice ? ` · slice #${detail.slice.id}` : ""}
+                            {detail.tasks.length > 0
+                              ? ` · ${detail.tasks.length} tasks`
+                              : ""}
+                          </p>
+                        ) : (
+                          <p className="font-mono text-[11px] text-dim">
+                            Loading plan status…
+                          </p>
+                        )}
+                        <div className="mt-2 flex flex-wrap gap-2">
+                          {detail && detail.status !== "materialized" ? (
+                            <Button
+                              type="button"
+                              data-plan-approve={openSlug}
+                              disabled={actionBusy}
+                              onClick={() => void approvePlan(openSlug)}
+                            >
+                              {actionBusy ? "Approving…" : "Approve plan"}
+                            </Button>
+                          ) : null}
+                          {detail && detail.status === "materialized" ? (
+                            <Link
+                              href={`/workspace/execute?plan=${encodeURIComponent(openSlug)}`}
+                              data-plan-execute={openSlug}
+                              className="inline-flex h-10 items-center rounded-full bg-brand px-5 text-sm font-medium text-abyss transition-colors hover:bg-cyan2"
+                            >
+                              Execute →
+                            </Link>
+                          ) : null}
+                          <Link
+                            href="/workspace/chat"
+                            data-plan-request-changes={openSlug}
+                            className="inline-flex h-10 items-center rounded-full border border-line2 px-5 text-sm text-fog transition-colors hover:border-brand/60 hover:text-white"
+                          >
+                            Request changes
+                          </Link>
+                        </div>
+                        {actionMsg ? (
+                          <p className="mt-2 text-sm text-fog" role="status">
+                            {actionMsg}
+                          </p>
+                        ) : null}
+                      </div>
+                    ) : null}
                   </div>
                 ) : null}
               </li>

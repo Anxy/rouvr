@@ -624,6 +624,32 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/plans/{slug}/execute": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Execute Plan Lite
+         * @description Dispatch a materialized plan: 422 unless the plan:convert receipt
+         *     exists. Chain tasks are already claimable when open; an optional
+         *     ``worker`` principal assigns each unassigned open chain task
+         *     server-side with the same conflict rules as the claim endpoint
+         *     (idempotent per plan entry + task, contested tasks reported, never
+         *     forced). Always emits plan.execute so the dispatch itself is
+         *     observable; worker presence comes from live leases on the chain.
+         */
+        post: operations["execute_plan_lite_api_v1_plans__slug__execute_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/projects": {
         parameters: {
             query?: never;
@@ -1719,6 +1745,32 @@ export interface paths {
          *     Convert-then-approve both replay the same slice.
          */
         post: operations["approve_plan_v1_plans__slug__approve_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/plans/{slug}/execute": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Execute Plan
+         * @description Dispatch a materialized plan: 422 unless the plan:convert receipt
+         *     exists. Chain tasks are already claimable when open; an optional
+         *     ``worker`` principal assigns each unassigned open chain task
+         *     server-side with the same conflict rules as the claim endpoint
+         *     (idempotent per plan entry + task, contested tasks reported, never
+         *     forced). Always emits plan.execute so the dispatch itself is
+         *     observable; worker presence comes from live leases on the chain.
+         */
+        post: operations["execute_plan_v1_plans__slug__execute_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -3235,6 +3287,43 @@ export interface operations {
             cookie?: never;
         };
         requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    execute_plan_lite_api_v1_plans__slug__execute_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                slug: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    [key: string]: unknown;
+                };
+            };
+        };
         responses: {
             /** @description Successful Response */
             200: {
@@ -5241,6 +5330,43 @@ export interface operations {
             cookie?: never;
         };
         requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    execute_plan_v1_plans__slug__execute_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                slug: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    [key: string]: unknown;
+                };
+            };
+        };
         responses: {
             /** @description Successful Response */
             200: {

@@ -2943,6 +2943,12 @@ def make_app(db_url: str = DB_URL) -> FastAPI:
             for t in chain:
                 card = _task_card(c, t)
                 card["link"] = f"/workspace/tasks/{t['id']}"
+                lease = row(c, "SELECT holder, expires_at FROM leases WHERE task_id=:i",
+                            i=t["id"])
+                live = (lease is not None and lease.get("expires_at")
+                        and lease["expires_at"] > _now())
+                card["worker"] = lease["holder"] if live else None
+                card["lease_expires_at"] = lease["expires_at"] if live else None
                 cards.append(card)
             return {"status": "materialized", "slice": {
                         "id": rep["task_id"],
@@ -3059,6 +3065,114 @@ def make_app(db_url: str = DB_URL) -> FastAPI:
                               "author": entry.get("author"),
                               "created_at": entry.get("created_at")},
                     "confirmed": True, **shape}
+
+    @app.post("/v1/plans/{slug}/execute")
+    def execute_plan(slug: str, body: dict, request: Request):
+        """Dispatch a materialized plan: 422 unless the plan:convert receipt
+        exists. Chain tasks are already claimable when open; an optional
+        ``worker`` principal assigns each unassigned open chain task
+        server-side with the same conflict rules as the claim endpoint
+        (idempotent per plan entry + task, contested tasks reported, never
+        forced). Always emits plan.execute so the dispatch itself is
+        observable; worker presence comes from live leases on the chain."""
+        ident = _identity(request)
+        worker = body.get("worker")
+        if worker is not None and (not isinstance(worker, str) or not worker.strip()):
+            raise HTTPException(422, "worker must be a non-empty string")
+        worker = worker.strip() if isinstance(worker, str) else None
+        ttl = _ttl_field(body)
+        with eng.begin() as c:
+            if ident == "supervisor":
+                t = None
+            else:
+                if getattr(request.state, "session_role", None) != "owner":
+                    raise HTTPException(403, "worker-only operation")
+                t = _caller_tenant(request, c)
+            entry = None
+            if t is None:
+                rows = [dict(r) for r in c.execute(
+                    text("SELECT * FROM knowledge_entries WHERE slug=:s"
+                         " AND tags LIKE '%\"plan\"%' ORDER BY id DESC"),
+                    {"s": slug}).mappings()]
+                entry = rows[0] if rows else None
+            else:
+                entry = _plan_lookup(c, t, slug)
+            if entry is None:
+                raise HTTPException(404, f"no plan {slug!r}")
+            if t is not None and entry["tenant"] != t:
+                raise HTTPException(404, f"no plan {slug!r} in your tenant")
+            if _parse_plan_body(entry) is None:
+                raise HTTPException(422, "entry body is not a plan")
+            rep = row(c, "SELECT * FROM receipts WHERE idempotency_key=:k"
+                         " AND action='plan:convert'",
+                      k=f"plan-convert:{entry['id']}")
+            if rep is None:
+                raise HTTPException(422, "plan is not materialized — approve first")
+            try:
+                rb = json.loads(rep["body"])
+            except ValueError:
+                rb = {}
+            tids = [x for x in (rb.get("task_ids") or []) if isinstance(x, int)]
+            et, ep = entry["tenant"], entry["project"]
+            assigned, contested, open_ids = [], [], []
+            for tid in tids:
+                tr = row(c, "SELECT * FROM tasks WHERE id=:i", i=tid)
+                if not tr or tr["state"] not in ("open", "needs_review", "claimed"):
+                    continue
+                open_ids.append(tid)
+                if worker is None:
+                    continue
+                key = f"plan-execute:{entry['id']}:{worker}:{tid}"
+                if row(c, "SELECT id FROM receipts WHERE task_id=:i AND idempotency_key=:k",
+                       i=tid, k=key):
+                    assigned.append(tid)
+                    continue
+                active = row(c, "SELECT * FROM assignments WHERE task_id=:i"
+                                " AND status='active' ORDER BY id DESC LIMIT 1", i=tid)
+                if active and active.get("principal") != worker:
+                    contested.append(tid)
+                    continue
+                lease = row(c, "SELECT * FROM leases WHERE task_id=:i", i=tid)
+                if (lease and lease.get("expires_at") and lease["expires_at"] > _now()
+                        and lease.get("holder") != worker):
+                    contested.append(tid)
+                    continue
+                epoch = (lease["lease_epoch"] + 1) if lease else 1
+                if active:
+                    c.execute(text("UPDATE assignments SET principal=:p WHERE id=:a"),
+                              {"p": worker, "a": active["id"]})
+                    aid = active["id"]
+                else:
+                    aid = c.execute(text("INSERT INTO assignments(task_id,principal,attempt_no,"
+                                         "created_at) VALUES(:i,:p,1,:t)"),
+                                    {"i": tid, "p": worker, "t": _now()}).lastrowid
+                c.execute(text("INSERT INTO leases(task_id,holder,lease_epoch,expires_at,"
+                               "updated_at) VALUES(:i,:h,:e,:x,:t) "
+                               "ON CONFLICT(task_id) DO UPDATE SET holder=:h,lease_epoch=:e,"
+                               "expires_at=:x,updated_at=:t"),
+                          {"i": tid, "h": worker, "e": epoch,
+                           "x": _expiry(ttl), "t": _now()})
+                c.execute(text("UPDATE tasks SET state='claimed', updated_at=:t WHERE id=:i"),
+                          {"i": tid, "t": _now()})
+                _emit(c, et, ep, "task.transition", tid,
+                      {"task_id": tid, "from": tr["state"], "to": "claimed",
+                       "owner": worker})
+                payload = {"assignment_id": aid, "principal": worker,
+                           "lease_epoch": epoch}
+                c.execute(text("INSERT INTO receipts(task_id,idempotency_key,action,body,"
+                               "created_at) VALUES(:i,:k,'plan.execute.claim',:b,:n)"),
+                          {"i": tid, "k": key, "b": json.dumps(payload), "n": _now()})
+                assigned.append(tid)
+            eid = _emit(c, et, ep, "plan.execute", rep["task_id"],
+                        {"slug": slug, "plan_entry": entry["id"],
+                         "slice_id": rep["task_id"], "task_ids": open_ids,
+                         "worker": worker, "assigned": assigned,
+                         "contested": contested})
+            shape = _plan_shape(c, entry)
+            return {"tenant": et, "project": ep, "slug": slug,
+                    "execute_event": eid, "worker": worker,
+                    "dispatched": open_ids, "assigned": assigned,
+                    "contested": contested, **shape}
 
     @app.get("/v1/chat/autonomy")
     def get_chat_autonomy(request: Request, project: str, tenant: str | None = None):

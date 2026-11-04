@@ -45,6 +45,7 @@ MAPPING: list[tuple[str, str, str]] = [
     ("POST", "/v1/knowledge/{kid}/pin", "pin_knowledge"),
     ("GET", "/v1/plans/{slug}", "get_plan"),
     ("POST", "/v1/plans/{slug}/approve", "approve_plan"),
+    ("POST", "/v1/plans/{slug}/execute", "execute_plan"),
     ("POST", "/v1/users/{username}/disable", "disable_user"),
     ("POST", "/v1/onboard/register", "onboard_register"),
     ("POST", "/v1/onboard/login", "onboard_login"),

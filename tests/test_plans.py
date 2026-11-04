@@ -199,6 +199,28 @@ def test_plan_execute_dispatch(stack):
     assert sorted(rival["contested"]) == sorted(res["dispatched"])
 
 
+def test_plan_approve_seals_kids_with_durations(stack, tmp_path, monkeypatch):
+    monkeypatch.setenv("HIDDEN_TESTS_ROOT", str(tmp_path / "hidden-tests"))
+    entry = _plan_entry(stack, slug="seal-plan")
+    r = stack.post("/api/v1/plans/seal-plan/approve")
+    assert r.status_code == 200, r.text
+    res = r.json()
+    kids = [t["id"] for t in res["tasks"]]
+    assert len(kids) == 2
+    assert set(res["seals"]) >= {str(k) for k in kids}, res["seals"]
+    for tid in kids:
+        got = stack.get(f"/api/v1/tasks/{tid}").json()
+        receipts = [x for x in got["receipts"] if x["action"] == "seal:authored"]
+        assert len(receipts) == 1, got["receipts"]
+        body = json.loads(receipts[0]["body"])
+        assert body["ok"] is True and isinstance(body["duration_s"], (int, float)), body
+        assert body["files"], body
+    # suite_sealed evidence drives the visible sealed badge
+    first = stack.get(f"/api/v1/tasks/{kids[0]}").json()
+    assert "suite_sealed" in [e["kind"] for e in first["evidence"]], first["evidence"]
+    assert first["sealing"] is False  # sealing flag means pending, not sealed
+
+
 def test_plan_endpoints_fail_closed(stack, session_client):
     assert stack.get("/api/v1/plans/nope", params={"tenant": "demo"}).status_code == 404
     assert stack.post("/api/v1/plans/nope/approve").status_code == 404

@@ -218,6 +218,22 @@ def test_chat_retries_empty_turn_then_succeeds(session_client, monkeypatch):
     assert body["source"] == "retry-1" and body["retries"] == 2
 
 
+def test_chat_explicit_plan_phrasing_offers_instead_of_converting(session_client, monkeypatch):
+    import ledger.chat as chatmod
+
+    plan = dict(PLAN, intake={"class": "task", "confidence": 0.9, "category": "feature"})
+    monkeypatch.setattr(chatmod, "complete_once",
+                        lambda messages, provider: json.dumps(plan))
+    before = len(session_client.get("/api/v1/tasks").json()["items"])
+    r = _chat(session_client, "Prepare a plan for simple auth", message_id="explicit-plan-1")
+    assert r.status_code == 200, r.text
+    res = [d for e, d in _frames(r.text) if e == "result"][0]
+    assert res["offer"] and res["offer"]["plan_slug"], res
+    assert res["badge"]["kind"] == "saved" and res["badge"]["label"].startswith("Saved: "), res
+    assert [t for t in res.get("tasks", [])] == []
+    assert len(session_client.get("/api/v1/tasks").json()["items"]) == before
+
+
 def test_chat_gives_up_when_everything_empty(session_client, monkeypatch):
     import ledger.chat as chatmod
 

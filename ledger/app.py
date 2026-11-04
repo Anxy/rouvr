@@ -2216,6 +2216,11 @@ def make_app(db_url: str = DB_URL) -> FastAPI:
                             "slice": spec, "tasks": tasks}),
                 ident, tags=["plan", f"turn-{message_id}"], summary=summary[:160])
 
+        _EXPLICIT_PLAN_RE = re.compile(
+            r"\b(prep\w*|draft\w*|propos\w*|draw up|write(?: up)?)"
+            r"\b.{0,40}\bplans?\b"
+            r"|\bplans?\b.{0,20}\bproposal\b", re.IGNORECASE)
+
         def _offer_result(entry, tasks, cls, level, reply, category):
             return {"message_id": message_id, "reply": reply, "question": None,
                     "slice": None, "tasks": [], "created": 0,
@@ -2639,9 +2644,14 @@ def make_app(db_url: str = DB_URL) -> FastAPI:
                 try:
                     with eng.begin() as c:
                         level = _chat_level(c)
-                    auto = cls == "task" or level == "free" or (
+                    # Explicit plan phrasing routes to plan intent even when
+                    # the model classifies the turn as a task: the user asked
+                    # for a proposal, not for work to start.
+                    explicit_plan = bool(_EXPLICIT_PLAN_RE.search(msg_text))
+                    auto = (cls == "task" or level == "free" or (
                         level == "only-important"
                         and (cat or "feature") in _chatmod.AUTO_CONVERT_CATEGORIES)
+                        ) and not explicit_plan
                     pre_sealed = None
                     if auto:
                         # Slow model calls with NO open txn (see task branch).
@@ -2989,11 +2999,13 @@ def make_app(db_url: str = DB_URL) -> FastAPI:
 
     @app.post("/v1/plans/{slug}/approve")
     def approve_plan(slug: str, request: Request):
-        """Approve a plan: confirm the entry, then materialize one slice +
-        one task per step via the same path chat Convert uses (no model
-        call, no sealing — tasks land pending, seal retry applies).
-        Idempotent on the plan:convert receipt, so approve-then-Convert and
-        Convert-then-approve both replay the same slice."""
+        """Approve a plan: confirm the entry, seal hidden suites (same bounded
+        authoring the chat Convert path uses), then materialize one slice +
+        one task per step. Idempotent on the plan:convert receipt, so
+        approve-then-Convert and Convert-then-approve both replay the same
+        slice. The seal model calls run BEFORE the write txn (never holding
+        the SQLite write lock); leftovers record seal:authored receipts with
+        ok=false and suite_sealed/seal_pending evidence either way."""
         ident = _identity(request)
         with eng.begin() as c:
             if ident == "supervisor":
@@ -3030,6 +3042,36 @@ def make_app(db_url: str = DB_URL) -> FastAPI:
                                   "author": entry.get("author"),
                                   "created_at": entry.get("created_at")},
                         "confirmed": True, **shape}
+            spec, tasks = spec_d["slice"], spec_d["tasks"]
+            category = spec_d.get("category") or "feature"
+            et, ep = entry["tenant"], entry["project"]
+        # Seal authoring OUTSIDE any write txn: bounded batch (90 s shared),
+        # same jobs the Convert path seals (slice criteria + one step each).
+        seal_jobs = [("slice", list(spec["acceptance_criteria"]))]
+        for st in tasks:
+            step = f"Step: {st['title']}. {st.get('intent') or ''}".strip()
+            seal_jobs.append((f"kid-{len(seal_jobs) - 1}", [step]))
+        seal_durations: dict = {}
+        try:
+            seal_batch = _author_seal_batch(seal_jobs, durations=seal_durations)
+        except Exception as exc:  # noqa: BLE001 — authoring is best-effort; pending is data
+            seal_batch = {}
+            seal_error = f"{type(exc).__name__}: {exc}"[:200]
+        else:
+            seal_error = ""
+        with eng.begin() as c:
+            rep = row(c, "SELECT * FROM receipts WHERE idempotency_key=:k"
+                         " AND action='plan:convert'",
+                      k=f"plan-convert:{entry['id']}")
+            if rep is not None:
+                shape = _plan_shape(c, entry)
+                return {"tenant": entry["tenant"], "project": entry["project"],
+                        "slug": slug,
+                        "entry": {"id": entry["id"], "title": entry["title"],
+                                  "version": entry["version"], "verified": True,
+                                  "author": entry.get("author"),
+                                  "created_at": entry.get("created_at")},
+                        "confirmed": True, **shape}
             # Approval is a tenant-owner decision, distinct from the
             # creator-confirm rule: mark verified + emit, then materialize.
             c.execute(text("UPDATE knowledge_entries SET verified=1 WHERE id=:i"),
@@ -3041,12 +3083,37 @@ def make_app(db_url: str = DB_URL) -> FastAPI:
                 model_name = _chatmod.provider_from_env()["model"]
             except (ValueError, RuntimeError, KeyError):
                 model_name = "manual"
-            spec, tasks = spec_d["slice"], spec_d["tasks"]
-            category = spec_d.get("category") or "feature"
-            et, ep = entry["tenant"], entry["project"]
+            pre_sealed = {
+                "slice": seal_batch.get("slice"),
+                "kids": [seal_batch.get(f"kid-{i}") for i in range(len(tasks))],
+            }
             slice_row, kid_rows = _materialize_plan(
                 c, ident, f"plan-approve:{entry['id']}", model_name,
-                spec, tasks, category, slug, et, ep)
+                spec, tasks, category, slug, et, ep,
+                pre_sealed=pre_sealed if any(
+                    [pre_sealed["slice"]] + pre_sealed["kids"]) else None)
+            seals: dict = {}
+            jobs = ([("slice", slice_row["id"], pre_sealed["slice"])]
+                    + [(f"kid-{i}", kr["id"], pre_sealed["kids"][i])
+                       for i, kr in enumerate(kid_rows)])
+            for job_key, tid, piece in jobs:
+                if piece is None:
+                    ok, payload = False, seal_error or "seal authoring unavailable"
+                else:
+                    (sealed, _criteria) = piece
+                    ok, payload = sealed
+                # _materialize_plan already wrote the suite_sealed /
+                # seal_pending evidence row for authored pieces.
+                duration_s = seal_durations.get(job_key, 0.0)
+                s, h = _canon({"ok": ok, "duration_s": duration_s,
+                               "files": payload if ok else None,
+                               "reason": None if ok else str(payload),
+                               "job": job_key, "plan_slug": slug})
+                c.execute(text("INSERT INTO receipts(task_id,idempotency_key,action,body,created_at)"
+                               " VALUES(:i,:k,'seal:authored',:b,:n)"),
+                          {"i": tid, "k": f"plan-approve-seal:{entry['id']}:{tid}",
+                           "b": s, "n": _now()})
+                seals[str(tid)] = {"ok": ok, "duration_s": duration_s}
             # Chain convention matches chat Convert: task_ids holds the kids
             # only (plus an intake head when one exists); the slice travels
             # as slice_id / the receipt's own task_id.
@@ -3064,7 +3131,7 @@ def make_app(db_url: str = DB_URL) -> FastAPI:
                               "version": entry["version"], "verified": True,
                               "author": entry.get("author"),
                               "created_at": entry.get("created_at")},
-                    "confirmed": True, **shape}
+                    "confirmed": True, "seals": seals, **shape}
 
     @app.post("/v1/plans/{slug}/execute")
     def execute_plan(slug: str, body: dict, request: Request):
@@ -3170,6 +3237,11 @@ def make_app(db_url: str = DB_URL) -> FastAPI:
                          "contested": contested})
             shape = _plan_shape(c, entry)
             return {"tenant": et, "project": ep, "slug": slug,
+                    "entry": {"id": entry["id"], "title": entry["title"],
+                              "version": entry["version"],
+                              "verified": bool(entry.get("verified")),
+                              "author": entry.get("author"),
+                              "created_at": entry.get("created_at")},
                     "execute_event": eid, "worker": worker,
                     "dispatched": open_ids, "assigned": assigned,
                     "contested": contested, **shape}
@@ -3411,26 +3483,34 @@ def make_app(db_url: str = DB_URL) -> FastAPI:
         return hidden, (Path(spec) if spec else None)
 
     def _author_seal_batch(jobs: list[tuple[str, list[str]]],
-                           budget_s: float = 90.0) -> dict[str, tuple[tuple[bool, object], list[str]]]:
+                           budget_s: float = 90.0,
+                           durations: dict | None = None,
+                           ) -> dict[str, tuple[tuple[bool, object], list[str]]]:
         """Author hidden suites for Convert-created tasks, sequentially inside
         one overall budget (sync Convert path; leftovers fall back to async
         hold + visible badge). No DB touched — call BEFORE opening a write
         txn so a 15-60 s model call never holds a SQLite write lock. Returns
-        {key: ((ok, files|error), criteria)}."""
+        {key: ((ok, files|error), criteria)}; when durations is given it is
+        filled with {key: seconds} per job."""
         from rouvr.mcp_server import _author_hidden_suite, _SUITE_TIMEOUT
         out: dict[str, tuple[tuple[bool, object], list[str]]] = {}
         deadline = time.monotonic() + budget_s
         for key, criteria in jobs:
-            remaining = deadline - time.monotonic()
+            start = time.monotonic()
+            remaining = deadline - start
             if remaining <= 1:
                 out[key] = ((False, f"seal budget exhausted ({budget_s:g}s shared across tasks)"),
                             criteria)
+                if durations is not None:
+                    durations[key] = round(time.monotonic() - start, 2)
                 continue
             try:
                 files = _author_hidden_suite(criteria, timeout=min(_SUITE_TIMEOUT, remaining))
                 out[key] = ((True, files), criteria)
             except Exception as e:  # noqa: BLE001 — seal failure is data, never fatal
                 out[key] = ((False, f"{type(e).__name__}: {e}"[:300]), criteria)
+            if durations is not None:
+                durations[key] = round(time.monotonic() - start, 2)
         return out
 
     def _seal_one_task(c, tid: int, sealed: tuple[bool, object], criteria: list[str]) -> None:

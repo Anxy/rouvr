@@ -611,11 +611,13 @@ export interface paths {
         put?: never;
         /**
          * Approve Plan Lite
-         * @description Approve a plan: confirm the entry, then materialize one slice +
-         *     one task per step via the same path chat Convert uses (no model
-         *     call, no sealing — tasks land pending, seal retry applies).
-         *     Idempotent on the plan:convert receipt, so approve-then-Convert and
-         *     Convert-then-approve both replay the same slice.
+         * @description Approve a plan: confirm the entry, seal hidden suites (same bounded
+         *     authoring the chat Convert path uses), then materialize one slice +
+         *     one task per step. Idempotent on the plan:convert receipt, so
+         *     approve-then-Convert and Convert-then-approve both replay the same
+         *     slice. The seal model calls run BEFORE the write txn (never holding
+         *     the SQLite write lock); leftovers record seal:authored receipts with
+         *     ok=false and suite_sealed/seal_pending evidence either way.
          */
         post: operations["approve_plan_lite_api_v1_plans__slug__approve_post"];
         delete?: never;
@@ -1738,11 +1740,13 @@ export interface paths {
         put?: never;
         /**
          * Approve Plan
-         * @description Approve a plan: confirm the entry, then materialize one slice +
-         *     one task per step via the same path chat Convert uses (no model
-         *     call, no sealing — tasks land pending, seal retry applies).
-         *     Idempotent on the plan:convert receipt, so approve-then-Convert and
-         *     Convert-then-approve both replay the same slice.
+         * @description Approve a plan: confirm the entry, seal hidden suites (same bounded
+         *     authoring the chat Convert path uses), then materialize one slice +
+         *     one task per step. Idempotent on the plan:convert receipt, so
+         *     approve-then-Convert and Convert-then-approve both replay the same
+         *     slice. The seal model calls run BEFORE the write txn (never holding
+         *     the SQLite write lock); leftovers record seal:authored receipts with
+         *     ok=false and suite_sealed/seal_pending evidence either way.
          */
         post: operations["approve_plan_v1_plans__slug__approve_post"];
         delete?: never;

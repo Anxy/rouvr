@@ -1532,7 +1532,7 @@
     },
     "/api/v1/plans/{slug}/approve": {
       "post": {
-        "description": "Approve a plan: confirm the entry, then materialize one slice +\none task per step via the same path chat Convert uses (no model\ncall, no sealing \u2014 tasks land pending, seal retry applies).\nIdempotent on the plan:convert receipt, so approve-then-Convert and\nConvert-then-approve both replay the same slice.",
+        "description": "Approve a plan: confirm the entry, seal hidden suites (same bounded\nauthoring the chat Convert path uses), then materialize one slice +\none task per step. Idempotent on the plan:convert receipt, so\napprove-then-Convert and Convert-then-approve both replay the same\nslice. The seal model calls run BEFORE the write txn (never holding\nthe SQLite write lock); leftovers record seal:authored receipts with\nok=false and suite_sealed/seal_pending evidence either way.",
         "operationId": "approve_plan_lite_api_v1_plans__slug__approve_post",
         "parameters": [
           {
@@ -4257,7 +4257,7 @@
     },
     "/v1/plans/{slug}/approve": {
       "post": {
-        "description": "Approve a plan: confirm the entry, then materialize one slice +\none task per step via the same path chat Convert uses (no model\ncall, no sealing \u2014 tasks land pending, seal retry applies).\nIdempotent on the plan:convert receipt, so approve-then-Convert and\nConvert-then-approve both replay the same slice.",
+        "description": "Approve a plan: confirm the entry, seal hidden suites (same bounded\nauthoring the chat Convert path uses), then materialize one slice +\none task per step. Idempotent on the plan:convert receipt, so\napprove-then-Convert and Convert-then-approve both replay the same\nslice. The seal model calls run BEFORE the write txn (never holding\nthe SQLite write lock); leftovers record seal:authored receipts with\nok=false and suite_sealed/seal_pending evidence either way.",
         "operationId": "approve_plan_v1_plans__slug__approve_post",
         "parameters": [
           {

@@ -90,6 +90,10 @@ export default function PlannerPage() {
   }
 
   async function approvePlan(slug: string) {
+    // Pre-click status decides the message: a click that finds the plan
+    // already materialized replays; a click on draft/agreed creates.
+    // (The response's replayed flag is true either way once materialized.)
+    const was = detail?.status;
     setActionBusy(true);
     setActionMsg("");
     try {
@@ -108,9 +112,9 @@ export default function PlannerPage() {
       }
       setDetail(data);
       setActionMsg(
-        data.replayed
+        was === "materialized"
           ? "Already materialized — same slice, no duplicate tasks."
-          : `Materialized: slice #${data.slice?.id} with ${data.tasks.length} tasks.`,
+          : `Approved — slice #${data.slice?.id} with ${data.tasks.length} tasks created.`,
       );
     } catch (err) {
       setActionMsg(err instanceof Error ? err.message : "approve failed");

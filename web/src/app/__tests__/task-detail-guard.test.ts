@@ -184,8 +184,8 @@ test("detail top renders the full strip plus a real-data why-line", () => {
   assert.ok(page.includes("data-why"), "why-line must be marked with data-why");
   assert.ok(page.includes("whyTaskExists"), "why-line must derive from the contract");
   assert.ok(
-    page.includes("Why this exists:"),
-    "why-line must label itself as the task's reason to exist",
+    !page.includes("Why this exists:"),
+    "why-line stands as the lede under the title, no redundant label (hierarchy)",
   );
 });
 
@@ -341,6 +341,27 @@ test("detail shows a seal badge with retry while the suite is pending", () => {
   assert.ok(
     api.includes("/v1/tasks/{tid}/seal"),
     "seal proxy must forward to the ledger seal endpoint",
+  );
+});
+
+test("detail renders a derived journey plus a parsed contract card", () => {
+  const page = read("src/app/workspace/tasks/[id]/page.tsx");
+  assert.ok(page.includes("data-journey"), "journey timeline must be marked");
+  assert.ok(page.includes("journeyStages"), "journey must derive from real rows");
+  assert.ok(page.includes("data-contract-card"), "contract card must be marked");
+  assert.ok(
+    page.includes("parseContractCriteria"),
+    "criteria must parse from the contract JSON",
+  );
+  assert.ok(
+    page.includes("raw live events"),
+    "raw events stay reachable behind a collapsed details",
+  );
+  const lib = read("src/lib/task-detail.ts");
+  assert.ok(
+    lib.includes("export function journeyStages") &&
+      lib.includes("export function parseContractCriteria"),
+    "journey and criteria helpers must be pure and testable",
   );
 });
 

@@ -19,6 +19,8 @@ import {
   describeBlockedReason,
   evidenceLabel,
   formatEvidenceTime,
+  journeyStages,
+  parseContractCriteria,
   retireReason,
   whyTaskExists,
 } from "@/lib/task-detail";
@@ -230,6 +232,15 @@ export default function TaskPage() {
 
   useEffect(() => () => abortRef.current?.abort(), []);
 
+  const stages = task
+    ? journeyStages({
+        state: task.state,
+        contracts: task.contracts,
+        evidence: task.evidence,
+        receipts: task.receipts,
+      })
+    : [];
+
   return (
     <div className="mx-auto w-full max-w-3xl">
       <Link
@@ -245,12 +256,21 @@ export default function TaskPage() {
       {task ? (
         <div className="mt-4 space-y-6">
           <div>
-            <div className="mb-2 flex items-center gap-3">
-              <span className="font-mono text-sm text-muted">#{task.id}</span>
+            <div className="mb-3 flex flex-wrap items-center gap-3">
+              <span className="font-mono text-xs text-dim">#{task.id}</span>
               <TaskStatePill state={task.state} />
+              <span className="font-mono text-[11px] text-dim">
+                {task.tenant} / {task.project} · by {task.created_by}
+              </span>
             </div>
+            <h1 className="text-3xl font-semibold leading-tight text-white">{task.title}</h1>
+            <p data-why className="mt-2 max-w-2xl text-[15px] leading-relaxed text-cloud">
+              {whyTaskExists(task)}
+            </p>
             {task.pipeline ? (
-              <PipelineStrip pipeline={task.pipeline} variant="full" />
+              <div className="mt-4">
+                <PipelineStrip pipeline={task.pipeline} variant="full" />
+              </div>
             ) : null}
             {task.sealing ? (
               <p
@@ -273,14 +293,9 @@ export default function TaskPage() {
                 Needs exec spec — the worker host has no spec for this project yet.
               </p>
             ) : null}
-            <p data-why className="mt-2 text-sm text-cloud">
-              Why this exists: {whyTaskExists(task)}
+            <p className="mt-3 max-w-2xl whitespace-pre-wrap text-sm leading-relaxed text-dim">
+              {task.intent}
             </p>
-            <h1 className="text-2xl font-semibold text-white">{task.title}</h1>
-            <p className="mt-2 font-mono text-xs text-muted">
-              {task.tenant} / {task.project} · by {task.created_by}
-            </p>
-            <p className="mt-3 text-sm text-cloud">{task.intent}</p>
           </div>
           <div className="flex flex-wrap gap-2">
             {APPROVABLE.has(task.state) ? (
@@ -340,10 +355,17 @@ export default function TaskPage() {
             </section>
           ) : null}
           {refs.planSlugs.length + refs.categories.length + refs.citations.length > 0 ? (
-            <section data-knowledge-badges aria-label="Knowledge applied">
-              <h2 className="mb-2 font-mono text-xs uppercase tracking-wider text-muted">
+            <section
+              data-knowledge-badges
+              aria-label="Knowledge applied"
+              className="rounded-2xl border border-line bg-panel p-4"
+            >
+              <h2 className="mb-1 text-base font-semibold text-white">
                 Knowledge applied
               </h2>
+              <p className="mb-3 text-[13px] text-dim">
+                Project memory this task builds on — same entries the Knowledge page shows.
+              </p>
               <ul className="flex flex-wrap gap-2">
                 {refs.planSlugs.map((slug) => (
                   <li
@@ -377,36 +399,108 @@ export default function TaskPage() {
               </ul>
             </section>
           ) : null}
-          <section>
-            <h2 className="mb-2 font-mono text-xs uppercase tracking-wider text-muted">
-              Live events
-            </h2>
-            {events.length === 0 ? (
-              <p className="font-mono text-xs text-muted/60">
-                tailing… new ledger events for this task appear here.
-              </p>
-            ) : (
-              <ul className="space-y-1.5">
-                {events.map((e) => (
-                  <li
-                    key={e.id}
-                    className="rounded-lg border border-steel/30 bg-abyss/60 px-3 py-2 font-mono text-xs text-cloud"
+          <section data-journey aria-label="Delivery journey">
+            <h2 className="mb-3 text-base font-semibold text-white">Delivery journey</h2>
+            <ol className="space-y-0">
+              {stages.map((s, i) => (
+                <li key={s.key} className="relative flex gap-3 pb-4 last:pb-0">
+                  {i < stages.length - 1 ? (
+                    <span
+                      aria-hidden
+                      className={`absolute left-[7px] top-5 h-[calc(100%-16px)] w-px ${
+                        s.state === "done" ? "bg-brand/50" : "bg-line"
+                      }`}
+                    />
+                  ) : null}
+                  <span
+                    aria-hidden
+                    className={`mt-1 grid h-[15px] w-[15px] shrink-0 place-items-center rounded-full border text-[9px] leading-none ${
+                      s.state === "done"
+                        ? "border-brand bg-brand/20 text-brand-300"
+                        : s.state === "current"
+                          ? "border-amber-400 bg-amber-400/20 text-amber-300"
+                          : "border-line2 text-dim"
+                    }`}
                   >
-                    <span className="text-muted">#{e.id}</span> {e.type}{" "}
-                    <span className="text-muted">{e.summary}</span>
-                  </li>
-                ))}
-              </ul>
-            )}
+                    {s.state === "done" ? "✓" : s.state === "current" ? "•" : ""}
+                  </span>
+                  <div className="min-w-0 flex-1">
+                    <p
+                      className={`text-sm font-medium ${
+                        s.state === "todo" ? "text-dim" : "text-fog"
+                      }`}
+                    >
+                      {s.label}
+                      {s.detail ? (
+                        <span className="ml-2 font-mono text-[11px] font-normal text-dim">
+                          {s.detail}
+                        </span>
+                      ) : null}
+                    </p>
+                  </div>
+                </li>
+              ))}
+            </ol>
+            <details className="mt-3">
+              <summary className="cursor-pointer font-mono text-[11px] text-dim hover:text-fog">
+                raw live events ({events.length})
+              </summary>
+              {events.length === 0 ? (
+                <p className="mt-2 font-mono text-xs text-dim">
+                  tailing… new ledger events for this task appear here.
+                </p>
+              ) : (
+                <ul className="mt-2 space-y-1.5">
+                  {events.map((e) => (
+                    <li
+                      key={e.id}
+                      className="rounded-lg border border-line bg-abyss/60 px-3 py-2 font-mono text-xs text-fog"
+                    >
+                      <span className="text-dim">#{e.id}</span> {e.type}{" "}
+                      <span className="text-dim">{e.summary}</span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </details>
           </section>
           {task.contracts.length > 0 ? (
-            <section>
-              <h2 className="mb-2 font-mono text-xs uppercase tracking-wider text-muted">
-                Acceptance criteria
-              </h2>
-              <pre className="overflow-x-auto rounded-xl border border-steel/30 bg-abyss/60 p-3 font-mono text-xs text-cloud">
-                {task.contracts.map((c) => c.body).join("\n")}
-              </pre>
+            <section
+              data-contract-card
+              aria-label="Agreed outcome"
+              className="rounded-2xl border border-line bg-panel p-4"
+            >
+              <h2 className="mb-1 text-base font-semibold text-white">Agreed outcome</h2>
+              <p className="mb-3 text-[13px] text-dim">
+                The acceptance criteria this task is verified against.
+              </p>
+              {(() => {
+                const criteria = task.contracts
+                  .map((c) => parseContractCriteria(c.body))
+                  .find((list) => list !== null);
+                if (!criteria) {
+                  return (
+                    <pre className="overflow-x-auto rounded-xl border border-line bg-abyss/60 p-3 font-mono text-xs text-fog">
+                      {task.contracts.map((c) => c.body).join("\n")}
+                    </pre>
+                  );
+                }
+                return (
+                  <ul className="space-y-2">
+                    {criteria.map((c, i) => (
+                      <li key={i} className="flex items-start gap-2.5">
+                        <span
+                          aria-hidden
+                          className="mt-0.5 grid h-[18px] w-[18px] shrink-0 place-items-center rounded-md border border-brand/50 bg-brand/10 text-[11px] leading-none text-brand-300"
+                        >
+                          ✓
+                        </span>
+                        <span className="text-sm leading-relaxed text-fog">{c}</span>
+                      </li>
+                    ))}
+                  </ul>
+                );
+              })()}
             </section>
           ) : null}
           {task.evidence.length > 0 ? (

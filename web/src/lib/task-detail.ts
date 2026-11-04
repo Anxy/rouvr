@@ -312,3 +312,105 @@ export function formatEvidenceTime(iso: string): string {
   if (Number.isNaN(ms)) return iso;
   return new Date(ms).toLocaleString();
 }
+
+// Agreed outcome as a real checklist: parse the contract JSON the ledger
+// writes and return its acceptance_criteria strings. Null when the body
+// is not a contract (the UI falls back to raw JSON then, never invented
+// criteria).
+export function parseContractCriteria(body: string): string[] | null {
+  try {
+    const parsed: unknown = JSON.parse(body);
+    if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed)) return null;
+    const criteria = (parsed as Record<string, unknown>)["acceptance_criteria"];
+    if (!Array.isArray(criteria)) return null;
+    const items = criteria.filter(
+      (c): c is string => typeof c === "string" && c.trim().length > 0,
+    );
+    return items.length > 0 ? items : null;
+  } catch {
+    return null;
+  }
+}
+
+export type JourneyState = "done" | "current" | "todo";
+
+export interface JourneyStage {
+  key: string;
+  label: string;
+  state: JourneyState;
+  detail: string | null;
+}
+
+// Delivery journey derived from real rows only: contracts present,
+// knowledge citations, execution/review evidence, and the task state.
+// Unknown stages stay "todo"; nothing is inferred from prose.
+export function journeyStages(task: {
+  state: string;
+  contracts: ContractRow[];
+  evidence: EvidenceRow[];
+  receipts: ReceiptRow[];
+}): JourneyStage[] {
+  const kinds = new Set(task.evidence.map((e) => e.kind));
+  const actions = new Set(task.receipts.map((r) => r.action));
+  const hasContract = task.contracts.length > 0;
+  const hasKnowledge =
+    kinds.has("knowledge_citations") ||
+    task.contracts.some((c) => /knowledge:\d+@v\d+/.test(c.body));
+  const reviewRows = task.evidence.filter((e) =>
+    ["review", "reviewer", "review_note", "verdict", "result"].includes(e.kind),
+  );
+  const testRows = task.evidence.filter((e) =>
+    ["test_run", "attempt", "execution", "suite_sealed", "seal_pending"].includes(e.kind),
+  );
+  const converted = [...actions].some((a) => a === "plan:convert" || a === "chat:create");
+  const reviewed = reviewRows.length > 0 || actions.has("transition:needs_review");
+  const decided = ["done", "blocked", "failed"].includes(task.state);
+  const terminal: JourneyStage =
+    task.state === "done"
+      ? { key: "delivered", label: "Delivered", state: "done", detail: "verified and closed" }
+      : task.state === "blocked" || task.state === "failed"
+        ? { key: "blocked", label: "Blocked", state: "current", detail: task.state }
+        : task.state === "needs_review"
+          ? { key: "review", label: "Under review", state: "current", detail: null }
+          : { key: "delivered", label: "Delivered", state: "todo", detail: null };
+
+  const executionState: JourneyState =
+    testRows.length > 0 || reviewed || decided
+      ? "done"
+      : task.state === "claimed"
+        ? "current"
+        : "todo";
+  return [
+    { key: "goal", label: "Goal agreed", state: "done", detail: converted ? "converted into work" : null },
+    {
+      key: "contract",
+      label: "Contract generated",
+      state: hasContract ? "done" : "todo",
+      detail: null,
+    },
+    {
+      key: "knowledge",
+      label: "Knowledge applied",
+      state: hasKnowledge ? "done" : "todo",
+      detail: null,
+    },
+    {
+      key: "execution",
+      label: "Execution",
+      state: executionState,
+      detail:
+        executionState === "current"
+          ? "a worker holds this task"
+          : testRows.length > 0
+            ? `${testRows.length} execution record${testRows.length === 1 ? "" : "s"}`
+            : null,
+    },
+    {
+      key: "review",
+      label: "Review",
+      state: reviewed || task.state === "done" ? "done" : task.state === "needs_review" ? "current" : "todo",
+      detail: null,
+    },
+    terminal,
+  ];
+}

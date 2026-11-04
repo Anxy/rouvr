@@ -105,9 +105,9 @@ test("board is an attention-first list, not kanban columns", () => {
     !page.includes("grid-cols-5") && !page.includes("COLUMNS"),
     "board must not render a kanban column grid",
   );
-  const attentionAt = page.indexOf("Needs attention");
-  const progressAt = page.indexOf("In progress");
-  const doneAt = page.indexOf('"Done"');
+  const attentionAt = page.indexOf('aria-label="Needs attention"');
+  const progressAt = page.indexOf('aria-label="In progress"');
+  const doneAt = page.indexOf(">Done</h2>");
   assert.ok(
     attentionAt !== -1 && progressAt !== -1 && doneAt !== -1,
     "board must render Needs attention, In progress and Done sections",
@@ -147,7 +147,15 @@ test("board has live counts, search, project filter and sort", () => {
     page.includes('type="search"'),
     "board must have a live search box",
   );
-  assert.ok(page.includes("<select"), "board must have a project dropdown");
+  assert.ok(page.includes("<datalist"), "board must have a type-to-filter project list");
+  assert.ok(
+    page.includes('list="board-project-options"'),
+    "project input must attach to the options datalist",
+  );
+  assert.ok(
+    page.includes("aria-pressed") && page.includes("setStateFilter"),
+    "count chips must be toggle buttons filtering by state",
+  );
   assert.ok(
     page.includes("useSession"),
     "board project dropdown must list the session projects",

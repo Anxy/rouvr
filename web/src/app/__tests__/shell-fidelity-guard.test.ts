@@ -50,8 +50,8 @@ test("shell brand lockup renders the mark plus the Figma wordmark", () => {
   assert.ok(layout.includes("<RouvrMark"), "shell must render the mark top-left");
   assert.ok(layout.includes("Rouvr home"), "brand link must label itself for AT");
   assert.ok(
-    layout.includes("rouvr") && layout.includes("text-[20px]"),
-    "shell must render the lowercase Figma wordmark at 20px",
+    layout.includes("rouvr") && layout.includes("text-[24px]"),
+    "shell must render the lowercase wordmark enlarged at 24px",
   );
   assert.ok(
     layout.includes("tracking-[-0.5px]"),

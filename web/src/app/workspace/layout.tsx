@@ -119,16 +119,13 @@ function AppShell({ children }: { children: React.ReactNode }) {
   return (
     <div className="min-h-screen bg-abyss">
       <aside className="fixed inset-y-0 left-0 z-30 flex w-[242px] flex-col border-r border-line bg-abyss">
-        <div className="flex h-[68px] flex-col justify-center gap-1 border-b border-line px-4">
-          <Link href="/workspace" aria-label="Rouvr home" className="flex items-center gap-2.5">
-            <RouvrMark size={32} />
-            <span className="text-[20px] font-bold leading-none tracking-[-0.5px] text-white">
+        <div className="flex h-[68px] flex-col justify-center border-b border-line px-4">
+          <Link href="/workspace" aria-label="Rouvr home" className="flex items-center gap-3">
+            <RouvrMark size={44} />
+            <span className="text-[24px] font-bold leading-none tracking-[-0.5px] text-white">
               rouvr
             </span>
           </Link>
-          <span className="text-[10px] leading-snug text-muted">
-            An autonomous AI colleague that turns conversations into accountable work.
-          </span>
         </div>
 
         {context ? (

@@ -179,8 +179,8 @@ test("shell keeps the Figma rail, topbar, and app markers", () => {
   assert.ok(layout.includes("data-app-shell"), "layout must keep the app-shell marker");
   assert.ok(layout.includes("Rouvr"), "shell must keep the Rouvr wordmark");
   assert.ok(
-    layout.includes("An autonomous AI colleague that turns conversations into accountable work."),
-    "shell must keep the product tagline",
+    !layout.includes("An autonomous AI colleague that turns conversations into accountable work."),
+    "shell carries no tagline paragraph (brand lockup is mark + wordmark only)",
   );
   assert.ok(layout.includes("w-[242px]"), "sidebar must keep the 242px Figma rail");
   assert.ok(layout.includes("pl-[242px]"), "main area must clear the rail");

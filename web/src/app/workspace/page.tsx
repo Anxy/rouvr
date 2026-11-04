@@ -133,6 +133,10 @@ export default function BoardPage() {
   const [loading, setLoading] = useState(true);
   const [query, setQuery] = useState("");
   const [projectFilter, setProjectFilter] = useState("All");
+  const [projectInput, setProjectInput] = useState("All projects");
+  const [stateFilter, setStateFilter] = useState<
+    "all" | "open" | "claimed" | "needs_review" | "stuck" | "done"
+  >("all");
   const [sortDirection, setSortDirection] = useState<"newest" | "oldest">("newest");
   const [showAllDone, setShowAllDone] = useState(false);
   const [activity, setActivity] = useState<BoardEvent[]>([]);
@@ -255,12 +259,18 @@ export default function BoardPage() {
     const q = query.trim().toLowerCase();
     return tasks.filter((t) => {
       if (projectFilter !== "All" && t.project !== projectFilter) return false;
+      if (stateFilter === "open" && t.state !== "open") return false;
+      if (stateFilter === "claimed" && t.state !== "claimed") return false;
+      if (stateFilter === "needs_review" && t.state !== "needs_review") return false;
+      if (stateFilter === "stuck" && t.state !== "blocked" && t.state !== "failed")
+        return false;
+      if (stateFilter === "done" && t.state !== "done") return false;
       if (!q) return true;
       return (
         t.title.toLowerCase().includes(q) || String(t.id).includes(q)
       );
     });
-  }, [tasks, query, projectFilter]);
+  }, [tasks, query, projectFilter, stateFilter]);
 
   const counts = useMemo(() => {
     let open = 0;
@@ -337,41 +347,49 @@ export default function BoardPage() {
         </div>
       </div>
 
-      <dl className="mb-4 flex flex-wrap gap-2" aria-label="Task counts by state">
+      <div className="mb-4 flex flex-wrap gap-2" role="group" aria-label="Filter tasks by state">
+        {(
+          [
+            ["open", "Open", counts.open],
+            ["claimed", "Claimed", counts.claimed],
+            ["needs_review", "Needs review", counts.review],
+            ["stuck", "Blocked / failed", counts.stuck],
+            ["done", "Done", counts.done],
+          ] as const
+        ).map(([key, label, n]) => {
+          const active = stateFilter === key;
+          return (
+            <button
+              key={key}
+              type="button"
+              onClick={() => setStateFilter(active ? "all" : key)}
+              aria-pressed={active}
+              title={active ? `Showing ${label} — click to clear` : `Show only ${label}`}
+              className={`rounded-lg border px-3 py-1.5 text-left transition-colors ${
+                active
+                  ? "border-brand/70 bg-brand/10"
+                  : "border-steel/40 bg-abyss/60 hover:border-brand/50"
+              }`}
+            >
+              <span className="block font-mono text-[10px] uppercase tracking-wider text-muted">
+                {label}
+              </span>
+              <span className="block font-mono text-sm text-cloud">{n}</span>
+            </button>
+          );
+        })}
         <div className="rounded-lg border border-steel/40 bg-abyss/60 px-3 py-1.5">
-          <dt className="font-mono text-[10px] uppercase tracking-wider text-muted">Open</dt>
-          <dd className="font-mono text-sm text-cloud">{counts.open}</dd>
-        </div>
-        <div className="rounded-lg border border-steel/40 bg-abyss/60 px-3 py-1.5">
-          <dt className="font-mono text-[10px] uppercase tracking-wider text-muted">Claimed</dt>
-          <dd className="font-mono text-sm text-cloud">{counts.claimed}</dd>
-        </div>
-        <div className="rounded-lg border border-steel/40 bg-abyss/60 px-3 py-1.5">
-          <dt className="font-mono text-[10px] uppercase tracking-wider text-muted">Needs review</dt>
-          <dd className="font-mono text-sm text-cloud">{counts.review}</dd>
-        </div>
-        <div className="rounded-lg border border-steel/40 bg-abyss/60 px-3 py-1.5">
-          <dt className="font-mono text-[10px] uppercase tracking-wider text-muted">
-            Blocked / failed
-          </dt>
-          <dd className="font-mono text-sm text-cloud">{counts.stuck}</dd>
-        </div>
-        <div className="rounded-lg border border-steel/40 bg-abyss/60 px-3 py-1.5">
-          <dt className="font-mono text-[10px] uppercase tracking-wider text-muted">Done</dt>
-          <dd className="font-mono text-sm text-cloud">{counts.done}</dd>
-        </div>
-        <div className="rounded-lg border border-steel/40 bg-abyss/60 px-3 py-1.5">
-          <dt className="font-mono text-[10px] uppercase tracking-wider text-muted">
+          <span className="block font-mono text-[10px] uppercase tracking-wider text-muted">
             Last activity
-          </dt>
-          <dd
-            className="font-mono text-sm text-cloud"
+          </span>
+          <span
+            className="block font-mono text-sm text-cloud"
             title="Newest updated_at across the listed tasks — the list rows carry no per-task review timestamps, so this is last activity, not last review."
           >
             {lastActivity}
-          </dd>
+          </span>
         </div>
-      </dl>
+      </div>
 
       <div className="mb-6 flex flex-wrap items-center gap-2">
         <input
@@ -382,18 +400,30 @@ export default function BoardPage() {
           aria-label="Search tasks by title or id"
           className="min-w-0 flex-1 rounded-xl border border-steel/40 bg-abyss/60 px-3 py-2 text-sm text-cloud placeholder:text-muted/60 focus:border-brand/60 focus:outline-none"
         />
-        <select
-          value={projectFilter}
-          onChange={(e) => setProjectFilter(e.target.value)}
-          aria-label="Filter by project"
-          className="rounded-xl border border-steel/40 bg-abyss/60 px-3 py-2 text-sm text-cloud focus:border-brand/60 focus:outline-none"
-        >
+        <input
+          value={projectInput}
+          onChange={(e) => {
+            const v = e.target.value;
+            setProjectInput(v);
+            if (v === "" || v === "All projects") setProjectFilter("All");
+            else if (projectOptions.includes(v)) setProjectFilter(v);
+          }}
+          onBlur={() => {
+            if (!projectOptions.includes(projectInput) && projectInput !== "All projects") {
+              setProjectInput("All projects");
+              setProjectFilter("All");
+            }
+          }}
+          list="board-project-options"
+          aria-label="Filter by project — type to filter"
+          placeholder="All projects"
+          className="rounded-xl border border-steel/40 bg-abyss/60 px-3 py-2 text-sm text-cloud placeholder:text-muted/60 focus:border-brand/60 focus:outline-none"
+        />
+        <datalist id="board-project-options">
           {projectOptions.map((name) => (
-            <option key={name} value={name}>
-              {name === "All" ? "All projects" : name}
-            </option>
+            <option key={name} value={name === "All" ? "All projects" : name} />
           ))}
-        </select>
+        </datalist>
         <button
           type="button"
           onClick={() =>

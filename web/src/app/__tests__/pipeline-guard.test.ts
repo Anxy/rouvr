@@ -15,17 +15,12 @@ const read = (rel: string): string =>
 const TAGLINE =
   "An autonomous AI colleague that turns conversations into accountable work.";
 
-test("workspace header carries the Rouvr wordmark and tagline", () => {
+test("workspace header carries the Rouvr wordmark, no tagline", () => {
   const layout = read("src/app/workspace/layout.tsx");
   assert.ok(layout.includes("Rouvr"), "header must keep the Rouvr wordmark");
   assert.ok(
-    layout.includes(TAGLINE),
-    "header must carry the product tagline",
-  );
-  // Compact: one short line next to the wordmark, theme tokens only.
-  assert.ok(
-    layout.includes("text-muted"),
-    "tagline must use theme tokens (text-muted), not hard-coded colour",
+    !layout.includes(TAGLINE),
+    "header carries no tagline paragraph (lockup is mark + wordmark only)",
   );
   const headerBlock = layout.slice(0, layout.indexOf("</nav>"));
   assert.ok(

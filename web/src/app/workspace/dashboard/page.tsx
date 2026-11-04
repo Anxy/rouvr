@@ -1,14 +1,7 @@
-import { Planned } from "@/components/workspace/Planned";
+import { redirect } from "next/navigation";
 
-// Dashboard landing until the dashboard page ships: an honest Planned
-// shell, not a dead nav button.
+// The dashboard page was removed from the product (frozen scope cut);
+// the route redirects to the board so old links keep working.
 export default function DashboardPage() {
-  return (
-    <Planned
-      title="Dashboard"
-      blurb="KPIs, delivery velocity, the AI team strip, and the active-tasks table will live here."
-      actionHref="/workspace"
-      actionLabel="Back to Board"
-    />
-  );
+  redirect("/workspace");
 }

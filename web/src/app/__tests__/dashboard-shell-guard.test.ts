@@ -63,8 +63,9 @@ test("shell nav matches the contract IA in order", () => {
   const layout = read("src/app/workspace/layout.tsx");
   const items = [
     ["/workspace", "Board"],
-    ["/workspace/dashboard", "Dashboard"],
     ["/workspace/chat", "Chat"],
+    ["/workspace/planner", "Planner"],
+    ["/workspace/projects", "Projects"],
     ["/workspace/tasks", "Tasks"],
     ["/workspace/knowledge", "Knowledge"],
     ["/workspace/escalations", "Escalations"],
@@ -87,9 +88,14 @@ test("unbuilt destinations render a Planned shell with working links only", () =
   assert.ok(planned.includes("Planned"), "Planned shell must label itself Planned");
   assert.ok(planned.includes("not built yet"), "Planned shell must say not built yet");
   assert.ok(!planned.includes("<button"), "Planned shell must render no buttons");
+  const dash = read("src/app/workspace/dashboard/page.tsx");
+  assert.ok(
+    dash.includes('redirect("/workspace")'),
+    "removed dashboard route must redirect to the board",
+  );
   for (const [rel, title, action] of [
-    ["src/app/workspace/dashboard/page.tsx", "Dashboard", "Back to Board"],
     ["src/app/workspace/tasks/page.tsx", "Tasks", "View tasks on the Board"],
+    ["src/app/workspace/projects/page.tsx", "Projects", "Back to Board"],
   ] as const) {
     const page = read(rel);
     assert.ok(page.includes("<Planned"), `${rel} must render the Planned shell`);

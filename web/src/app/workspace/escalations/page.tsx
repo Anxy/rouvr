@@ -45,6 +45,7 @@ export default function EscalationsPage() {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
   const [query, setQuery] = useState("");
+  const [stateFilter, setStateFilter] = useState<"all" | "needs_review" | "stuck">("all");
   const [feedbacks, setFeedbacks] = useState<Record<number, string>>({});
   const [approvers, setApprovers] = useState<Record<number, string>>({});
   const [busy, setBusy] = useState<Record<number, string | null>>({});
@@ -81,11 +82,14 @@ export default function EscalationsPage() {
 
   const visible = useMemo(() => {
     const q = query.trim().toLowerCase();
-    if (!q) return tasks;
-    return tasks.filter(
-      (t) => t.title.toLowerCase().includes(q) || String(t.id).includes(q),
-    );
-  }, [tasks, query]);
+    return tasks.filter((t) => {
+      if (stateFilter === "needs_review" && t.state !== "needs_review") return false;
+      if (stateFilter === "stuck" && t.state !== "blocked" && t.state !== "failed")
+        return false;
+      if (!q) return true;
+      return t.title.toLowerCase().includes(q) || String(t.id).includes(q);
+    });
+  }, [tasks, query, stateFilter]);
 
   const counts = useMemo(() => {
     let review = 0;
@@ -322,22 +326,41 @@ export default function EscalationsPage() {
         </p>
       </div>
 
-      <dl className="mb-4 flex flex-wrap gap-2" aria-label="Escalation counts by state">
+      <div className="mb-4 flex flex-wrap gap-2" role="group" aria-label="Filter escalations by state">
+        {(
+          [
+            ["needs_review", "Needs review", counts.review],
+            ["stuck", "Blocked / failed", counts.stuck],
+          ] as const
+        ).map(([key, label, n]) => {
+          const active = stateFilter === key;
+          return (
+            <button
+              key={key}
+              type="button"
+              onClick={() => setStateFilter(active ? "all" : key)}
+              aria-pressed={active}
+              title={active ? `Showing ${label} — click to clear` : `Show only ${label}`}
+              className={`rounded-lg border px-3 py-1.5 text-left transition-colors ${
+                active
+                  ? "border-brand/70 bg-brand/10"
+                  : "border-steel/40 bg-abyss/60 hover:border-brand/50"
+              }`}
+            >
+              <span className="block font-mono text-[10px] uppercase tracking-wider text-muted">
+                {label}
+              </span>
+              <span className="block font-mono text-sm text-cloud">{n}</span>
+            </button>
+          );
+        })}
         <div className="rounded-lg border border-steel/40 bg-abyss/60 px-3 py-1.5">
-          <dt className="font-mono text-[10px] uppercase tracking-wider text-muted">Needs review</dt>
-          <dd className="font-mono text-sm text-cloud">{counts.review}</dd>
+          <span className="block font-mono text-[10px] uppercase tracking-wider text-muted">
+            Total
+          </span>
+          <span className="block font-mono text-sm text-cloud">{counts.total}</span>
         </div>
-        <div className="rounded-lg border border-steel/40 bg-abyss/60 px-3 py-1.5">
-          <dt className="font-mono text-[10px] uppercase tracking-wider text-muted">
-            Blocked / failed
-          </dt>
-          <dd className="font-mono text-sm text-cloud">{counts.stuck}</dd>
-        </div>
-        <div className="rounded-lg border border-steel/40 bg-abyss/60 px-3 py-1.5">
-          <dt className="font-mono text-[10px] uppercase tracking-wider text-muted">Total</dt>
-          <dd className="font-mono text-sm text-cloud">{counts.total}</dd>
-        </div>
-      </dl>
+      </div>
 
       <div className="mb-6">
         <input

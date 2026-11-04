@@ -6,7 +6,6 @@ import {
   BookOpen,
   ClipboardList,
   Folder,
-  LayoutDashboard,
   LayoutGrid,
   ListTodo,
   LogIn,
@@ -26,7 +25,6 @@ import { shellGreeting } from "@/lib/greeting";
 // on an authenticated session.
 const NAV: { href: string; label: string; icon: LucideIcon }[] = [
   { href: "/workspace", label: "Board", icon: LayoutGrid },
-  { href: "/workspace/dashboard", label: "Dashboard", icon: LayoutDashboard },
   { href: "/workspace/chat", label: "Chat", icon: MessageSquare },
   { href: "/workspace/planner", label: "Planner", icon: ClipboardList },
   { href: "/workspace/projects", label: "Projects", icon: Folder },

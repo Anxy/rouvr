@@ -17,6 +17,9 @@ const IN_PROGRESS = new Set(["open", "claimed"]);
 
 const PAGE_SIZE = 10;
 const ACTIVITY_LIMIT = 8;
+// Board refresh: same 3 s cadence as the execute view. One fresh ledger
+// read per tick feeds stats and sections together (see load below).
+const BOARD_POLL_MS = 3000;
 // Board activity reads the same ledger outbox snapshot as the task page's
 // live tail (GET /api/events -> /v1/events, SSE frames). The ledger replays
 // oldest-first from a cursor, so the board pages forward from the start
@@ -251,31 +254,39 @@ export default function BoardPage() {
   const [activityError, setActivityError] = useState("");
   const [activityLoading, setActivityLoading] = useState(true);
 
-  const load = useCallback(async () => {
-    setLoading(true);
-    setError("");
-    try {
-      const { data, response } = await ws.GET("/api/tasks");
-      if (response.status === 401) {
-        router.push("/workspace/login");
-        return;
+  // One loader for stats and sections: every call replaces the single
+  // tasks state, so counts and lists always come from the same response.
+  // Quiet ticks skip the loading flash but still replace the rows.
+  const load = useCallback(
+    async (quiet = false) => {
+      if (!quiet) setLoading(true);
+      setError("");
+      try {
+        const { data, response } = await ws.GET("/api/tasks");
+        if (response.status === 401) {
+          router.push("/workspace/login");
+          return;
+        }
+        if (!response.ok || !data) {
+          setError(`board failed (${response.status})`);
+          return;
+        }
+        setTasks(data.items);
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "board failed");
+      } finally {
+        setLoading(false);
       }
-      if (!response.ok || !data) {
-        setError(`board failed (${response.status})`);
-        return;
-      }
-      setTasks(data.items);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "board failed");
-    } finally {
-      setLoading(false);
-    }
-  }, [router]);
+    },
+    [router],
+  );
 
   useEffect(() => {
-    // Mount fetch: single-shot board load, not a render cascade.
+    // Fresh board read per tick, not a render cascade.
     // eslint-disable-next-line react-hooks/set-state-in-effect
     void load();
+    const timer = setInterval(() => void load(true), BOARD_POLL_MS);
+    return () => clearInterval(timer);
   }, [load]);
 
   const loadActivity = useCallback(
@@ -459,7 +470,7 @@ export default function BoardPage() {
           <h1 className="text-2xl font-semibold text-white">Project board</h1>
           <p className="mt-1 text-sm text-muted">
             What needs you first, what is moving, and what is done — live from the
-            ledger.
+            ledger. Refreshes every 3 seconds.
           </p>
         </div>
         <div className="ml-auto flex gap-2">

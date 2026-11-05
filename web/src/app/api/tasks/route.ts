@@ -1,5 +1,9 @@
 import { incomingCookie, ledgerClient, passJson } from "@/lib/api/server";
 
+// The board polls this read for fresh stats + list: never serve a cached
+// ledger response.
+export const dynamic = "force-dynamic";
+
 // Board: tasks visible to the caller's tenant. Bounded pages: callers pass
 // limit/offset for server-side windows; without them the full list comes
 // back for client-side grouping.

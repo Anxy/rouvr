@@ -191,6 +191,31 @@ export interface ProxyPaths {
       };
     };
   };
+  "/api/chat/turns": {
+    get: {
+      parameters: { query: { project: string; message_id?: string } };
+      responses: {
+        200: {
+          content: {
+            "application/json": {
+              items: {
+                id: number;
+                tenant: string;
+                project: string;
+                message_id: string;
+                message: string;
+                reply: string;
+                class?: string;
+                created_at: string;
+              }[];
+            };
+          };
+        };
+        401: { content: { "application/json": { detail: string } } };
+        422: { content: { "application/json": { detail: string } } };
+      };
+    };
+  };
   "/api/chat/autonomy": {
     get: {
       parameters: { query?: { project?: string } };

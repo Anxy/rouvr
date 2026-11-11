@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/Button";
+import { ChatSurface } from "@/components/workspace/ChatSurface";
 import {
   csrfHeaders,
   ws,
@@ -12,11 +13,8 @@ import {
 } from "@/lib/api/workspace";
 import { isVerified } from "@/lib/knowledge";
 
-// Planner: the work surface. Plans are the plan knowledge entries the chat
-// saves (titles minted as "Plan: …"); converting happens in chat, so every
-// plan links back there as a handoff. No plan lifecycle is invented here:
-// verified means agreed, otherwise draft; materialization state lives with
-// the slice/tasks the chat Convert creates.
+// Planner: its own chat surface plus the plan inbox (approve / execute /
+// request changes). Converting still happens via plan offers in chat.
 interface PlanThread {
   sliceTitle: string;
   sliceIntent: string;
@@ -55,7 +53,7 @@ function parsePlanThread(body: string): PlanThread | null {
   }
 }
 
-export default function PlannerPage() {
+function PlansInbox() {
   const router = useRouter();
   const [plans, setPlans] = useState<KnowledgeHit[]>([]);
   const [error, setError] = useState("");
@@ -90,9 +88,6 @@ export default function PlannerPage() {
   }
 
   async function approvePlan(slug: string) {
-    // Pre-click status decides the message: a click that finds the plan
-    // already materialized replays; a click on draft/agreed creates.
-    // (The response's replayed flag is true either way once materialized.)
     const was = detail?.status;
     setActionBusy(true);
     setActionMsg("");
@@ -106,8 +101,8 @@ export default function PlannerPage() {
         return;
       }
       if (!response.ok || !data) {
-        const detail = await response.text().catch(() => "");
-        setActionMsg(detail || `approve failed (${response.status})`);
+        const detailText = await response.text().catch(() => "");
+        setActionMsg(detailText || `approve failed (${response.status})`);
         return;
       }
       setDetail(data);
@@ -195,37 +190,39 @@ export default function PlannerPage() {
   }, [router]);
 
   return (
-    <div className="mx-auto w-full max-w-4xl">
-      <p className="font-mono text-[10px] uppercase tracking-widest text-cyan2">
-        Agree the plan
-      </p>
-      <h1 className="mt-1 text-2xl font-semibold text-white">Planner</h1>
-      <p className="mt-1 max-w-2xl text-sm text-muted">
-        Plans under discussion with your pack. A plan becomes work when you
-        convert it in chat — each plan hands off to the thread that shapes it.
-      </p>
-      <div className="mt-4">
+    <div data-plans-inbox className="rounded-2xl border border-line bg-panel p-4">
+      <div className="flex flex-wrap items-end justify-between gap-2">
+        <div>
+          <p className="font-mono text-[10px] uppercase tracking-widest text-cyan2">
+            Agree the plan
+          </p>
+          <h2 className="mt-0.5 text-lg font-semibold text-white">Plans inbox</h2>
+        </div>
         <Link
-          href="/workspace/chat"
-          className="inline-flex h-10 items-center rounded-full bg-brand px-5 text-sm font-medium text-abyss transition-colors hover:bg-cyan2"
+          href="/workspace/planner"
+          className="font-mono text-[11px] text-dim transition-colors hover:text-fog"
+          onClick={(e) => {
+            e.preventDefault();
+            document.querySelector<HTMLTextAreaElement>("[data-chat-composer] textarea")?.focus();
+          }}
         >
-          Start a new plan in chat
+          Start a new plan in chat ↑
         </Link>
       </div>
-      {error ? <p className="mt-4 text-sm text-danger">{error}</p> : null}
+      {error ? <p className="mt-3 text-sm text-danger">{error}</p> : null}
       {busy ? (
-        <p className="mt-4 text-sm text-muted" aria-live="polite">
+        <p className="mt-3 text-sm text-muted" aria-live="polite">
           Loading plans…
         </p>
       ) : plans.length > 0 ? (
-        <ul data-plan-list className="mt-4 space-y-2">
+        <ul data-plan-list className="mt-3 max-h-72 space-y-2 overflow-y-auto">
           {plans.map((p) => {
             const open = openCitation === p.citation;
             return (
               <li
                 key={p.citation}
                 data-plan-thread={open ? p.citation : undefined}
-                className="rounded-2xl border border-line bg-panel p-4"
+                className="rounded-xl border border-line bg-abyss/50 p-3"
               >
                 <div className="flex items-center gap-3">
                   <button
@@ -234,9 +231,7 @@ export default function PlannerPage() {
                     aria-expanded={open}
                     className="min-w-0 flex-1 text-left"
                   >
-                    <p className="truncate text-[15px] font-semibold text-white">
-                      {p.title}
-                    </p>
+                    <p className="truncate text-sm font-semibold text-white">{p.title}</p>
                     <p className="mt-0.5 truncate font-mono text-[11px] text-dim">
                       {p.citation} · {isVerified(p) ? "agreed" : "draft"}
                       {open ? " · close" : " · open thread"}
@@ -252,8 +247,14 @@ export default function PlannerPage() {
                     {isVerified(p) ? "agreed" : "draft"}
                   </span>
                   <Link
-                    href="/workspace/chat"
-                    className="shrink-0 rounded-full border border-line2 px-4 py-1.5 text-sm text-fog transition-colors hover:border-brand/60 hover:text-white"
+                    href="/workspace/planner"
+                    className="shrink-0 rounded-full border border-line2 px-3 py-1 text-sm text-fog transition-colors hover:border-brand/60 hover:text-white"
+                    onClick={(e) => {
+                      e.preventDefault();
+                      document
+                        .querySelector<HTMLTextAreaElement>("[data-chat-composer] textarea")
+                        ?.focus();
+                    }}
                   >
                     Open in chat →
                   </Link>
@@ -270,9 +271,7 @@ export default function PlannerPage() {
                       <div className="space-y-3">
                         {thread.sliceTitle ? (
                           <div>
-                            <p className="text-sm font-semibold text-fog">
-                              {thread.sliceTitle}
-                            </p>
+                            <p className="text-sm font-semibold text-fog">{thread.sliceTitle}</p>
                             {thread.sliceIntent ? (
                               <p className="mt-0.5 text-[13px] leading-relaxed text-dim">
                                 {thread.sliceIntent}
@@ -290,9 +289,7 @@ export default function PlannerPage() {
                                 >
                                   ✓
                                 </span>
-                                <span className="text-[13px] leading-relaxed text-fog">
-                                  {c}
-                                </span>
+                                <span className="text-[13px] leading-relaxed text-fog">{c}</span>
                               </li>
                             ))}
                           </ul>
@@ -335,9 +332,7 @@ export default function PlannerPage() {
                               : ""}
                           </p>
                         ) : (
-                          <p className="font-mono text-[11px] text-dim">
-                            Loading plan status…
-                          </p>
+                          <p className="font-mono text-[11px] text-dim">Loading plan status…</p>
                         )}
                         <div className="mt-2 flex flex-wrap gap-2">
                           {detail && detail.status !== "materialized" ? (
@@ -359,13 +354,18 @@ export default function PlannerPage() {
                               Execute →
                             </Link>
                           ) : null}
-                          <Link
-                            href="/workspace/chat"
+                          <button
+                            type="button"
                             data-plan-request-changes={openSlug}
                             className="inline-flex h-10 items-center rounded-full border border-line2 px-5 text-sm text-fog transition-colors hover:border-brand/60 hover:text-white"
+                            onClick={() => {
+                              document
+                                .querySelector<HTMLTextAreaElement>("[data-chat-composer] textarea")
+                                ?.focus();
+                            }}
                           >
                             Request changes
-                          </Link>
+                          </button>
                         </div>
                         {actionMsg ? (
                           <p className="mt-2 text-sm text-fog" role="status">
@@ -382,11 +382,22 @@ export default function PlannerPage() {
         </ul>
       ) : (
         !error && (
-          <p className="mt-4 rounded-2xl border border-line bg-panel p-6 text-center text-sm text-muted">
-            No plans yet — start one from any chat thread.
+          <p className="mt-3 rounded-xl border border-line bg-abyss/40 p-4 text-center text-sm text-muted">
+            No plans yet — start one from the planner chat above.
           </p>
         )
       )}
+    </div>
+  );
+}
+
+export default function PlannerPage() {
+  return (
+    <div className="flex min-h-0 flex-1 flex-col gap-3">
+      <ChatSurface mode="planner" />
+      <div className="max-h-64 shrink-0 overflow-y-auto">
+        <PlansInbox />
+      </div>
     </div>
   );
 }

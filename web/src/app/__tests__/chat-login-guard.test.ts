@@ -16,7 +16,12 @@ const VALUE_PROP =
   "Rouvr turns requests into tracked work: contract, build, review, evidence.";
 
 test("chat helper text states the value prop in one line", () => {
-  const chat = read("src/app/workspace/chat/page.tsx");
+  const page = read("src/app/workspace/chat/page.tsx");
+  const chat = read("src/components/workspace/ChatSurface.tsx");
+  assert.ok(
+    page.includes('mode="supervisor"') || page.includes("mode={'supervisor'}"),
+    "chat route must mount the supervisor ChatSurface",
+  );
   assert.ok(
     chat.includes(VALUE_PROP),
     "chat helper text must state the tracked-work value prop",
@@ -29,7 +34,7 @@ test("chat helper text states the value prop in one line", () => {
 });
 
 test("chat examples rotate as help text under the composer", () => {
-  const chat = read("src/app/workspace/chat/page.tsx");
+  const chat = read("src/components/workspace/ChatSurface.tsx");
   assert.ok(
     chat.includes("data-chat-examples"),
     "rotator must render a container marked with data-chat-examples",
@@ -68,7 +73,7 @@ test("chat examples rotate as help text under the composer", () => {
 });
 
 test("chat intake badge is a prominent pill with TaskStatePill tones", () => {
-  const chat = read("src/app/workspace/chat/page.tsx");
+  const chat = read("src/components/workspace/ChatSurface.tsx");
   assert.ok(
     chat.includes("data-intake-badge"),
     "assistant turns must render a badge marked with data-intake-badge",
@@ -103,7 +108,7 @@ test("chat intake badge is a prominent pill with TaskStatePill tones", () => {
 });
 
 test("chat task cards show id, title, status pill and mini strip", () => {
-  const chat = read("src/app/workspace/chat/page.tsx");
+  const chat = read("src/components/workspace/ChatSurface.tsx");
   assert.ok(
     chat.includes("data-task-card"),
     "task cards must be marked with data-task-card",
@@ -129,7 +134,7 @@ test("chat task cards show id, title, status pill and mini strip", () => {
 });
 
 test("chat plan offers carry a title with the task count plus the buttons", () => {
-  const chat = read("src/app/workspace/chat/page.tsx");
+  const chat = read("src/components/workspace/ChatSurface.tsx");
   assert.ok(
     chat.includes("data-plan-offer-title"),
     "plan offer must render a title marked with data-plan-offer-title",

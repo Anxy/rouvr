@@ -94,14 +94,14 @@ test("workspace sources contain no marketing markers", () => {
 });
 
 test("chat project defaults to the session tenant, never a hard-coded name", () => {
-  const chat = read("src/app/workspace/chat/page.tsx");
+  const chat = read("src/components/workspace/ChatSurface.tsx");
   assert.ok(
     chat.includes("useSession"),
-    "chat page must read the default project from the session",
+    "chat surface must read the active project from the session",
   );
   assert.ok(
     !chat.includes('useState("demo")') && !chat.includes("|| \"demo\""),
-    "chat page must not fall back to a hard-coded project name",
+    "chat surface must not fall back to a hard-coded project name",
   );
 });
 
@@ -266,11 +266,11 @@ test("knowledge page searches, filters and shows detail with history", () => {
   );
 });
 
-test("workspace sub-nav links Board, Chat and Knowledge", () => {
+test("workspace sub-nav links Board, Supervisor and Knowledge", () => {
   const layout = read("src/app/workspace/layout.tsx");
   for (const [href, label] of [
     ["/workspace", "Board"],
-    ["/workspace/chat", "Chat"],
+    ["/workspace/chat", "Supervisor"],
     ["/workspace/knowledge", "Knowledge"],
   ] as const) {
     assert.ok(
@@ -279,19 +279,19 @@ test("workspace sub-nav links Board, Chat and Knowledge", () => {
     );
   }
   const boardAt = layout.indexOf('"Board"');
-  const chatAt = layout.indexOf('"Chat"');
+  const chatAt = layout.indexOf('"Supervisor"');
   const knowledgeAt = layout.indexOf('"Knowledge"');
   assert.ok(
     boardAt !== -1 && chatAt !== -1 && knowledgeAt !== -1 && boardAt < chatAt && chatAt < knowledgeAt,
-    "workspace sub-nav must order Board, Chat, Knowledge",
+    "workspace sub-nav must order Board, Supervisor, Knowledge",
   );
 });
 
 test("chat renders a conversation thread with user and assistant turns", () => {
-  const chat = read("src/app/workspace/chat/page.tsx");
+  const chat = read("src/components/workspace/ChatSurface.tsx");
   assert.ok(
     chat.includes("data-chat-thread"),
-    "chat page must render a thread container marked with data-chat-thread",
+    "chat surface must render a thread container marked with data-chat-thread",
   );
   assert.ok(
     chat.includes('data-turn="user"') || chat.includes("data-turn='user'"),
@@ -320,7 +320,7 @@ test("chat renders a conversation thread with user and assistant turns", () => {
 });
 
 test("chat replies carry an intake badge (Logged / Saved / Task)", () => {
-  const chat = read("src/app/workspace/chat/page.tsx");
+  const chat = read("src/components/workspace/ChatSurface.tsx");
   assert.ok(
     chat.includes("data-intake-badge"),
     "assistant turns must render a small intake badge marked with data-intake-badge",
@@ -341,7 +341,7 @@ test("chat replies carry an intake badge (Logged / Saved / Task)", () => {
 });
 
 test("chat plan offers carry Convert/Edit/Just-keep-it buttons", () => {
-  const chat = read("src/app/workspace/chat/page.tsx");
+  const chat = read("src/components/workspace/ChatSurface.tsx");
   assert.ok(
     chat.includes("data-plan-offer"),
     "plan offers must render a container marked with data-plan-offer",
@@ -366,20 +366,25 @@ test("chat plan offers carry Convert/Edit/Just-keep-it buttons", () => {
   );
 });
 
-test("chat project picker is a type-to-filter combobox with no hard-coded default", () => {
-  const chat = read("src/app/workspace/chat/page.tsx");
-  assert.ok(chat.includes("Combobox"), "chat project picker must use the shared Combobox");
+test("chat uses the header project only — no duplicate picker above the thread", () => {
+  const page = read("src/app/workspace/chat/page.tsx");
+  const chat = read("src/components/workspace/ChatSurface.tsx");
+  const layout = read("src/app/workspace/layout.tsx");
   assert.ok(
-    !chat.includes("<datalist"),
-    "chat must not fall back to a native datalist",
+    !page.includes("Combobox") && !chat.includes("Combobox"),
+    "chat must not render a second project Combobox above the thread",
   );
   assert.ok(
-    chat.includes("projects"),
-    "chat project combobox must list the session projects",
+    layout.includes('data-project-heading') && layout.includes('aria-label="Active project"'),
+    "active project lives once in the shell header",
+  );
+  assert.ok(
+    chat.includes("data-chat-history") && chat.includes("/api/chat/turns"),
+    "chat must load and show previous turns for the active project",
   );
   assert.ok(
     !chat.includes('"demo"') && !chat.includes("'demo'"),
-    "chat page must not hard-code a 'demo' project default anywhere",
+    "chat surface must not hard-code a 'demo' project default anywhere",
   );
 });
 

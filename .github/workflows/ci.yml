@@ -1,8 +1,9 @@
 name: CI
 on:
   push:
-    branches: [main]
+    branches: [main, rouvr-development]
   pull_request:
+    branches: [main, rouvr-development]
 permissions:
   contents: read
 jobs:

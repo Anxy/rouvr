@@ -4,7 +4,7 @@
 
 Rouvr is a reliable autonomous colleague: *think it through, agree the plan, get it moving*, with you in control. Website: [rouvr.ai](https://rouvr.ai).
 
-[![CI](https://github.com/Anxy/rouvr/actions/workflows/ci.yml/badge.svg)](https://github.com/Anxy/rouvr/actions/workflows/ci.yml)
+[![CI](https://github.com/Anxy/rouvr/actions/workflows/ci.yml/badge.svg?branch=rouvr-development)](https://github.com/Anxy/rouvr/actions/workflows/ci.yml?query=branch%3Arouvr-development)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 ![Python 3.12+](https://img.shields.io/badge/python-3.12%2B-blue.svg)
 
@@ -84,9 +84,9 @@ offline stub provider (chat plans and hidden-test sealing need the live
 model; the stub works without one).
 
 ```bash
-git clone --depth 1 https://github.com/Anxy/rouvr.git && cd rouvr
+# Product branch until main is cut for the public default.
+git clone --depth 1 -b rouvr-development https://github.com/Anxy/rouvr.git && cd rouvr
 # full history is ~237MB; --depth 1 keeps the fresh clone small
-git checkout rouvr-development    # the active branch; main does not have this yet
 make setup PY=python3.12
 ```
 
@@ -152,12 +152,15 @@ export META_API_KEY=<your key> META_MODEL_API_BASE_URL=https://api.meta.ai/v1 ME
 
 | Role | Job | Model / tool | How it runs |
 |---|---|---|---|
-| Supervisor chat | One turn → plan offer or tasks (`POST /v1/chat`) | `muse-spark-1.3-contributor` via the **Meta Model API key**; stub when unset | Server-side in the ledger, streamed as SSE |
+| Supervisor chat | One turn → plan offer or tasks (`POST /v1/chat`) | Live model via Meta/Ollama/OpenRouter; stub when unset | Server-side in the ledger, streamed as SSE |
 | Approver (you) | Planner Approve; seals hidden suites at approve time | Same model via the ledger | Approve button → `POST /v1/plans/{slug}/approve` |
-| Coder / worker | Claim → attempt → result on a leased task | Headless `muse` CLI (Muse Code subscription) or `META_API_KEY` | Any host against the ledger; the execute view only observes |
-| Reviewer | Pass/fail verdicts; done needs contract + evidence + passing head | No separate persona UI — verdicts are recorded via the API | Ledger receipts |
+| Owner session | Cookie login in the web workspace | — | May approve `needs_review` → `done` only when the latest result verdict is `pass`, plus contract and evidence. Cannot claim or create grants |
+| Coder / worker | Claim → attempt → result on a leased task (`x-rouvr-token`) | Headless `muse` CLI or a stack client | Any host against the ledger; Record execute only observes / optionally names a worker |
+| Reviewer | Pass/fail verdicts | No separate persona UI — verdicts via the API | Ledger receipts |
 
-Neither credential is ever committed; both come from the environment.
+Without a worker process, tasks stay `open` after approve/execute. Bring one up with the stack token against the same ledger (see `scripts/rouvr` for the full stack, or call `POST /v1/tasks/{id}/assignments/claim` yourself). Never set `ROUVR_INSECURE_DEV` or `ROUVR_ALLOW_ANON` except on a private loopback bind.
+
+Neither credential is ever committed; both come from the environment. Operator details: [web/README.md](web/README.md).
 
 ## Ecosystem: powered by Hyeve
 
@@ -173,11 +176,14 @@ What's green on this branch (`rouvr-development`):
 - The plan loop, end to end on the live stack: chat → plan offer → approve (+ sealing, seal durations in receipts) → execute dispatch → fail → fix → done, recorded under `e2e/recordings/`.
 
 Known limits, said plainly:
+- **No in-UI worker.** Claim, attempts, results, and heartbeats are stack-token APIs. The execute view waits honestly until a worker claims a task.
+- **Board freshness.** The board polls tasks every 3s and loads a closed events snapshot (`live=0`); task detail tails live SSE (`live=1`).
 - **No separate reviewer persona.** Reviewer verdicts are recorded through the same API as everything else; there is no distinct reviewer UI or role. Builder≠reviewer holds as a rule (a passing verify result on the head plus contract and evidence gates `done`), not as a separate agent you can watch.
-- **Sealing can fail closed and leave a task pending.** Approve-time sealing calls the model per task (bounded: 6,000 tokens, low reasoning, 90 s shared budget). A billing error or an unparseable suite records a `seal:authored` receipt with `ok: false` and `seal_pending` evidence instead of `suite_sealed`; `POST /v1/tasks/{id}/seal` retries it. Observed live: 28.3 s and 29.8 s seals, one 402, one unparseable retry.
-- Chat plan authoring and sealing need the live Meta model; the stub provider answers but cannot author plans or suites.
+- **Sealing can fail closed and leave a task pending.** Approve-time sealing calls the model per task (bounded: 6,000 tokens, low reasoning, 90 s shared budget). A billing error or an unparseable suite records a `seal:authored` receipt with `ok: false` and `seal_pending` evidence instead of `suite_sealed`; `POST /v1/tasks/{id}/seal` retries it.
+- Chat plan authoring and sealing need a live model; the stub provider answers but cannot author plans or suites.
 - The MCP channel is supervisor-scoped: every MCP tool calls the ledger with the shared stack token and sees all tenants. Per-user scoping lives at the API layer.
-- This is dev software. Nothing here is hardened.
+- `core/`, `workers/`, `lane/`, Temporal demos are experimental and not part of the lite quickstart.
+- This is early software. Nothing here is production-hardened.
 
 ## Roadmap
 

@@ -174,12 +174,18 @@ test("user menu never disappears on a live session", () => {
   );
 });
 
-test("bottom-left profile shows the real logged-in username", () => {
+test("account profile lives in the header user menu only", () => {
   const layout = read("src/app/workspace/layout.tsx");
-  assert.ok(layout.includes("data-profile-username"), "profile name must carry its marker");
+  const menuAt = layout.indexOf("data-user-menu");
+  const profileAt = layout.indexOf("data-profile-username");
+  assert.ok(menuAt > 0 && profileAt > menuAt, "profile name must sit inside the user menu");
   assert.ok(
     layout.includes('{username ?? "unknown user"}'),
     "profile must render the session username, never a placeholder",
+  );
+  assert.ok(
+    !layout.includes("Account options live in the user menu"),
+    "rail must not duplicate account info or point elsewhere for options",
   );
 });
 

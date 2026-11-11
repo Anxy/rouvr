@@ -21,12 +21,12 @@ import { shellGreeting } from "@/lib/greeting";
 
 // Figma shell port (sidebar + topbar, 68px brand/topbar bands, 242px rail):
 // contract IA in Figma order, theme tokens only, every control live — the
-// context card and sidebar profile row are static, the header avatar opens
-// a native-disclosure user menu (profile info, Help & support into chat,
-// working Sign out), and a footer links the real destinations.
+// context card is static, account options live only in the header user menu
+// (profile info, Help & support into chat, working Sign out), and a footer
+// links the real destinations. No duplicate account block in the rail.
 const NAV: { href: string; label: string; icon: LucideIcon }[] = [
   { href: "/workspace", label: "Board", icon: LayoutGrid },
-  { href: "/workspace/chat", label: "Chat", icon: MessageSquare },
+  { href: "/workspace/chat", label: "Supervisor", icon: MessageSquare },
   { href: "/workspace/planner", label: "Planner", icon: ClipboardList },
   { href: "/workspace/projects", label: "Projects", icon: Folder },
   { href: "/workspace/tasks", label: "Tasks", icon: ListTodo },
@@ -115,6 +115,12 @@ function AppShell({ children }: { children: React.ReactNode }) {
   // server render and the client clock can disagree across midnight.
   const greeting = shellGreeting(authed ? username : null, new Date());
 
+  const isChatSurface =
+    pathname === "/workspace/chat" ||
+    pathname.startsWith("/workspace/chat/") ||
+    pathname === "/workspace/planner" ||
+    pathname.startsWith("/workspace/planner/");
+
   return (
     <div className="min-h-screen bg-abyss">
       <aside className="fixed inset-y-0 left-0 z-30 flex w-[242px] flex-col border-r border-line bg-abyss">
@@ -156,27 +162,10 @@ function AppShell({ children }: { children: React.ReactNode }) {
             />
           ) : null}
         </nav>
-
-        {authed ? (
-          <div className="mt-auto border-t border-line p-3">
-            <div className="flex items-center gap-2 px-1 py-1">
-              <Avatar name={username ?? "?"} size={30} />
-              <div className="min-w-0 flex-1">
-                <p className="truncate text-[11px] font-semibold text-fog" data-profile-username>
-                  {username ?? "unknown user"}
-                </p>
-                <p className="truncate text-[9px] text-dim">{tenant ?? ""}</p>
-              </div>
-            </div>
-            <p className="mt-2 px-1 text-[9px] text-dim">
-              Account options live in the user menu, top right.
-            </p>
-          </div>
-        ) : null}
       </aside>
 
-      <div className="pl-[242px]">
-        <header className="sticky top-0 z-20 flex h-[68px] items-center gap-3 border-b border-line bg-abyss/90 px-6 backdrop-blur">
+      <div className="flex min-h-screen flex-col pl-[242px]">
+        <header className="sticky top-0 z-20 flex h-[68px] shrink-0 items-center gap-3 border-b border-line bg-abyss/90 px-6 backdrop-blur">
           <div data-greeting>
             <p
               suppressHydrationWarning
@@ -230,7 +219,12 @@ function AppShell({ children }: { children: React.ReactNode }) {
                       <p className="text-[9px] font-semibold uppercase tracking-widest text-dim">
                         Profile
                       </p>
-                      <p className="mt-1 truncate text-xs font-semibold text-fog">{username ?? tenant ?? "account"}</p>
+                      <p
+                        className="mt-1 truncate text-xs font-semibold text-fog"
+                        data-profile-username
+                      >
+                        {username ?? "unknown user"}
+                      </p>
                       <p className="truncate font-mono text-[10px] text-dim">
                         {tenant ? `${tenant}${project ? ` / ${project}` : ""}` : "—"}
                       </p>
@@ -255,10 +249,18 @@ function AppShell({ children }: { children: React.ReactNode }) {
             ) : null}
           </div>
         </header>
-        <main className="mx-auto w-full max-w-[1600px] px-8 py-[30px]">{children}</main>
+        <main
+          className={
+            isChatSurface
+              ? "mx-auto flex w-full max-w-[1600px] min-h-0 flex-1 flex-col px-8 py-4"
+              : "mx-auto w-full max-w-[1600px] flex-1 px-8 py-[30px]"
+          }
+        >
+          {children}
+        </main>
         <footer
           data-footer
-          className="mx-auto flex w-full max-w-[1600px] flex-wrap items-center gap-x-4 gap-y-1 border-t border-line px-8 py-4"
+          className="mx-auto mt-auto flex w-full max-w-[1600px] shrink-0 flex-wrap items-center gap-x-4 gap-y-1 border-t border-line px-8 py-4"
         >
           <p className="font-mono text-[10px] uppercase tracking-widest text-dim">
             rouvr — your pack is working

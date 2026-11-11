@@ -63,7 +63,7 @@ test("shell nav matches the contract IA in order", () => {
   const layout = read("src/app/workspace/layout.tsx");
   const items = [
     ["/workspace", "Board"],
-    ["/workspace/chat", "Chat"],
+    ["/workspace/chat", "Supervisor"],
     ["/workspace/planner", "Planner"],
     ["/workspace/projects", "Projects"],
     ["/workspace/tasks", "Tasks"],
@@ -132,7 +132,7 @@ test("the shell's only button is the working Sign out", () => {
   assert.equal(
     (layout.match(/<button/g) ?? []).length,
     1,
-    "shell must render exactly one button (Sign out inside the user menu); context and sidebar profile rows stay static",
+    "shell must render exactly one button (Sign out inside the user menu); account options live only there",
   );
   assert.ok(layout.includes("Sign out"), "shell must offer Sign out");
   assert.ok(layout.includes("void logout()"), "Sign out must call the session logout");

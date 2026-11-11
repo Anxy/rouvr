@@ -2830,6 +2830,26 @@
         ]
       }
     },
+    "/auth/session": {
+      "get": {
+        "description": "Same identity login returns, read back from the cookie.\n\nA later tab has the httponly cookie and not the login reply, so\nusername and csrf_token would otherwise exist only in the tab\nthat signed in. GET is safe: no CSRF token is required to refill it.",
+        "operationId": "current_session_auth_session_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Current Session",
+        "tags": [
+          "auth"
+        ]
+      }
+    },
     "/demo/onboard": {
       "get": {
         "operationId": "demo_onboard_demo_onboard_get",

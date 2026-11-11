@@ -4,6 +4,7 @@ import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { AnimatePresence, m } from "motion/react";
 import { Check, ChevronDown } from "lucide-react";
 import { fieldClass } from "@/components/forms/FieldError";
+import { filterComboboxOptions } from "@/lib/combobox";
 import { cn } from "@/lib/utils";
 
 type Option = { value: string; label: string };
@@ -168,6 +169,10 @@ export function Select({
 // No new deps — same theme tokens, motion dropdown, and steel/brand
 // styling as Select. The dropdown scrolls internally so 10+ projects
 // stay usable.
+//
+// Filtering only kicks in after the user types while the list is open.
+// Using the selected value itself as the query (e.g. "All projects")
+// would hide every other option the moment the list opens.
 export function Combobox({
   id,
   value,
@@ -191,12 +196,12 @@ export function Combobox({
   const rootRef = useRef<HTMLDivElement>(null);
   const [open, setOpen] = useState(false);
   const [active, setActive] = useState(0);
+  const [filtering, setFiltering] = useState(false);
 
-  const query = value.trim().toLowerCase();
-  const filtered = useMemo(() => {
-    if (!query) return [...options];
-    return options.filter((option) => option.toLowerCase().includes(query));
-  }, [options, query]);
+  const filtered = useMemo(
+    () => filterComboboxOptions(options, value, filtering),
+    [options, value, filtering],
+  );
 
   // safeActive clamps the highlight to a real row, so an externally
   // reset value can never strand the highlight out of range.
@@ -207,6 +212,7 @@ export function Combobox({
     const onPointer = (event: PointerEvent) => {
       if (!rootRef.current?.contains(event.target as Node)) {
         setOpen(false);
+        setFiltering(false);
         onBlur?.();
       }
     };
@@ -216,6 +222,7 @@ export function Combobox({
 
   const choose = (option: string) => {
     onChange(option);
+    setFiltering(false);
     setOpen(false);
   };
 
@@ -225,11 +232,15 @@ export function Combobox({
         id={id}
         value={value}
         onChange={(e) => {
+          setFiltering(true);
           onChange(e.target.value);
           setActive(0);
           setOpen(true);
         }}
-        onFocus={() => setOpen(true)}
+        onFocus={() => {
+          setFiltering(false);
+          setOpen(true);
+        }}
         onBlur={onBlur}
         onKeyDown={(event) => {
           if (event.key === "ArrowDown") {

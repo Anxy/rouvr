@@ -163,10 +163,11 @@ CREATE TABLE IF NOT EXISTS chat_turns (
   message     TEXT NOT NULL,  -- user text for this turn
   reply       TEXT NOT NULL,  -- assistant reply text for this turn
   class       TEXT NOT NULL DEFAULT '',  -- intake class or '' for legacy turns
+  surface     TEXT NOT NULL DEFAULT 'supervisor',  -- supervisor|planner UI channel
   created_at  TEXT NOT NULL,
   FOREIGN KEY (tenant, project) REFERENCES projects(tenant, project)
 );
-CREATE INDEX IF NOT EXISTS chat_turns_scope ON chat_turns(tenant, project, id);
+CREATE INDEX IF NOT EXISTS chat_turns_scope ON chat_turns(tenant, project, surface, id);
 -- Slice C intake router: every classification the intake classifier makes,
 -- with its confidence, created ids and the autonomy decision (who/when/
 -- level). Reclassifiable by appending (reclass_of points at the prior row)

@@ -436,3 +436,19 @@ def test_chat_system_prompt_carries_manifest_and_skills(session_client, monkeypa
     assert "workhub_create_task" in system  # a real live tool name
     assert "probe-skill" in system  # the seeded skill slug
     assert "tenant 'demo', project 'demo'" in system
+
+
+def test_supervisor_and_planner_surfaces_keep_separate_logs(session_client):
+    _result(_chat(session_client, _turn_msg(answer="from supervisor"),
+                  message_id="sup-1", surface="supervisor"))
+    _result(_chat(session_client, _turn_msg(answer="from planner"),
+                  message_id="plan-1", surface="planner"))
+    # Default list is supervisor-only (legacy callers + Supervisor UI).
+    sup = session_client.get("/api/v1/chat/turns",
+                             params={"project": "demo"}).json()["items"]
+    assert [(t["message_id"], t["surface"]) for t in sup] == [("sup-1", "supervisor")]
+    plan = session_client.get(
+        "/api/v1/chat/turns",
+        params={"project": "demo", "surface": "planner"},
+    ).json()["items"]
+    assert [(t["message_id"], t["surface"]) for t in plan] == [("plan-1", "planner")]

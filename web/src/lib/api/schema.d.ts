@@ -119,6 +119,9 @@ export interface paths {
         /**
          * List Chat Turns Lite
          * @description Append-only conversation log for the scope (never hard-deleted).
+         *
+         *     ``surface`` keeps Supervisor and Planner threads separate; legacy rows
+         *     without a surface default to supervisor.
          */
         get: operations["list_chat_turns_lite_api_v1_chat_turns_get"];
         put?: never;
@@ -1289,6 +1292,9 @@ export interface paths {
         /**
          * List Chat Turns
          * @description Append-only conversation log for the scope (never hard-deleted).
+         *
+         *     ``surface`` keeps Supervisor and Planner threads separate; legacy rows
+         *     without a surface default to supervisor.
          */
         get: operations["list_chat_turns_v1_chat_turns_get"];
         put?: never;
@@ -2466,6 +2472,7 @@ export interface operations {
                 project: string;
                 tenant?: string | null;
                 message_id?: string | null;
+                surface?: string;
             };
             header?: never;
             path?: never;
@@ -4549,6 +4556,7 @@ export interface operations {
                 project: string;
                 tenant?: string | null;
                 message_id?: string | null;
+                surface?: string;
             };
             header?: never;
             path?: never;

@@ -362,7 +362,7 @@
     },
     "/api/v1/chat/turns": {
       "get": {
-        "description": "Append-only conversation log for the scope (never hard-deleted).",
+        "description": "Append-only conversation log for the scope (never hard-deleted).\n\n``surface`` keeps Supervisor and Planner threads separate; legacy rows\nwithout a surface default to supervisor.",
         "operationId": "list_chat_turns_lite_api_v1_chat_turns_get",
         "parameters": [
           {
@@ -404,6 +404,16 @@
                 }
               ],
               "title": "Message Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "surface",
+            "required": false,
+            "schema": {
+              "default": "supervisor",
+              "title": "Surface",
+              "type": "string"
             }
           }
         ],
@@ -3123,7 +3133,7 @@
     },
     "/v1/chat/turns": {
       "get": {
-        "description": "Append-only conversation log for the scope (never hard-deleted).",
+        "description": "Append-only conversation log for the scope (never hard-deleted).\n\n``surface`` keeps Supervisor and Planner threads separate; legacy rows\nwithout a surface default to supervisor.",
         "operationId": "list_chat_turns_v1_chat_turns_get",
         "parameters": [
           {
@@ -3165,6 +3175,16 @@
                 }
               ],
               "title": "Message Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "surface",
+            "required": false,
+            "schema": {
+              "default": "supervisor",
+              "title": "Surface",
+              "type": "string"
             }
           }
         ],

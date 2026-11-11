@@ -181,6 +181,7 @@ export interface ProxyPaths {
             autonomy?: string;
             plan_action?: string;
             plan_entry?: number;
+            surface?: "supervisor" | "planner";
           };
         };
       };
@@ -193,7 +194,13 @@ export interface ProxyPaths {
   };
   "/api/chat/turns": {
     get: {
-      parameters: { query: { project: string; message_id?: string } };
+      parameters: {
+        query: {
+          project: string;
+          message_id?: string;
+          surface?: "supervisor" | "planner";
+        };
+      };
       responses: {
         200: {
           content: {
@@ -206,6 +213,7 @@ export interface ProxyPaths {
                 message: string;
                 reply: string;
                 class?: string;
+                surface?: string;
                 created_at: string;
               }[];
             };

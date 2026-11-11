@@ -452,12 +452,17 @@ def make_app(db_url: str = DB_URL) -> FastAPI:
         c.execute(text("CREATE TABLE IF NOT EXISTS chat_turns ("
                        "id INTEGER PRIMARY KEY, tenant TEXT NOT NULL, project TEXT NOT NULL,"
                        "message_id TEXT NOT NULL, message TEXT NOT NULL, reply TEXT NOT NULL,"
-                       "class TEXT NOT NULL DEFAULT '', created_at TEXT NOT NULL)"))
+                       "class TEXT NOT NULL DEFAULT '',"
+                       "surface TEXT NOT NULL DEFAULT 'supervisor',"
+                       "created_at TEXT NOT NULL)"))
         tcols2 = [r[1] for r in c.execute(text("PRAGMA table_info(chat_turns)"))]
         if tcols2 and "class" not in tcols2:
             c.execute(text("ALTER TABLE chat_turns ADD COLUMN class TEXT NOT NULL DEFAULT ''"))
+        if tcols2 and "surface" not in tcols2:
+            c.execute(text(
+                "ALTER TABLE chat_turns ADD COLUMN surface TEXT NOT NULL DEFAULT 'supervisor'"))
         c.execute(text("CREATE INDEX IF NOT EXISTS chat_turns_scope"
-                       " ON chat_turns(tenant, project, id)"))
+                       " ON chat_turns(tenant, project, surface, id)"))
         c.execute(text("CREATE TABLE IF NOT EXISTS intake_classifications ("
                        "id INTEGER PRIMARY KEY, tenant TEXT NOT NULL, project TEXT NOT NULL,"
                        "turn_id TEXT NOT NULL, class TEXT NOT NULL,"
@@ -2094,6 +2099,9 @@ def make_app(db_url: str = DB_URL) -> FastAPI:
         if plan_entry is not None and (isinstance(plan_entry, bool)
                                        or not isinstance(plan_entry, int)):
             raise HTTPException(422, "plan_entry must be an integer knowledge id")
+        surface = body.get("surface") or "supervisor"
+        if surface not in ("supervisor", "planner"):
+            raise HTTPException(422, "surface must be supervisor or planner")
         try:
             provider = _chatmod.provider_from_env()
         except (ValueError, RuntimeError) as e:
@@ -2123,9 +2131,9 @@ def make_app(db_url: str = DB_URL) -> FastAPI:
             """One append-only conversation-log row per turn. No DELETE path
             touches chat_turns: history is never hard-deleted."""
             c.execute(text("INSERT INTO chat_turns(tenant,project,message_id,message,reply,class,"
-                           "created_at) VALUES(:t,:p,:m,:g,:r,:c,:n)"),
+                           "surface,created_at) VALUES(:t,:p,:m,:g,:r,:c,:s,:n)"),
                       {"t": tenant, "p": project, "m": message_id, "g": message.strip(),
-                       "r": reply, "c": cls or "", "n": _now()})
+                       "r": reply, "c": cls or "", "s": surface, "n": _now()})
 
         def _record_class(c, ident: str, level: str, cls: str, conf: float,
                           cat: str | None, created: dict, reclass_of=None) -> dict:
@@ -3325,16 +3333,24 @@ def make_app(db_url: str = DB_URL) -> FastAPI:
 
     @app.get("/v1/chat/turns")
     def list_chat_turns(request: Request, project: str, tenant: str | None = None,
-                         message_id: str | None = None):
-        """Append-only conversation log for the scope (never hard-deleted)."""
+                         message_id: str | None = None,
+                         surface: str = "supervisor"):
+        """Append-only conversation log for the scope (never hard-deleted).
+
+        ``surface`` keeps Supervisor and Planner threads separate; legacy rows
+        without a surface default to supervisor.
+        """
+        if surface not in ("supervisor", "planner"):
+            raise HTTPException(422, "surface must be supervisor or planner")
         with eng.begin() as c:
             scope = {"project": project}
             if tenant is not None:
                 scope["tenant"] = tenant
             t, p = _session_scope(request, c, scope)
             _registered(c, t, p)
-            q = "SELECT * FROM chat_turns WHERE tenant=:t AND project=:p"
-            kw: dict = {"t": t, "p": p}
+            q = ("SELECT * FROM chat_turns WHERE tenant=:t AND project=:p"
+                 " AND surface=:s")
+            kw: dict = {"t": t, "p": p, "s": surface}
             if message_id:
                 q += " AND message_id=:m"
                 kw["m"] = message_id

@@ -13,9 +13,10 @@ import {
 
 // Execution view: observe one materialized plan's slice->tasks chain.
 // Polls the derived plan status every 3 s (timer cleared on unmount);
-// no new orchestration engine — dispatch assigns chain tasks to a worker
-// principal through the plan execute endpoint, and this page watches the
-// same chain states the board and task detail pages already render.
+// no new orchestration engine — Record execute calls the plan execute
+// endpoint (optional worker name only). Open tasks stay open until a
+// worker claims them. This page watches the same chain states the board
+// and task detail pages already render.
 const POLL_MS = 3000;
 
 function groupOf(state: string): "working" | "next" | "done" | "attention" {
@@ -122,10 +123,11 @@ export default function ExecutePage() {
         return;
       }
       setDetail(data);
-      const bits = [`dispatched ${data.dispatched.length} task(s)`];
+      const bits = [`recorded execute for ${data.dispatched.length} open task(s)`];
       if (data.assigned.length > 0) bits.push(`assigned ${data.assigned.length}`);
       if (data.contested.length > 0)
         bits.push(`${data.contested.length} contested (held by another worker)`);
+      bits.push("tasks stay open until a worker claims them");
       setDispatchMsg(bits.join(" · ") + ".");
     } catch (err) {
       setDispatchMsg(err instanceof Error ? err.message : "dispatch failed");
@@ -152,8 +154,10 @@ export default function ExecutePage() {
       <p className="mt-1 max-w-2xl text-sm text-muted">
         {detail
           ? `${detail.entry.title} · ${detail.status}`
-          : "Live view of one materialized plan."}{" "}
-        Refreshes every 3 seconds.
+          : "One materialized plan."}{" "}
+        Recording execute assigns an optional worker name. It does not start a
+        worker — open tasks stay open until one claims them. Refreshes every 3
+        seconds.
       </p>
       <div className="mt-4 flex flex-wrap items-center gap-2">
         <Link
@@ -193,7 +197,7 @@ export default function ExecutePage() {
               disabled={dispatchBusy || detail.status !== "materialized"}
               onClick={() => void dispatch()}
             >
-              {dispatchBusy ? "Dispatching…" : "Dispatch"}
+              {dispatchBusy ? "Recording…" : "Record execute"}
             </Button>
           </div>
           {dispatchMsg ? (

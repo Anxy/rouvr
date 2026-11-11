@@ -118,10 +118,15 @@ export function Select({
             id={listId}
             role="listbox"
             aria-labelledby={id}
-            initial={{ opacity: 0, y: 6 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: 4 }}
-            transition={{ duration: 0.18, ease: [0.22, 1, 0.36, 1] }}
+            initial={{ opacity: 0, scale: 0.97 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{
+              opacity: 0,
+              scale: 0.97,
+              transition: { duration: 0.12, ease: [0.23, 1, 0.32, 1] },
+            }}
+            transition={{ duration: 0.18, ease: [0.23, 1, 0.32, 1] }}
+            style={{ transformOrigin: "top center" }}
             className="absolute left-0 right-0 z-30 mt-2 overflow-hidden rounded-xl border border-steel/70 bg-navy p-1.5 shadow-[0_24px_60px_-24px_rgb(8_169_240/0.45)]"
           >
             {options.map((option, index) => {
@@ -277,10 +282,15 @@ export function Combobox({
             id={listId}
             role="listbox"
             aria-label={ariaLabel}
-            initial={{ opacity: 0, y: 6 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: 4 }}
-            transition={{ duration: 0.18, ease: [0.22, 1, 0.36, 1] }}
+            initial={{ opacity: 0, scale: 0.97 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{
+              opacity: 0,
+              scale: 0.97,
+              transition: { duration: 0.12, ease: [0.23, 1, 0.32, 1] },
+            }}
+            transition={{ duration: 0.18, ease: [0.23, 1, 0.32, 1] }}
+            style={{ transformOrigin: "top center" }}
             className="absolute left-0 right-0 z-30 mt-2 max-h-60 overflow-y-auto rounded-xl border border-steel/70 bg-navy p-1.5 shadow-[0_24px_60px_-24px_rgb(8_169_240/0.45)]"
           >
             {filtered.length === 0 ? (

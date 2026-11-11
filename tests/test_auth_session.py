@@ -90,6 +90,20 @@ def test_cookie_post_with_origin_passes(user_client):
     assert r.json()["tenant"] == "demo"
 
 
+def test_session_get_restores_username_and_csrf_from_cookie(user_client):
+    login = _login(user_client)
+    assert login.status_code == 200, login.text
+    signed_in = TestClient(user_client.app, cookies=login.cookies)
+    restored = signed_in.get("/auth/session")
+    assert restored.status_code == 200, restored.text
+    body = restored.json()
+    assert body["username"] == "admin"
+    assert body["tenant"] == "demo" and body["role"] == "owner"
+    assert body["csrf_token"] == login.json()["csrf_token"]
+    anon = TestClient(user_client.app)
+    assert anon.get("/auth/session").status_code == 401
+
+
 def test_cookie_post_with_csrf_token_passes(user_client):
     login = _login(user_client)
     c = TestClient(user_client.app, cookies=login.cookies)

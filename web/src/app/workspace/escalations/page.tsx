@@ -6,15 +6,14 @@ import { useRouter } from "next/navigation";
 import { TaskStatePill } from "@/components/ui/StatusPill";
 import { PipelineStrip } from "@/components/workspace/PipelineStrip";
 import { Button } from "@/components/ui/Button";
-import { useSession } from "@/components/workspace/session";
 import { csrfHeaders, ws, type TaskRow } from "@/lib/api/workspace";
 import {
   ESCALATION_STATES,
   ESCALATION_TRANSITIONS,
   REQUEST_CHANGES_KIND,
+  approveBlocker,
   buildRequestChangesBody,
   escalationActionsForState,
-  grantExpiryIso,
   grantScopeForTask,
 } from "@/lib/escalations";
 
@@ -40,14 +39,12 @@ interface MoveRecord {
 
 export default function EscalationsPage() {
   const router = useRouter();
-  const { tenant } = useSession();
   const [tasks, setTasks] = useState<TaskRow[]>([]);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
   const [query, setQuery] = useState("");
   const [stateFilter, setStateFilter] = useState<"all" | "needs_review" | "stuck">("all");
   const [feedbacks, setFeedbacks] = useState<Record<number, string>>({});
-  const [approvers, setApprovers] = useState<Record<number, string>>({});
   const [busy, setBusy] = useState<Record<number, string | null>>({});
   const [rowErrors, setRowErrors] = useState<Record<number, string>>({});
   const [grantStatus, setGrantStatus] = useState<Record<number, string>>({});
@@ -160,6 +157,11 @@ export default function EscalationsPage() {
         setRowError(task.id, `approve needs needs_review (task is ${task.state})`);
         return;
       }
+      const why = approveBlocker(task);
+      if (why) {
+        setRowError(task.id, why);
+        return;
+      }
       if (await postTransition(task.id, to)) {
         recordMove(task, to);
         await load();
@@ -219,60 +221,6 @@ export default function EscalationsPage() {
     }
   }
 
-  async function grant(task: TaskRow) {
-    clearRowError(task.id);
-    setRowBusy(task.id, "grant");
-    try {
-      if (!escalationActionsForState(task.state).includes("grant")) {
-        setRowError(task.id, `grant needs blocked or failed (task is ${task.state})`);
-        return;
-      }
-      const approvedBy = (approvers[task.id] ?? tenant ?? "owner").trim() || "owner";
-      const scope = grantScopeForTask(task.id);
-      const { response: grantRes } = await ws.POST("/api/grants", {
-        body: { scope, expires_at: grantExpiryIso(7), approved_by: approvedBy },
-        headers: csrfHeaders(),
-      });
-      if (grantRes.status === 401) {
-        router.push("/workspace/login");
-        return;
-      }
-      if (!grantRes.ok) {
-        const detail = await grantRes.text().catch(() => "");
-        setRowError(task.id, detail || `grant failed (${grantRes.status})`);
-        return;
-      }
-      // Grant recorded: note it, then reopen so the task moves observably.
-      const { response: evRes } = await ws.POST("/api/tasks/{id}/evidence", {
-        params: { path: { id: String(task.id) } },
-        body: {
-          kind: "escalation_resolved",
-          body: { scope, approved_by: approvedBy, resolution: "grant" },
-        },
-        headers: csrfHeaders(),
-      });
-      if (!evRes.ok && evRes.status !== 401) {
-        const detail = await evRes.text().catch(() => "");
-        setRowError(task.id, detail || `grant note failed (${evRes.status})`);
-        return;
-      }
-      if (evRes.status === 401) {
-        router.push("/workspace/login");
-        return;
-      }
-      const to = ESCALATION_TRANSITIONS.grant;
-      if (await postTransition(task.id, to)) {
-        recordMove(task, to);
-        setGrantStatus((prev) => ({ ...prev, [task.id]: `grant active · scope ${scope}` }));
-        await load();
-      }
-    } catch (err) {
-      setRowError(task.id, err instanceof Error ? err.message : "grant failed");
-    } finally {
-      setRowBusy(task.id, null);
-    }
-  }
-
   async function requestChanges(task: TaskRow) {
     clearRowError(task.id);
     const feedback = (feedbacks[task.id] ?? "").trim();
@@ -322,7 +270,7 @@ export default function EscalationsPage() {
       <div className="mb-6">
         <h1 className="text-2xl font-semibold text-white">Escalations inbox</h1>
         <p className="mt-1 text-sm text-muted">
-          Approve, retry, grant, or request changes — every action moves a task.
+          Approve a verified head, retry, or request changes. Grants are issued by the stack — this inbox can only look one up.
         </p>
       </div>
 
@@ -385,6 +333,7 @@ export default function EscalationsPage() {
           {visible.map((task) => {
             const actions = escalationActionsForState(task.state);
             const isBusy = busy[task.id] != null;
+            const blocker = actions.includes("approve") ? approveBlocker(task) : null;
             return (
               <li
                 key={task.id}
@@ -417,7 +366,7 @@ export default function EscalationsPage() {
                   {actions.includes("approve") ? (
                     <Button
                       variant="primary"
-                      disabled={isBusy}
+                      disabled={isBusy || blocker !== null}
                       data-action="approve"
                       onClick={() => void approve(task)}
                     >
@@ -434,37 +383,26 @@ export default function EscalationsPage() {
                       {busy[task.id] === "retry" ? "Working…" : "Retry → open"}
                     </Button>
                   ) : null}
-                  {actions.includes("grant") ? (
-                    <>
-                      <input
-                        value={approvers[task.id] ?? tenant ?? "owner"}
-                        onChange={(e) =>
-                          setApprovers((prev) => ({ ...prev, [task.id]: e.target.value }))
-                        }
-                        aria-label={`Approved by for task ${task.id}`}
-                        placeholder="approved by"
-                        className="w-32 rounded-xl border border-steel/40 bg-abyss/60 px-3 py-2 text-sm text-cloud placeholder:text-muted/60 focus:border-brand/60 focus:outline-none"
-                      />
-                      <Button
-                        variant="secondary"
-                        disabled={isBusy}
-                        data-action="grant"
-                        onClick={() => void grant(task)}
-                      >
-                        {busy[task.id] === "grant" ? "Working…" : "Grant + reopen"}
-                      </Button>
-                      <button
-                        type="button"
-                        disabled={isBusy}
-                        data-action="grant-check"
-                        onClick={() => void checkGrant(task)}
-                        className="rounded-full px-4 py-2 font-mono text-xs text-muted transition-colors hover:text-cloud disabled:opacity-60"
-                      >
-                        {busy[task.id] === "grant-check" ? "Checking…" : "Check grant"}
-                      </button>
-                    </>
+                  {task.state === "blocked" || task.state === "failed" ? (
+                    <button
+                      type="button"
+                      disabled={isBusy}
+                      data-action="grant-check"
+                      onClick={() => void checkGrant(task)}
+                      className="rounded-full px-4 py-2 font-mono text-xs text-muted transition-colors hover:text-cloud disabled:opacity-60"
+                    >
+                      {busy[task.id] === "grant-check" ? "Checking…" : "Check grant"}
+                    </button>
                   ) : null}
                 </div>
+                {blocker ? (
+                  <p className="mt-2 text-sm text-muted">{blocker}</p>
+                ) : null}
+                {task.state === "blocked" || task.state === "failed" ? (
+                  <p className="mt-2 font-mono text-[11px] text-muted/60">
+                    Grants are issued by the stack. Check looks one up; Retry moves this task back to open.
+                  </p>
+                ) : null}
 
                 {actions.includes("request_changes") ? (
                   <div className="mt-3 space-y-2">

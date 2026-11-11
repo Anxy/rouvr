@@ -14,7 +14,8 @@ import { usePathname, useRouter } from "next/navigation";
 import {
   clearCsrfToken,
   clearSessionUsername,
-  sessionUsername,
+  setCsrfToken,
+  setSessionUsername,
   ws,
   type ProjectRow,
 } from "@/lib/api/workspace";
@@ -74,12 +75,29 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     const run = ++seq.current;
     await (async () => {
       try {
+        // Cookie is the session. Login stores the name once; a new tab
+        // has the cookie and not that store, so refill both before posts.
+        const sessionCall = await ws.GET("/api/auth/session");
+        if (run !== seq.current) return;
+        if (sessionCall.response.status === 401) {
+          setProjects([]);
+          setUsername(null);
+          clearSessionUsername();
+          clearCsrfToken();
+          setStatus("anonymous");
+          return;
+        }
+        if (!sessionCall.response.ok || !sessionCall.data) return;
+        setCsrfToken(sessionCall.data.csrf_token);
+        setSessionUsername(sessionCall.data.username);
+        setUsername(sessionCall.data.username);
         const { data, response } = await ws.GET("/api/projects");
         if (run !== seq.current) return;
         if (response.status === 401) {
           setProjects([]);
           setUsername(null);
           clearSessionUsername();
+          clearCsrfToken();
           setStatus("anonymous");
           return;
         }
@@ -94,9 +112,6 @@ export function SessionProvider({ children }: { children: ReactNode }) {
         setActiveProject((prev) =>
           known(prev) ? prev : known(stored) ? stored : (data.projects[0]?.project ?? null),
         );
-        // The stored login-reply username is only trusted alongside a live
-        // session: this probe just returned 200 for the session cookie.
-        setUsername(sessionUsername());
         setStatus("authenticated");
       } catch {
         // Network failure: leave the last known status in place.

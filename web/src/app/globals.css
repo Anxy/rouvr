@@ -35,6 +35,11 @@
   --color-coral: #fb7185;
   --color-cyan2: #67d1ff;
 
+  /* Stronger than the built-in CSS curves. Press and entrances use ease-out;
+     on-screen moves use ease-in-out. Never ease-in — it starts late. */
+  --ease-out-strong: cubic-bezier(0.23, 1, 0.32, 1);
+  --ease-in-out-strong: cubic-bezier(0.77, 0, 0.175, 1);
+
   --animate-shimmer: shimmer 6s linear infinite;
   --animate-drift-a: drift-a 22s ease-in-out infinite;
   --animate-drift-b: drift-b 28s ease-in-out infinite;
@@ -300,7 +305,7 @@ body {
       transparent 45%
     );
     opacity: var(--spot, 0);
-    transition: opacity 300ms ease;
+    transition: opacity 200ms ease;
     pointer-events: none;
   }
 }
@@ -362,13 +367,32 @@ body {
   animation: string-light 2.2s linear infinite;
 }
 
+/* Press feedback lives in the base layer so a button's own transition
+   utility still wins. Unlayered, this replaced every button transition
+   and dropped translate motion on controls positioned with it. */
+@layer base {
+  button:not(:disabled) {
+    transition-property: scale, color, background-color, border-color, opacity, box-shadow;
+    transition-duration: 160ms;
+    transition-timing-function: var(--ease-out-strong);
+  }
+  button:not(:disabled):active {
+    scale: 0.97;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,
   *::after {
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;
-    transition-duration: 0.01ms !important;
     scroll-behavior: auto !important;
+    /* Color and opacity stay so a state change is still visible.
+       Transform, translate, and scale drop out, so nothing travels. */
+    transition-property: color, background-color, border-color, outline-color, text-decoration-color, fill, stroke, opacity, box-shadow !important;
+  }
+  button:not(:disabled):active {
+    scale: none;
   }
 }

@@ -30,6 +30,7 @@ def test_pipeline_bare_task_is_all_pending(tmp_path):
     assert _row(c, tid)["pipeline"] == {
         "contract": "pending", "knowledge": "pending", "build": "pending",
         "review": "pending", "evidence": "pending"}
+    assert _row(c, tid)["head_verdict"] is None
 
 
 def test_pipeline_contract_knowledge_build_review_evidence(tmp_path):

@@ -268,8 +268,9 @@ export default function KnowledgePage() {
     setVerifying(hit.citation);
     setError("");
     try {
-      const { response } = await ws.POST("/api/knowledge/{key}/confirm", {
+      const { response } = await ws.POST("/api/knowledge/{key}/review", {
         params: { path: { key: id } },
+        body: { verdict: "verified" },
         headers: csrfHeaders(),
       });
       if (response.status === 401) {

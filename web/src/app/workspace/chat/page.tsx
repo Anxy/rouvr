@@ -69,6 +69,36 @@ interface Turn {
 
 const EMPTY_TURN = { question: null, slice: null, tasks: [], badge: null, offer: null };
 
+// The ledger streams the model envelope (JSON with answer/intake/slice)
+// as a token, then a result with the sentence the person should read.
+// Showing the envelope prints `{"stub":true,...}` into the thread.
+function spokenTurn(raw: string): string {
+  const trimmed = raw.trim();
+  if (!trimmed.startsWith("{")) return raw;
+  try {
+    const obj = JSON.parse(trimmed) as Record<string, unknown>;
+    if (obj.stub === true) return "";
+    const answer = typeof obj.answer === "string" ? obj.answer.trim() : "";
+    const question = typeof obj.question === "string" ? obj.question.trim() : "";
+    if (answer) return answer;
+    if (question) return question;
+    if ("intake" in obj || "slice" in obj || "tasks" in obj || "detail" in obj) return "";
+  } catch {
+    return "";
+  }
+  return raw;
+}
+
+function errorDetail(raw: string): string {
+  try {
+    const obj = JSON.parse(raw) as { detail?: unknown };
+    if (typeof obj.detail === "string" && obj.detail.trim()) return obj.detail;
+  } catch {
+    /* already a sentence */
+  }
+  return raw;
+}
+
 // Intake badge tones mirror TaskStatePill (src/components/ui/StatusPill.tsx):
 // a created task reads as open blue, a saved knowledge entry as done green,
 // a plain log append as neutral steel. Theme tokens only, no hard-coded hex.
@@ -240,7 +270,8 @@ export default function ChatPage() {
         const detail = await response.text().catch(() => "");
         patchTurn(asstId, {
           status: "error",
-          error: detail || `chat failed (${response.status})`,
+          error: errorDetail(detail) || `chat failed (${response.status})`,
+          text: "",
         });
         setMessage(outgoing);
         return;
@@ -266,7 +297,7 @@ export default function ChatPage() {
           .filter((f) => f.event === "token")
           .map((f) => {
             try {
-              return (JSON.parse(f.data) as { text?: string }).text ?? "";
+              return spokenTurn((JSON.parse(f.data) as { text?: string }).text ?? "");
             } catch {
               return "";
             }
@@ -282,7 +313,7 @@ export default function ChatPage() {
       const frames = parseSseFrames(all);
       const errors = frames.filter((f) => f.event === "error");
       if (errors.length > 0) {
-        patchTurn(asstId, { status: "error", error: errors[0].data });
+        patchTurn(asstId, { status: "error", error: errorDetail(errors[0].data), text: "" });
         setMessage(outgoing);
         return;
       }

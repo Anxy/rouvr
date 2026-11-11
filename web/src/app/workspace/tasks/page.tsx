@@ -24,7 +24,7 @@ export default function TasksPage() {
   const router = useRouter();
   // Choosing a project here moves the whole workspace with it (header,
   // sidebar, chat); "All projects" stays a tasks-only view.
-  const { projects, setProject: setSessionProject, username } = useSession();
+  const { projects, setProject: setSessionProject } = useSession();
   const [tasks, setTasks] = useState<TaskRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -175,36 +175,6 @@ export default function TasksPage() {
     }
   }
 
-  async function claimTask(id: number) {
-    if (!username) {
-      setRowError("sign in to claim this task");
-      return;
-    }
-    setRowBusy(true);
-    setRowError("");
-    try {
-      const { response } = await ws.POST("/api/tasks/{id}/claim", {
-        params: { path: { id: String(id) } },
-        body: { key: newKey(), principal: username },
-        headers: csrfHeaders(),
-      });
-      if (response.status === 401) {
-        router.push("/workspace/login");
-        return;
-      }
-      if (!response.ok) {
-        const detail = await response.text().catch(() => "");
-        setRowError(detail || `claim failed (${response.status})`);
-        return;
-      }
-      await load();
-    } catch (err) {
-      setRowError(err instanceof Error ? err.message : "claim failed");
-    } finally {
-      setRowBusy(false);
-    }
-  }
-
   async function confirmRetire(id: number) {
     if (!retireReason.trim()) return;
     setRowBusy(true);
@@ -244,8 +214,8 @@ export default function TasksPage() {
           <h1 className="text-2xl font-semibold text-white">Tasks</h1>
           <p className="mt-1 text-sm text-muted">
             Every task in scope — pick a project, then create, edit, or
-            retire. Claimed or finished work refuses edits; done work can
-            never be retired.
+            retire. A worker claims open tasks through the stack. Claimed
+            or finished work refuses edits; done work can never be retired.
           </p>
         </div>
         <div className="ml-auto flex gap-2">
@@ -469,15 +439,6 @@ export default function TasksPage() {
                   </div>
                   <span className="flex shrink-0 items-center gap-2">
                     <TaskStatePill state={t.state} />
-                    {t.state === "open" ? (
-                      <button
-                        type="button"
-                        onClick={() => void claimTask(t.id)}
-                        className="rounded-lg border border-steel/40 px-2 py-1 font-mono text-[11px] text-muted transition-colors hover:border-brand/50 hover:text-cloud"
-                      >
-                        Claim
-                      </button>
-                    ) : null}
                     {t.state === "open" ? (
                       <button
                         type="button"

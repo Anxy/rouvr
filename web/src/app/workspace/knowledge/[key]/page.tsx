@@ -140,8 +140,9 @@ export default function KnowledgeEntryPage({
     setActionError("");
     setBusy(true);
     try {
-      const { response } = await ws.POST("/api/knowledge/{key}/confirm", {
+      const { response } = await ws.POST("/api/knowledge/{key}/review", {
         params: { path: { key } },
+        body: { verdict: "verified" },
         headers: csrfHeaders(),
       });
       if (response.status === 401) {

@@ -171,8 +171,16 @@ test("session username comes from the login reply and clears with the session", 
   const session = read("src/components/workspace/session.tsx");
   assert.ok(session.includes("username"), "session context must expose username");
   assert.ok(
+    session.includes('"/api/auth/session"') && session.includes("setCsrfToken"),
+    "a new tab must refill username and csrf from the cookie session",
+  );
+  assert.ok(
     (session.match(/clearSessionUsername\(\)/g) ?? []).length >= 2,
     "session must clear the username on both 401 and logout",
+  );
+  assert.ok(
+    (session.match(/clearCsrfToken\(\)/g) ?? []).length >= 2,
+    "session must clear the csrf token on both 401 and logout",
   );
   const login = read("src/app/workspace/login/page.tsx");
   assert.ok(

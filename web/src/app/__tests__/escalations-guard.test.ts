@@ -14,11 +14,11 @@ import {
   ESCALATION_TRANSITIONS,
   REQUEST_CHANGES_KIND,
   REQUEST_CHANGES_VERDICT,
+  approveBlocker,
   buildRequestChangesBody,
   coderPromptWithRework,
   escalationActionsForState,
   formatReworkSection,
-  grantExpiryIso,
   grantScopeForTask,
   reworkNotesFromEvidence,
 } from "../../lib/escalations.ts";
@@ -31,14 +31,13 @@ const read = (rel: string): string =>
 
 test("escalation actions map states to the ledger transitions", () => {
   assert.deepEqual(escalationActionsForState("needs_review"), ["approve", "request_changes"]);
-  assert.deepEqual(escalationActionsForState("blocked"), ["retry", "grant"]);
-  assert.deepEqual(escalationActionsForState("failed"), ["retry", "grant"]);
+  assert.deepEqual(escalationActionsForState("blocked"), ["retry"]);
+  assert.deepEqual(escalationActionsForState("failed"), ["retry"]);
   for (const state of ["open", "claimed", "done"]) {
     assert.deepEqual(escalationActionsForState(state), [], `${state} must offer no escalation action`);
   }
   assert.equal(ESCALATION_TRANSITIONS.approve, "done");
   assert.equal(ESCALATION_TRANSITIONS.retry, "open");
-  assert.equal(ESCALATION_TRANSITIONS.grant, "open");
   assert.equal(ESCALATION_TRANSITIONS.request_changes, "claimed");
   for (const state of ["needs_review", "blocked", "failed"]) {
     assert.ok(ESCALATION_STATES.has(state), `inbox must list ${state}`);
@@ -109,10 +108,14 @@ test("coder prompt carries the feedback verbatim under the reviewer header", () 
   assert.equal(coderPromptWithRework(base, ""), base);
 });
 
-test("grant scope and expiry stay bounded per task", () => {
+test("grant lookup stays read-only for the session owner", () => {
   assert.equal(grantScopeForTask(7), "task:7");
-  const fixed = new Date("2026-11-04T00:00:00.000Z");
-  assert.equal(grantExpiryIso(7, fixed), "2026-11-11T00:00:00.000Z");
+  const page = read("src/app/workspace/escalations/page.tsx");
+  assert.ok(page.includes('data-action="grant-check"'), "inbox must offer a grant lookup");
+  assert.ok(page.includes('"/api/grants/active"'), "lookup must call the active-grant proxy");
+  assert.ok(page.includes("grantScopeForTask"), "lookup scope must derive per task");
+  assert.ok(!page.includes('"/api/grants"'), "owner inbox must not create a grant");
+  assert.ok(page.includes("issued by the stack"), "copy must say grants are stack-issued");
 });
 
 // --- page wiring ------------------------------------------------------------------
@@ -146,16 +149,23 @@ test("retry calls transition to open", () => {
   assert.ok(page.includes("Retry → open"), "retry button must label its target");
 });
 
-test("grant creates a grant, notes it, then reopens", () => {
+test("approve stays disabled until a passing verify is on the head", () => {
   const page = read("src/app/workspace/escalations/page.tsx");
-  assert.ok(page.includes('data-action="grant"'), "grant button must carry data-action");
-  assert.ok(page.includes('"/api/grants"'), "grant must call the grants proxy");
-  assert.ok(page.includes("grantScopeForTask"), "grant scope must derive per task");
-  assert.ok(page.includes("grantExpiryIso"), "grant must carry a bounded expiry");
-  assert.ok(page.includes("escalation_resolved"), "grant must note the resolution as evidence");
-  assert.ok(page.includes("ESCALATION_TRANSITIONS.grant"), "grant must reopen via the shared table");
-  assert.ok(page.includes('"/api/grants/active"'), "inbox must offer a grant status check");
-  assert.ok(page.includes("data-grant-status"), "grant status must render inline");
+  assert.ok(page.includes("approveBlocker"), "approve must consult the ledger gate");
+  const pass = {
+    state: "needs_review",
+    pipeline: { contract: "done", evidence: "done" },
+    head_verdict: "pass",
+  };
+  assert.equal(approveBlocker(pass), null);
+  assert.match(
+    approveBlocker({ ...pass, head_verdict: null }) ?? "",
+    /passing verify/,
+  );
+  assert.match(
+    approveBlocker({ ...pass, pipeline: { contract: "pending", evidence: "done" } }) ?? "",
+    /contract/,
+  );
 });
 
 test("request changes posts a review note then moves to claimed", () => {
@@ -185,9 +195,9 @@ test("every action reloads and records the move observably", () => {
   const page = read("src/app/workspace/escalations/page.tsx");
   assert.ok(page.includes("data-move-note"), "moves must render with data-move-note");
   assert.ok(page.includes("Moved this session"), "inbox must keep a moved-this-session section");
-  // Each of the four actions records from -> to and reloads the list.
-  assert.ok((page.match(/recordMove\(/g) ?? []).length >= 4, "all four actions must record their move");
-  assert.ok((page.match(/await load\(\)/g) ?? []).length >= 4, "all four actions must reload the inbox");
+  // Each owner action records from -> to and reloads the list.
+  assert.ok((page.match(/recordMove\(/g) ?? []).length >= 3, "owner actions must record their move");
+  assert.ok((page.match(/await load\(\)/g) ?? []).length >= 3, "owner actions must reload the inbox");
 });
 
 test("typed client carries the escalations proxy paths", () => {

@@ -2,19 +2,21 @@
 // No fetches, no invented text — every string returned comes from the
 // task's evidence bodies, or from the explicit action table below.
 
-export type EscalationAction = "approve" | "retry" | "grant" | "request_changes";
+export type EscalationAction = "approve" | "retry" | "request_changes";
 
 // Ledger states that land in the inbox (same set the board calls
 // NEEDS_ATTENTION in web/src/app/workspace/page.tsx).
 export const ESCALATION_STATES = new Set(["needs_review", "blocked", "failed"]);
 
-// One inbox row offers exactly the actions its state allows. The `to`
-// values are the ledger TRANSITIONS targets (ledger/app.py):
+// One inbox row offers exactly the actions a session owner may perform.
+// The `to` values are the ledger TRANSITIONS targets (ledger/app.py):
 //   needs_review -> done (approve) | claimed (request changes)
-//   blocked/failed -> open (retry, or grant then open)
+//   blocked/failed -> open (retry)
+// Creating a grant is stack-token only (POST /v1/grants). The inbox can
+// look a grant up; it cannot issue one.
 export function escalationActionsForState(state: string): EscalationAction[] {
   if (state === "needs_review") return ["approve", "request_changes"];
-  if (state === "blocked" || state === "failed") return ["retry", "grant"];
+  if (state === "blocked" || state === "failed") return ["retry"];
   return [];
 }
 
@@ -24,9 +26,25 @@ export function escalationActionsForState(state: string): EscalationAction[] {
 export const ESCALATION_TRANSITIONS: Record<EscalationAction, string> = {
   approve: "done",
   retry: "open",
-  grant: "open",
   request_changes: "claimed",
 };
+
+// Owner approve (non-supervisor) is legal only from needs_review, with a
+// contract, at least one evidence row, and a passing results head.
+// Returns the reason the click would 409, or null when it is legal.
+export function approveBlocker(task: {
+  state: string;
+  pipeline?: { contract?: string; evidence?: string } | null;
+  head_verdict?: string | null;
+}): string | null {
+  if (task.state !== "needs_review") return "Approve needs needs_review.";
+  if (task.pipeline?.contract !== "done") return "Approve needs a contract.";
+  if (task.pipeline?.evidence !== "done") return "Approve needs evidence.";
+  if (task.head_verdict !== "pass") {
+    return "Approve needs a passing verify on the current head. A worker records that result.";
+  }
+  return null;
+}
 
 // Request-changes posts a review-note evidence entry (kind review_note,
 // one of the three kinds the ledger maps to the review.note SSE event in
@@ -130,15 +148,8 @@ export function coderPromptWithRework(basePrompt: string, notes: string): string
   return `${basePrompt}${formatReworkSection(notes)}`;
 }
 
-// Per-task grant scope for the inbox grant action. One scope per task keeps
-// grants bounded; the grant expiry is the time box (T5).
+// Scope the inbox uses when looking up a stack-issued grant. One scope
+// per task matches how grants are bounded (T5).
 export function grantScopeForTask(taskId: number): string {
   return `task:${taskId}`;
-}
-
-// ISO expiry `days` out (default 7). The caller may pass an explicit date
-// instead; this is the inbox default.
-export function grantExpiryIso(days = 7, now: Date = new Date()): string {
-  const ms = now.getTime() + days * 24 * 60 * 60 * 1000;
-  return new Date(ms).toISOString();
 }

@@ -20,6 +20,14 @@ export interface ProxyPaths {
       responses: { 200: { content: { "application/json": { ok: boolean } } } };
     };
   };
+  "/api/auth/session": {
+    get: {
+      responses: {
+        200: { content: { "application/json": LoginReply } };
+        401: { content: { "application/json": { detail: string } } };
+      };
+    };
+  };
   "/api/tasks": {
     get: {
       parameters: { query?: { state?: string; limit?: string; offset?: string } };
@@ -518,6 +526,9 @@ export interface TaskRow {
   // needs_spec — worker host has no exec spec for this project.
   sealing?: boolean;
   needs_spec?: boolean;
+  // Latest results.verdict, or null when no result exists. Owner approve
+  // is legal only when this is "pass" (ledger transition, non-supervisor).
+  head_verdict?: string | null;
 }
 
 export interface TaskDetail extends TaskRow {

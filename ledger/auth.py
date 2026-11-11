@@ -287,4 +287,30 @@ def build_auth_router(
         resp.delete_cookie(transport.cookie_name, path=transport.cookie_path)
         return resp
 
+    @router.get("/session")
+    async def current_session(request: Request):
+        """Same identity login returns, read back from the cookie.
+
+        A later tab has the httponly cookie and not the login reply, so
+        username and csrf_token would otherwise exist only in the tab
+        that signed in. GET is safe: no CSRF token is required to refill it.
+        """
+        tok = request.cookies.get(transport.cookie_name)
+        if not tok:
+            return JSONResponse({"detail": "unauthorized"}, status_code=401)
+        try:
+            async with get_session() as session:
+                user = await get_strategy().read_token(tok, make_manager(session))
+        except Exception:
+            user = None
+        if user is None or not user.is_active:
+            return JSONResponse({"detail": "unauthorized"}, status_code=401)
+        return {
+            "id": str(user.id),
+            "username": user.email.split("@")[0],
+            "tenant": user.tenant,
+            "role": user.role,
+            "csrf_token": csrf_token_for(str(user.id), secret),
+        }
+
     return router, transport, get_strategy(), throttle

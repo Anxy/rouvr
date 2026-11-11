@@ -3636,6 +3636,8 @@ def make_app(db_url: str = DB_URL) -> FastAPI:
             d["pipeline"] = _pipeline_flags(d.get("state"), b["contracts"],
                                             b["evidence"], b["receipts"],
                                             b["verdicts"])
+            # Latest results.verdict. Owner approve reads this same head.
+            d["head_verdict"] = b["verdicts"][-1] if b["verdicts"] else None
             d["sealing"] = _sealing(b["evidence"])
             d["needs_spec"] = _needs_exec_spec(d.get("tenant"), d.get("project"))
 
@@ -3703,6 +3705,7 @@ def make_app(db_url: str = DB_URL) -> FastAPI:
             t["pipeline"] = _pipeline_flags(t.get("state"), t["contracts"],
                                             t["evidence"], t["receipts"],
                                             verdicts)
+            t["head_verdict"] = verdicts[-1] if verdicts else None
             t["sealing"] = _sealing(t["evidence"])
             t["needs_spec"] = _needs_exec_spec(t.get("tenant"), t.get("project"))
             return t

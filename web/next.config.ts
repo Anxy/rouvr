@@ -2,6 +2,12 @@ import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
   poweredByHeader: false,
+  // The dev badge defaults to the bottom-left, on top of the sidebar profile.
+  devIndicators: { position: "bottom-right" },
+  // Dev resources are blocked unless the browser host is listed. 127.0.0.1
+  // and the LAN address are how this workspace is opened; without them the
+  // login page HTML loads but its scripts 403 and the form never submits.
+  allowedDevOrigins: ["127.0.0.1", "localhost", "192.168.29.31"],
   async redirects() {
     return [
       { source: "/early-access", destination: "/contact", permanent: true },

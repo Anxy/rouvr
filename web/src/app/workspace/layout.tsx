@@ -68,7 +68,7 @@ function NavItem({
     <Link
       href={href}
       aria-current={active ? "page" : undefined}
-      className={`group flex h-10 items-center gap-3 rounded-lg px-[11px] text-xs font-medium transition-[color,background-color,transform] duration-[160ms] ${
+      className={`group flex h-10 items-center gap-3 rounded-lg px-[11px] text-xs font-medium transition-[color,background-color,translate,scale] duration-[160ms] ease-out-strong active:scale-[0.97] ${
         active
           ? "nav-item-active bg-panel2 text-fog"
           : "text-dim hover:bg-panel2 hover:text-fog motion-safe:hover:translate-x-0.5"

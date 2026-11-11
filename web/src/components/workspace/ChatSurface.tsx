@@ -64,14 +64,6 @@ interface Turn {
   messageId?: string;
 }
 
-interface HistoryItem {
-  id: number;
-  messageId: string;
-  preview: string;
-  at: number;
-  className: string;
-}
-
 const EMPTY_TURN = { question: null, slice: null, tasks: [], badge: null, offer: null };
 
 const EXAMPLE_PROMPTS = [
@@ -186,38 +178,31 @@ function ExampleRotator({
 
 type PlanAction = "convert" | "edit" | "keep";
 
-export function ChatSurface({
-  mode,
-  asideExtra,
-}: {
-  mode: ChatMode;
-  /** Optional panel under Previous chats (planner inbox, etc.). */
-  asideExtra?: React.ReactNode;
-}) {
+export function ChatSurface({ mode }: { mode: ChatMode }) {
   const router = useRouter();
   const { project: sessionProject, status: sessionStatus } = useSession();
   const copy = COPY[mode];
   const shownProject = sessionProject ?? "";
   const [message, setMessage] = useState("");
   const [turns, setTurns] = useState<Turn[]>([]);
-  const [history, setHistory] = useState<HistoryItem[]>([]);
   const [historyError, setHistoryError] = useState("");
   const [busy, setBusy] = useState(false);
-  const [activeMessageId, setActiveMessageId] = useState<string | null>(null);
   const nextId = useRef(1);
+  const threadRef = useRef<HTMLDivElement | null>(null);
   const bottomRef = useRef<HTMLDivElement | null>(null);
-  const turnRefs = useRef<Map<string, HTMLElement>>(new Map());
+  // Stay pinned to the latest turn unless the user scrolls up into history.
+  const stickToBottom = useRef(true);
 
   const loadHistory = useCallback(async () => {
     if (!shownProject) {
-      setHistory([]);
       setTurns([]);
       return;
     }
     setHistoryError("");
+    stickToBottom.current = true;
     try {
       const { data, response } = await ws.GET("/api/chat/turns", {
-        params: { query: { project: shownProject } },
+        params: { query: { project: shownProject, surface: mode } },
       });
       if (response.status === 401) {
         router.push("/workspace/login");
@@ -228,14 +213,6 @@ export function ChatSurface({
         return;
       }
       const items = data.items ?? [];
-      const hist: HistoryItem[] = items.map((row) => ({
-        id: row.id,
-        messageId: row.message_id,
-        preview: row.message.trim() || "(empty)",
-        at: Date.parse(row.created_at) || Date.now(),
-        className: row.class ?? "",
-      }));
-      setHistory(hist);
       const hydrated: Turn[] = [];
       for (const row of items) {
         const at = Date.parse(row.created_at) || Date.now();
@@ -267,15 +244,24 @@ export function ChatSurface({
     } catch (err) {
       setHistoryError(err instanceof Error ? err.message : "history load failed");
     }
-  }, [router, shownProject]);
+  }, [mode, router, shownProject]);
 
   useEffect(() => {
     void loadHistory();
   }, [loadHistory]);
 
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
+    const el = threadRef.current;
+    if (!el || !stickToBottom.current) return;
+    // Instant pin on load / new turns so the composer stays in view with the latest reply.
+    el.scrollTop = el.scrollHeight;
   }, [turns]);
+
+  function onThreadScroll() {
+    const el = threadRef.current;
+    if (!el) return;
+    stickToBottom.current = el.scrollHeight - el.scrollTop - el.clientHeight < 96;
+  }
 
   function patchTurn(id: number, patch: Partial<Turn>) {
     setTurns((prev) => prev.map((t) => (t.id === id ? { ...t, ...patch } : t)));
@@ -293,12 +279,6 @@ export function ChatSurface({
       retryNote: "",
       ...EMPTY_TURN,
     };
-  }
-
-  function jumpTo(messageId: string) {
-    setActiveMessageId(messageId);
-    const el = turnRefs.current.get(messageId);
-    el?.scrollIntoView({ behavior: "smooth", block: "center" });
   }
 
   async function send(e?: React.FormEvent, retryText?: string) {
@@ -336,6 +316,7 @@ export function ChatSurface({
       return;
     }
     setBusy(true);
+    stickToBottom.current = true;
     const userId = nextId.current++;
     const asstId = nextId.current++;
     setTurns((prev) => [
@@ -364,7 +345,12 @@ export function ChatSurface({
     try {
       const { response } = await ws.POST("/api/chat", {
         parseAs: "stream",
-        body: { message: outgoing, project: effectiveProject, ...extra },
+        body: {
+          message: outgoing,
+          project: effectiveProject,
+          surface: mode,
+          ...extra,
+        },
         headers: csrfHeaders(),
       });
       if (response.status === 401) {
@@ -445,17 +431,7 @@ export function ChatSurface({
           t.id === userId ? { ...t, messageId: parsed.message_id } : t,
         ),
       );
-      setHistory((prev) => [
-        ...prev,
-        {
-          id: Date.now(),
-          messageId: parsed.message_id,
-          preview: outgoing,
-          at: Date.now(),
-          className: parsed.badge?.kind ?? "",
-        },
-      ]);
-      setActiveMessageId(parsed.message_id);
+      stickToBottom.current = true;
     } catch (err) {
       patchTurn(asstId, {
         status: "error",
@@ -478,89 +454,35 @@ export function ChatSurface({
   return (
     <div
       data-chat-surface={mode}
-      className="flex min-h-0 flex-1 flex-col gap-4 lg:flex-row"
+      className="mx-auto flex min-h-0 w-full max-w-3xl flex-1 flex-col"
     >
-      <div className="flex max-h-56 w-full shrink-0 flex-col gap-3 overflow-hidden lg:max-h-none lg:w-72">
-        <aside
-          data-chat-history
-          className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl border border-line bg-panel"
-        >
-          <div className="border-b border-line px-3 py-2.5">
-            <p className="font-mono text-[10px] uppercase tracking-widest text-dim">
-              Previous chats
-            </p>
-            <p className="mt-0.5 truncate text-[11px] text-muted">
-              {shownProject ? `in ${shownProject}` : "pick a project in the header"}
-            </p>
-          </div>
-          <div className="min-h-0 flex-1 overflow-y-auto p-2">
-            {historyError ? (
-              <p className="px-2 py-1 text-xs text-danger">{historyError}</p>
-            ) : null}
-            {history.length === 0 && !historyError ? (
-              <p className="px-2 py-3 text-xs text-dim">No earlier turns for this project yet.</p>
-            ) : (
-              <ul className="space-y-1">
-                {[...history].reverse().map((item) => (
-                  <li key={`${item.messageId}-${item.id}`}>
-                    <button
-                      type="button"
-                      data-history-item={item.messageId}
-                      onClick={() => jumpTo(item.messageId)}
-                      className={cn(
-                        "w-full rounded-xl px-2.5 py-2 text-left transition-colors",
-                        activeMessageId === item.messageId
-                          ? "bg-brand/10 text-fog"
-                          : "text-dim hover:bg-panel2 hover:text-fog",
-                      )}
-                    >
-                      <p className="line-clamp-2 text-[12px] leading-snug">{item.preview}</p>
-                      <time
-                        dateTime={new Date(item.at).toISOString()}
-                        className="mt-1 block font-mono text-[10px] opacity-70"
-                      >
-                        {new Date(item.at).toLocaleString()}
-                      </time>
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </div>
-        </aside>
-        {asideExtra ? (
-          <div className="min-h-0 max-h-[45%] overflow-y-auto lg:max-h-none lg:flex-1">
-            {asideExtra}
-          </div>
-        ) : null}
+      <div data-chat-header className="shrink-0 pb-3">
+        <h1 className="text-2xl font-semibold text-white">{copy.title}</h1>
+        <p className="mt-1 text-sm text-muted">{copy.blurb}</p>
+        {historyError ? <p className="mt-2 text-sm text-danger">{historyError}</p> : null}
       </div>
 
-      <div className="flex min-h-0 min-w-0 flex-1 flex-col">
-        <div data-chat-header className="shrink-0 pb-3">
-          <h1 className="text-2xl font-semibold text-white">{copy.title}</h1>
-          <p className="mt-1 text-sm text-muted">{copy.blurb}</p>
-        </div>
-
-        <div
-          data-chat-thread
-          className="min-h-0 flex-1 space-y-4 overflow-y-auto pr-1"
-        >
-          {turns.length === 0 ? (
-            <p className="rounded-2xl border border-dashed border-line bg-panel/40 px-4 py-8 text-center text-sm text-dim">
-              Start the thread below. Earlier turns for this project appear in the
-              list on the left.
-            </p>
-          ) : null}
-          {turns.map((turn) =>
-            turn.role === "user" ? (
-              <div
-                key={turn.id}
-                data-turn="user"
-                ref={(el) => {
-                  if (el && turn.messageId) turnRefs.current.set(turn.messageId, el);
-                }}
-                className="flex justify-end"
-              >
+      <div
+        ref={threadRef}
+        data-chat-thread
+        data-chat-history
+        data-lenis-prevent
+        onScroll={onThreadScroll}
+        className="min-h-0 flex-1 space-y-4 overflow-y-auto overscroll-contain pr-1"
+      >
+        {turns.length === 0 ? (
+          <p className="rounded-2xl border border-dashed border-line bg-panel/40 px-4 py-8 text-center text-sm text-dim">
+            Latest replies land here. Scroll up for earlier turns, or send a
+            message below.
+          </p>
+        ) : (
+          <p className="pb-1 text-center font-mono text-[10px] uppercase tracking-widest text-dim">
+            Scroll up for earlier turns
+          </p>
+        )}
+        {turns.map((turn) =>
+          turn.role === "user" ? (
+              <div key={turn.id} data-turn="user" className="flex justify-end">
                 <div className="max-w-[80%] rounded-2xl rounded-br-md bg-brand px-4 py-2">
                   <p className="whitespace-pre-wrap text-sm text-abyss">{turn.text}</p>
                   <time
@@ -774,7 +696,6 @@ export function ChatSurface({
           </Button>
           <ExampleRotator prompts={copy.examples} onPick={(prompt) => setMessage(prompt)} />
         </form>
-      </div>
     </div>
   );
 }

@@ -164,7 +164,13 @@ function AppShell({ children }: { children: React.ReactNode }) {
         </nav>
       </aside>
 
-      <div className="flex min-h-screen flex-col pl-[242px]">
+      <div
+        className={
+          isChatSurface
+            ? "flex h-dvh flex-col overflow-hidden pl-[242px]"
+            : "flex min-h-screen flex-col pl-[242px]"
+        }
+      >
         <header className="sticky top-0 z-20 flex h-[68px] shrink-0 items-center gap-3 border-b border-line bg-abyss/90 px-6 backdrop-blur">
           <div data-greeting>
             <p
@@ -260,7 +266,11 @@ function AppShell({ children }: { children: React.ReactNode }) {
         </main>
         <footer
           data-footer
-          className="mx-auto mt-auto flex w-full max-w-[1600px] shrink-0 flex-wrap items-center gap-x-4 gap-y-1 border-t border-line px-8 py-4"
+          className={
+            isChatSurface
+              ? "mx-auto hidden w-full max-w-[1600px] shrink-0 flex-wrap items-center gap-x-4 gap-y-1 border-t border-line px-8 py-4"
+              : "mx-auto mt-auto flex w-full max-w-[1600px] shrink-0 flex-wrap items-center gap-x-4 gap-y-1 border-t border-line px-8 py-4"
+          }
         >
           <p className="font-mono text-[10px] uppercase tracking-widest text-dim">
             rouvr — your pack is working

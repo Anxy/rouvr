@@ -394,8 +394,13 @@ function PlansInbox() {
 export default function PlannerPage() {
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-3">
-      <ChatSurface mode="planner" />
-      <div className="max-h-64 shrink-0 overflow-y-auto">
+      <div className="min-h-0 flex-1">
+        <ChatSurface mode="planner" />
+      </div>
+      <div
+        data-lenis-prevent
+        className="max-h-48 shrink-0 overflow-y-auto overscroll-contain"
+      >
         <PlansInbox />
       </div>
     </div>

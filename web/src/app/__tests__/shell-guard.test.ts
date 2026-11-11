@@ -200,8 +200,8 @@ test("board sections page client-side with prev/next and collapse", () => {
     "done section must start collapsed",
   );
   assert.ok(
-    page.includes("overflow-y-auto"),
-    "board lists must scroll internally",
+    page.includes("overflow-y-auto") && page.includes("data-lenis-prevent"),
+    "board lists must scroll internally (Lenis must not steal the wheel)",
   );
   assert.ok(
     !page.includes("<datalist"),
@@ -314,8 +314,8 @@ test("chat renders a conversation thread with user and assistant turns", () => {
     "chat must render the clarifying-question state as a distinct assistant turn",
   );
   assert.ok(
-    chat.includes("Retry") && chat.includes("scrollIntoView"),
-    "chat must auto-scroll to latest and offer inline retry on the failed turn",
+    chat.includes("Retry") && chat.includes("scrollTop") && chat.includes("stickToBottom"),
+    "chat must pin to the latest turn and offer inline retry on the failed turn",
   );
 });
 
@@ -379,8 +379,18 @@ test("chat uses the header project only — no duplicate picker above the thread
     "active project lives once in the shell header",
   );
   assert.ok(
-    chat.includes("data-chat-history") && chat.includes("/api/chat/turns"),
-    "chat must load and show previous turns for the active project",
+    chat.includes("data-chat-history") &&
+      chat.includes("/api/chat/turns") &&
+      chat.includes("Scroll up for earlier turns"),
+    "chat must load prior turns into the thread and invite scroll-up for history",
+  );
+  assert.ok(
+    chat.includes("stickToBottom") && chat.includes("data-chat-composer"),
+    "chat must pin to the latest turn with the composer visible by default",
+  );
+  assert.ok(
+    chat.includes("surface: mode"),
+    "supervisor and planner must send distinct surface ids so their logs stay separate",
   );
   assert.ok(
     !chat.includes('"demo"') && !chat.includes("'demo'"),

@@ -590,7 +590,10 @@ export default function BoardPage() {
               </p>
             ) : (
               <div id="board-needs-attention">
-                <ul className="max-h-[480px] space-y-1.5 overflow-y-auto pr-1">
+                <ul
+                  data-lenis-prevent
+                  className="max-h-[480px] space-y-1.5 overflow-y-auto overscroll-contain pr-1"
+                >
                   {attentionPage.rows.map((t) => (
                     <TaskCard key={t.id} task={t} showAttention />
                   ))}
@@ -619,7 +622,10 @@ export default function BoardPage() {
               </p>
             ) : (
               <div id="board-in-progress">
-                <ul className="max-h-[480px] space-y-1.5 overflow-y-auto pr-1">
+                <ul
+                  data-lenis-prevent
+                  className="max-h-[480px] space-y-1.5 overflow-y-auto overscroll-contain pr-1"
+                >
                   {progressPage.rows.map((t) => (
                     <TaskCard key={t.id} task={t} showAttention={false} />
                   ))}
@@ -648,7 +654,10 @@ export default function BoardPage() {
               </p>
             ) : (
               <div id="board-done">
-                <ul className="max-h-[480px] space-y-1.5 overflow-y-auto pr-1">
+                <ul
+                  data-lenis-prevent
+                  className="max-h-[480px] space-y-1.5 overflow-y-auto overscroll-contain pr-1"
+                >
                   {donePage.rows.map((t) => (
                     <TaskCard key={t.id} task={t} showAttention={false} />
                   ))}
@@ -679,7 +688,10 @@ export default function BoardPage() {
               <p className="font-mono text-xs text-muted/60">no events yet</p>
             ) : (
               <div id="board-activity">
-                <ul className="max-h-[480px] space-y-1.5 overflow-y-auto pr-1">
+                <ul
+                  data-lenis-prevent
+                  className="max-h-[480px] space-y-1.5 overflow-y-auto overscroll-contain pr-1"
+                >
                   {activityPage.rows.map((e) => (
                     <li
                       key={e.id}

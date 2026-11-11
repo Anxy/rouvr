@@ -145,6 +145,9 @@ def provider_from_env(env=None) -> dict:
         raise ValueError(f"unknown ROUVR_MODEL_PROVIDER {name!r}; choose meta|ollama|openrouter|stub")
     url_var, url_default, key_var, model_var, model_default = _PROVIDER_PRESETS[name]
     key = env.get(key_var) if key_var else None
+    # Meta SDK / older local .env files often use META_MODEL_API_KEY.
+    if key_var == "META_API_KEY" and not key:
+        key = env.get("META_MODEL_API_KEY")
     if key_var and not key:
         raise RuntimeError(f"{key_var} is not set (required for provider {name!r})")
     base_url = env.get(url_var) or url_default

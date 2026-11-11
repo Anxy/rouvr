@@ -58,6 +58,8 @@ def get_provider(name: str | None = None, env: dict | None = None) -> ModelProvi
         raise ValueError(f"unknown ROUVR_MODEL_PROVIDER {name!r}; choose meta|ollama|openrouter|stub")
     url_var, url_default, key_var, model_var, model_default = _PRESETS[name]
     key = env.get(key_var) if key_var else None
+    if key_var == "META_API_KEY" and not key:
+        key = env.get("META_MODEL_API_KEY")
     if key_var and not key:
         raise RuntimeError(f"{key_var} is not set (required for provider {name!r})")
     base_url, model = env.get(url_var) or url_default, env.get(model_var) or model_default

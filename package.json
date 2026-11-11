@@ -1,1 +1,6 @@
-{"name": "rouvr", "private": true}
+{
+  "name": "rouvr",
+  "private": true,
+  "license": "MIT",
+  "description": "Rouvr monorepo root (app, not an npm package)."
+}

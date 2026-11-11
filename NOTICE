@@ -1,0 +1,19 @@
+Rouvr
+Copyright (c) 2026 Ankur Mishra
+
+This product is licensed under the MIT License. See LICENSE.
+
+Rouvr acknowledges the Hyeve platform and eBizneeds for the governance
+and orchestration ideas that informed this work. Those acknowledgements
+do not change the MIT license of this repository.
+
+This distribution includes or depends on third-party open-source
+components, including (non-exhaustive; see package managers for exact
+versions and licenses):
+
+- FastAPI, Starlette, Uvicorn, SQLAlchemy, pydantic (Python)
+- fastapi-users, pwdlib / argon2 (Python auth)
+- Next.js, React, TypeScript, openapi-fetch (web workspace)
+- pytest, Node.js test runner (tests)
+
+Their respective licenses apply to those components.

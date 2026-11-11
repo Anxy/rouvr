@@ -2,6 +2,8 @@
   "name": "web",
   "version": "0.1.0",
   "private": true,
+  "license": "MIT",
+  "description": "Rouvr operator workspace (Next.js app, not published to npm).",
   "engines": {
     "node": "22"
   },

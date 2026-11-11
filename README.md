@@ -166,7 +166,13 @@ Neither credential is ever committed; both come from the environment. Operator d
 
 Rouvr draws its specialists "from Hyeve, the ecosystem of agents, models, services and connectors beneath it", and stays *model agnostic*.
 
-Rouvr is built by [eBizneeds](https://www.ebizneeds.com) (bootstrapped; India and Australia) on its **Hyeve** platform. This repo ships the standalone lite cut — `ledger/` WorkHub-lite plus the web workspace — so it runs without the private Hyeve services. The wider pieces (`core/`, `lane/`, `workers/`, `cli/`, `demo/`) target the full stack. See [docs/ecosystem.md](docs/ecosystem.md).
+This repository is MIT-licensed (© Ankur Mishra). It was built with
+[eBizneeds](https://www.ebizneeds.com) on the **Hyeve** platform; those
+credits are acknowledgements, not a second license (see [NOTICE](NOTICE)).
+The supported open-source cut is Rouvr-lite — `ledger/` plus the web
+workspace — and runs without private Hyeve services. Wider pieces
+(`core/`, `lane/`, `workers/`, `cli/`, `demo/`) are experimental. See
+[docs/ecosystem.md](docs/ecosystem.md).
 
 ## Status and limitations (honest)
 
@@ -201,4 +207,4 @@ Issues and PRs are welcome; see [CONTRIBUTING.md](CONTRIBUTING.md), [CODE_OF_CON
 
 ## License
 
-MIT © 2026 Ankur Mishra. See [LICENSE](LICENSE).
+MIT © 2026 Ankur Mishra. See [LICENSE](LICENSE) and [NOTICE](NOTICE).

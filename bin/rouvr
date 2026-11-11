@@ -7,7 +7,7 @@ set -euo pipefail
 ROOT="${ROUVR_ROOT:-}"
 if [ -z "$ROOT" ]; then
   SELF="$(readlink -f "${BASH_SOURCE[0]}")"
-  for cand in "$(dirname "$(dirname "$SELF")")" "$HOME/Repository/hackathon/rouvr" "$HOME/Repository/rouvr"; do
+  for cand in "$(dirname "$(dirname "$SELF")")" "$HOME/.local/share/rouvr" "$HOME/src/rouvr"; do
     if [ -x "$cand/scripts/rouvr" ]; then ROOT="$cand"; break; fi
   done
 fi

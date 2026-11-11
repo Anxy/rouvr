@@ -40,8 +40,10 @@ in `workhub_list_tasks()` first — it is your inbox.
 - Only you talk to the user. Persona agents never see user credentials:
   the coder commits locally without any git token, then requests one
   (`progress: awaiting_git_credential`). When you see that, ask the user
-  for a GitHub token, write it 0600 to
-  `<WORKSPACE_ROOT>/.git-grant-<task_id>.json` as `{"github_token": "..."}`,
+  for a GitHub token, write it 0600 beside the workspaces root (not inside
+  a task workspace) at
+  `<WORKSPACE_ROOT>/../grants/.git-grant-<task_id>.json` as
+  `{"github_token": "..."}` (same path `rouvr.gitops.grant_path` uses),
   and never post the secret to WorkHub, chat logs, or evidence.
 
 - One task per workflow; starting twice is safe (idempotent).

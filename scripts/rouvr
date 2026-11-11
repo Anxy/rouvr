@@ -34,7 +34,8 @@ EOF
 
 write_operands() {
   mkdir -p "$OPS/personas" "$OPS/specs/supervisor" "$OPS/workspaces" "$OPS/evidence" "$OPS/hidden-tests" "$OPS/logs" "$OPS/keys"
-  local ws="${ROUVR_PERSONA_CREDS_DIR:-$HOME/Repository/hackathon/.secrets/rouvr/personas}"
+  # Persona JSON lives under XDG config unless the operator points elsewhere.
+  local ws="${ROUVR_PERSONA_CREDS_DIR:-${XDG_CONFIG_HOME:-$HOME/.config}/rouvr/personas}"
   [ -f "$OPS/personas/tenants.yaml" ] || cat > "$OPS/personas/tenants.yaml" <<EOF
 tenants:
   supervisor:
@@ -48,12 +49,18 @@ EOF
   for md in coder.md reviewer.md; do
     [ -f "$OPS/personas/$md" ] || cp "$ROOT/personas/$md" "$OPS/personas/$md"
   done
-  [ -f "$OPS/specs/supervisor/scratch.yaml" ] || cat > "$OPS/specs/supervisor/scratch.yaml" <<EOF
-repo: ${ROUVR_SPEC_REPO:-ebiz-backend-developer/rouvr-r10-scratch}
+  # Scratch repo is operator-owned; never default to a private org.
+  if [ ! -f "$OPS/specs/supervisor/scratch.yaml" ]; then
+    if [ -z "${ROUVR_SPEC_REPO:-}" ]; then
+      echo "rouvr: set ROUVR_SPEC_REPO=owner/name before coding tasks that push (writing placeholder)" >&2
+    fi
+    cat > "$OPS/specs/supervisor/scratch.yaml" <<EOF
+repo: ${ROUVR_SPEC_REPO:-OWNER/REPO}
 base_branch: ${ROUVR_SPEC_BASE:-main}
 test_command: ["python", "-m", "pytest", "-q"]
 timeout_s: 900
 EOF
+  fi
   if [ ! -f "$OPS/api-token" ]; then
     (umask 077; head -c 32 /dev/urandom | od -An -tx1 | tr -d ' \n' > "$OPS/api-token")
   fi

@@ -147,49 +147,6 @@ export interface ProxyPaths {
       };
     };
   };
-  "/api/tasks/{id}/claim": {
-    post: {
-      parameters: { path: { id: string } };
-      requestBody: {
-        content: {
-          "application/json": {
-            key?: string;
-            principal: string;
-            attempt_no?: number;
-            ttl_s?: number;
-          };
-        };
-      };
-      responses: {
-        200: { content: { "application/json": unknown } };
-        401: { content: { "application/json": { detail: string } } };
-        403: { content: { "application/json": { detail: string } } };
-        404: { content: { "application/json": { detail: string } } };
-        409: { content: { "application/json": { detail: string } } };
-        422: { content: { "application/json": { detail: string } } };
-      };
-    };
-  };
-  "/api/grants": {
-    post: {
-      requestBody: {
-        content: {
-          "application/json": {
-            scope: string;
-            expires_at: string;
-            approved_by: string;
-            contract_rev?: string;
-          };
-        };
-      };
-      responses: {
-        200: { content: { "application/json": GrantRow } };
-        401: { content: { "application/json": { detail: string } } };
-        403: { content: { "application/json": { detail: string } } };
-        422: { content: { "application/json": { detail: string } } };
-      };
-    };
-  };
   "/api/grants/active": {
     get: {
       parameters: { query: { scope: string; contract_rev?: string } };

@@ -7,7 +7,7 @@
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 import {
   ESCALATION_STATES,
@@ -202,10 +202,12 @@ test("every action reloads and records the move observably", () => {
 
 test("typed client carries the escalations proxy paths", () => {
   const api = read("src/lib/api/workspace.ts");
-  for (const p of ['"/api/tasks/{id}/evidence"', '"/api/grants"', '"/api/grants/active"'] as const) {
+  for (const p of ['"/api/tasks/{id}/evidence"', '"/api/grants/active"'] as const) {
     assert.ok(api.includes(p), `ProxyPaths must carry ${p}`);
   }
-  assert.ok(api.includes("GrantRow"), "grants proxy must type its rows");
+  assert.ok(!api.includes('"/api/grants"'), "session client must not create grants");
+  assert.ok(!api.includes('"/api/tasks/{id}/claim"'), "session client must not claim");
+  assert.ok(api.includes("GrantRow"), "grants lookup must type its rows");
 });
 
 test("proxy routes forward to the ledger like the transition precedent", () => {
@@ -213,11 +215,16 @@ test("proxy routes forward to the ledger like the transition precedent", () => {
   assert.ok(evidence.includes("ledgerClient") && evidence.includes("incomingCookie"));
   assert.ok(evidence.includes('"/v1/tasks/{tid}/evidence"'));
   assert.ok(evidence.includes("x-csrf-token"));
-  const grants = read("src/app/api/grants/route.ts");
-  assert.ok(grants.includes('"/v1/grants"'));
-  assert.ok(grants.includes("x-csrf-token"));
   const active = read("src/app/api/grants/active/route.ts");
   assert.ok(active.includes('"/v1/grants/active"'));
+  assert.ok(
+    !existsSync(path.join(WEB_ROOT, "src/app/api/grants/route.ts")),
+    "session must not keep a grants-create proxy",
+  );
+  assert.ok(
+    !existsSync(path.join(WEB_ROOT, "src/app/api/tasks/[id]/claim/route.ts")),
+    "session must not keep a claim proxy",
+  );
 });
 
 test("workspace nav links the escalations inbox", () => {
@@ -233,7 +240,6 @@ test("inbox slice keeps theme tokens, no hard-coded colour, no hand fetch", () =
     "src/app/workspace/escalations/page.tsx",
     "src/lib/escalations.ts",
     "src/app/api/tasks/[id]/evidence/route.ts",
-    "src/app/api/grants/route.ts",
     "src/app/api/grants/active/route.ts",
   ]) {
     const src = read(rel);

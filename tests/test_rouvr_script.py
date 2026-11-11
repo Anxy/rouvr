@@ -40,7 +40,7 @@ def test_script_operands_and_token_scoping():
     rouvr = (ROOT / "scripts/rouvr").read_text()
     assert 'mkdir -p "$OPS/personas"' in rouvr and '"$OPS/keys"' in rouvr
     assert "receipt_ed25519.pem" in rouvr and "RECEIPT_SIGNING_KEY_PATH=$OPS/keys/receipt_ed25519.pem" in rouvr
-    assert 'ROUVR_PERSONA_CREDS_DIR:-$HOME/Repository/hackathon/.secrets/rouvr/personas' in rouvr
+    assert "ROUVR_PERSONA_CREDS_DIR:-${XDG_CONFIG_HOME:-$HOME/.config}/rouvr/personas" in rouvr
     assert "foreign process" in rouvr and "_adopt ledger" in rouvr and "_adopt mcp" in rouvr
     assert 'OPS="${ROUVR_OPS_DIR:-$ROOT/.data}"' in (ROOT / "scripts/seed-user").read_text()
     run = (ROOT / "plugin/mcp/run.sh").read_text()
@@ -106,7 +106,7 @@ def test_up_health_and_plugin_order_static():
     assert "ledger did not answer /health" in rouvr and "MCP did not answer" in rouvr
     assert 'grep -qF "$ROOT/"' in rouvr
     run = (ROOT / "plugin/mcp/run.sh").read_text()
-    assert run.index('"$PWD/rouvr"') < run.index('"$HOME/Repository/hackathon/rouvr"')
+    assert run.index('"$PWD/rouvr"') < run.index('"$HOME/.local/share/rouvr"')
 
 
 def test_stop_kills_only_own_checkout_pids(tmp_path):

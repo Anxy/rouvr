@@ -8,7 +8,9 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && git rev-parse --show-toplevel)
 cd "$ROOT"
 
 ALLOW=".github/hygiene-allowlist.txt"
-PATTERN='vmg|betademo|hawks|/home/anxy|100\.(6[4-9]|[7-9][0-9]|1[01][0-9]|12[0-7])\.|115\.246|llama\.com|Maverick'
+# Private host/org leftovers plus common credential literals that must not
+# ship. Historical docs that still name scrubbed tenants stay on the allowlist.
+PATTERN='vmg|betademo|hawks|/home/anxy|/home/vpsr|Repository/hackathon|ebiz-backend-developer|Simple@123|ydaiya|100\.(6[4-9]|[7-9][0-9]|1[01][0-9]|12[0-7])\.|115\.246|llama\.com|Maverick'
 
 mapfile -t ALLOWLIST < <(grep -vE '^\s*(#|$)' "$ALLOW" || true)
 

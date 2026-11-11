@@ -6,7 +6,7 @@
 set -euo pipefail
 ROOT="${ROUVR_ROOT:-}"
 if [ -z "$ROOT" ]; then
-  for cand in "$PWD/rouvr" "$PWD" "$HOME/Repository/hackathon/rouvr"; do
+  for cand in "$PWD/rouvr" "$PWD" "$HOME/.local/share/rouvr" "$HOME/src/rouvr"; do
     if [ -f "$cand/rouvr/mcp_server.py" ] && [ -x "$cand/.venv/bin/python" ]; then ROOT="$cand"; break; fi
   done
 fi

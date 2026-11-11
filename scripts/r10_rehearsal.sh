@@ -2,7 +2,9 @@
 # R10: kill/resume rehearsal. Ledger (local) + live Muse turns + scratch GitHub repo.
 # Single-credential rehearsal: coder/reviewer share one model+GitHub credential under
 # distinct logical principals; the reviewer credential + stage attempt-scope grant are A2 gates.
-# Env in: META_API_KEY (model key), GH_TOKEN (or `gh auth token`).
+# Env in: META_API_KEY (model key), R10_REPO=owner/name, and either GH_TOKEN
+# or an already-authenticated `gh` (token is written to a 0600 file, never
+# exported stack-wide).
 # Out: exit 0 + docs/r10-runs/<ts>/ transcript iff done + 1 PR + activity retry on attempt 1.
 set -euo pipefail
 
@@ -18,17 +20,26 @@ if [ "$BACKEND" != "ledger" ]; then
   echo "FAIL: WORKHUB_BACKEND=$BACKEND unsupported by r10_rehearsal.sh (ledger only); see docs/a2-gates.md" >&2
   exit 2
 fi
-REPO="${R10_REPO:-ebiz-backend-developer/rouvr-r10-scratch}"
+REPO="${R10_REPO:?set R10_REPO=owner/name of a scratch GitHub repo}"
 LEDGER_PORT="${R10_LEDGER_PORT:-8221}"
 : "${META_API_KEY:?set META_API_KEY}"
-GH_TOKEN="${GH_TOKEN:-$(gh auth token)}"
-export GH_TOKEN  # consumed by the fixture writer below; never printed (set -x stays off)
+# Resolve the host git token now; write it to a 0600 file after the ops
+# dir is recreated (never export GH_TOKEN stack-wide).
+_gh="${GH_TOKEN:-}"
+if [ -z "$_gh" ]; then
+  _gh="$(gh auth token 2>/dev/null || true)"
+fi
+[ -n "$_gh" ] || { echo "FAIL: set GH_TOKEN or run gh auth login" >&2; exit 2; }
 
 log() { printf '[r10 %s] %s\n' "$(date +%H:%M:%S)" "$*" | tee -a "$R10_ROOT/run.log"; }
 fail() { log "FAIL: $*"; exit 1; }
 
 rm -rf "$R10_ROOT"
 mkdir -p "$R10_ROOT"/specs/"$R10_TENANT" "$R10_ROOT"/{hidden-tests,workspaces,personas,logs,pids}
+(umask 077; printf %s "$_gh" > "$R10_ROOT/gh-token")
+unset _gh
+export ROUVR_GH_TOKEN_FILE="$R10_ROOT/gh-token"
+unset GH_TOKEN
 
 # ---- fixtures (no secrets echoed) ----
 cat > "$R10_ROOT/personas/tenants.yaml" <<EOF
@@ -43,7 +54,8 @@ EOF
 for p in coder reviewer; do
   "$ROOT/.venv/bin/python" - "$R10_ROOT/personas/$p.json" <<'EOF'
 import json, os, sys
-json.dump({"meta_api_key": os.environ["META_API_KEY"], "github_token": os.environ["GH_TOKEN"],
+tok = open(os.environ["ROUVR_GH_TOKEN_FILE"], encoding="utf-8").read()
+json.dump({"meta_api_key": os.environ["META_API_KEY"], "github_token": tok,
            "workhub_token": "ledger"}, open(sys.argv[1], "w"))
 EOF
   chmod 600 "$R10_ROOT/personas/$p.json"

@@ -3698,10 +3698,15 @@ def make_app(db_url: str = DB_URL) -> FastAPI:
             return False
 
     def _task_delivery_flags(evidence) -> dict:
+        from rouvr.phase_cursor import cursor_from_evidence, last_failure_class, resume_at
+        cursor = cursor_from_evidence(evidence)
         return {
             "pr_url": _pr_url_from_evidence(evidence),
             "waiting_git_grant": _waiting_git_grant(evidence),
             "clone_failed": _clone_failed_reason(evidence),
+            "resume_at": resume_at(cursor),
+            "cursor_phase": cursor.phase or None,
+            "failure_class": last_failure_class(evidence) or None,
         }
 
     def _pipeline_flags(state, contracts, evidence, receipts, result_verdicts) -> dict:
@@ -4199,8 +4204,13 @@ def make_app(db_url: str = DB_URL) -> FastAPI:
                   {"task_id": tid, "kind": "git_grant_accepted"})
         return {"accepted": True, "task_id": tid}
 
-    def _start_one_delivery(tid: int, request: Request, requested_by: str) -> dict:
-        """Seal (if needed), reopen blocked/failed, start Temporal for one task."""
+    def _start_one_delivery(tid: int, request: Request, requested_by: str,
+                            restart: bool = False) -> dict:
+        """Seal (if needed), reopen blocked/failed, start Temporal for one task.
+
+        restart=False: Retry — workflow honors the durable phase cursor.
+        restart=True: Restart from build — workflow clears the cursor first.
+        """
         with eng.begin() as c:
             t = _own_or_stack(c, tid, request)
             contracts = [dict(r) for r in c.execute(
@@ -4241,7 +4251,8 @@ def make_app(db_url: str = DB_URL) -> FastAPI:
         try:
             import asyncio
             from rouvr.starter import run_start
-            wid = asyncio.run(run_start(task_number=tid, requested_by=requested_by))
+            wid = asyncio.run(run_start(task_number=tid, requested_by=requested_by,
+                                        restart=bool(restart)))
         except Exception as e:  # noqa: BLE001 — surface Temporal/config errors as 503
             raise HTTPException(503, f"workflow start failed: {type(e).__name__}: {e}") from e
         with eng.begin() as c:
@@ -4250,23 +4261,31 @@ def make_app(db_url: str = DB_URL) -> FastAPI:
             prior = row(c, "SELECT * FROM receipts WHERE task_id=:i AND idempotency_key=:k",
                         i=tid, k=key)
             if not prior:
-                s, _ = _canon({"workflow_id": wid, "requested_by": requested_by})
+                s, _ = _canon({"workflow_id": wid, "requested_by": requested_by,
+                               "restart": bool(restart)})
                 c.execute(text("INSERT INTO receipts(task_id,idempotency_key,action,body,created_at)"
                                " VALUES(:i,:k,'workflow:start',:b,:n)"),
                           {"i": tid, "k": key, "b": s, "n": _now()})
                 _emit(c, t["tenant"], t["project"], "task.step", tid,
-                      {"task_id": tid, "workflow_id": wid, "kind": "workflow_start"})
-        return {"workflow_id": wid, "task_id": tid, "started": True}
+                      {"task_id": tid, "workflow_id": wid, "kind": "workflow_start",
+                       "restart": bool(restart)})
+        return {"workflow_id": wid, "task_id": tid, "started": True,
+                "restart": bool(restart)}
 
     @app.post("/v1/tasks/{tid}/start")
     def start_task_delivery(tid: int, body: dict, request: Request):
         """Start Temporal TaskWorkflow for one task. Prefer POST /v1/plans/{slug}/start
-        for plan delivery (starts the whole chain, never the slice head alone)."""
+        for plan delivery (starts the whole chain, never the slice head alone).
+
+        Body.restart=true clears the phase cursor and rebuilds from coder;
+        default (false) resumes at the durable checkpoint.
+        """
         _transition_allowed(request)
         requested_by = str(body.get("requested_by") or "").strip()
         if not requested_by:
             requested_by = getattr(request.state, "session_user", None) or "supervisor"
-        return _start_one_delivery(tid, request, requested_by)
+        restart = bool(body.get("restart"))
+        return _start_one_delivery(tid, request, requested_by, restart=restart)
 
     @app.post("/v1/plans/{slug}/start")
     def start_plan_delivery(slug: str, body: dict, request: Request):
@@ -4275,12 +4294,16 @@ def make_app(db_url: str = DB_URL) -> FastAPI:
         Uses plan:convert task_ids (step tasks only — not the slice head).
         Reopens blocked/failed members. Returns per-task results; partial
         success is allowed so one seal/Temporal failure does not abort the rest.
+
+        Body.restart=true rebuilds every startable task from coder; default
+        resumes each task from its durable phase cursor.
         """
         _transition_allowed(request)
         ident = _identity(request)
         requested_by = str(body.get("requested_by") or "").strip()
         if not requested_by:
             requested_by = getattr(request.state, "session_user", None) or "supervisor"
+        restart = bool(body.get("restart"))
         with eng.begin() as c:
             if ident == "supervisor":
                 t = None
@@ -4332,7 +4355,7 @@ def make_app(db_url: str = DB_URL) -> FastAPI:
         results = []
         for tid in startable:
             try:
-                out = _start_one_delivery(tid, request, requested_by)
+                out = _start_one_delivery(tid, request, requested_by, restart=restart)
                 results.append({"task_id": tid, "ok": True,
                                 "workflow_id": out["workflow_id"], "detail": out["workflow_id"]})
             except HTTPException as e:
@@ -4343,9 +4366,10 @@ def make_app(db_url: str = DB_URL) -> FastAPI:
         with eng.begin() as c:
             _emit(c, et, ep, "plan.start", rep["task_id"] if rep else startable[0],
                   {"slug": slug, "plan_entry": entry["id"], "task_ids": startable,
-                   "started": started, "results": results})
+                   "started": started, "restart": restart, "results": results})
         return {"slug": slug, "tenant": et, "project": ep,
-                "started": started, "total": len(results), "results": results}
+                "started": started, "total": len(results), "restart": restart,
+                "results": results}
 
     @app.patch("/v1/tasks/{tid}")
     def edit_task(tid: int, body: dict, request: Request):

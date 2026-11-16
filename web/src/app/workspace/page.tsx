@@ -5,9 +5,10 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { ChevronDown } from "lucide-react";
 import { Combobox } from "@/components/ui/Select";
-import { TaskStatePill } from "@/components/ui/StatusPill";
-import { GitGrantPanel } from "@/components/workspace/GitGrantPanel";
-import { PipelineStrip } from "@/components/workspace/PipelineStrip";
+import {
+  BoardTaskCard,
+  type TaskAction,
+} from "@/components/workspace/BoardTaskCard";
 import { PlanDeliveryPanel } from "@/components/workspace/PlanDeliveryPanel";
 import { Button } from "@/components/ui/Button";
 import { useSession } from "@/components/workspace/session";
@@ -34,40 +35,6 @@ const EVENTS_MAX_PAGES = 5;
 // Board badges use the shared TaskStatePill colours (done green, open blue,
 // needs_review amber, blocked/failed red); in-flight states fall back to the
 // neutral pill tone.
-
-function attentionReason(task: TaskRow): string {
-  const reason = task.attention?.trim();
-  return reason ? reason : "reason unavailable";
-}
-
-/** One plain-language status line from ledger flags — never invents progress. */
-function deliveryStatus(task: TaskRow): string | null {
-  if (task.clone_failed) return `Clone failed: ${task.clone_failed}`;
-  if (task.waiting_git_grant) return "Waiting for GitHub access grant";
-  if (task.needs_spec) return "Needs GitHub repo before delivery";
-  if (task.sealing) return "Sealing hidden checks…";
-  if (task.state === "needs_review") {
-    if (task.head_verdict === "pass") return "Passed verify — awaiting your approval";
-    if (task.head_verdict) return `Review verdict: ${task.head_verdict}`;
-    return "Needs your review";
-  }
-  if (task.state === "claimed") {
-    const p = task.pipeline;
-    if (p?.review === "attention") return "Rework — reviewer sent feedback";
-    if (p?.build === "attention") return "Build needs attention";
-    if (p?.build === "done" && p.review === "pending") return "Waiting on reviewer";
-    if (p?.build === "pending" || p?.build === undefined) return "Worker coding…";
-    return "In progress with a worker";
-  }
-  if (task.state === "blocked" || task.state === "failed") {
-    return task.attention?.trim() || null;
-  }
-  if (task.pr_url) return "Pull request ready";
-  if (task.state === "open" && task.pipeline?.contract === "done") {
-    return "Queued — ready to start delivery";
-  }
-  return null;
-}
 
 function byUpdatedAt(direction: "newest" | "oldest") {
   return (a: TaskRow, b: TaskRow) => {
@@ -123,79 +90,6 @@ function eventLabel(env: EventEnvelope): string {
   const what = title || (from && to ? `${from} → ${to}` : env.type);
   const ref = env.task_id == null ? "ledger" : `task #${env.task_id}`;
   return `${ref} · ${env.type} · ${what}`;
-}
-
-function TaskCard({ task, showAttention }: { task: TaskRow; showAttention: boolean }) {
-  const statusLine = deliveryStatus(task);
-  return (
-    <li data-board-task={task.id} data-board-task-state={task.state}>
-      <Link
-        href={`/workspace/tasks/${task.id}`}
-        className="block rounded-2xl border border-steel/30 bg-navy/60 px-4 py-3 transition-colors hover:border-brand/50"
-      >
-        <div className="flex items-start justify-between gap-3">
-          <h3 className="min-w-0 flex-1 text-base font-semibold text-white">
-            {task.title}
-          </h3>
-          <span className="shrink-0">
-            <TaskStatePill state={task.state} />
-          </span>
-        </div>
-        <p className="mt-1 font-mono text-[11px] text-muted">
-          #{task.id} · updated{" "}
-          <time dateTime={task.updated_at}>{formatWhen(task.updated_at)}</time>
-        </p>
-        {statusLine ? (
-          <p
-            data-task-status
-            className={`mt-1.5 text-xs ${
-              task.clone_failed || task.state === "failed" || task.state === "blocked"
-                ? "text-danger"
-                : task.waiting_git_grant || task.state === "needs_review"
-                  ? "text-warning"
-                  : "text-cloud"
-            }`}
-          >
-            {statusLine}
-          </p>
-        ) : null}
-        {task.pipeline ? (
-          <div className="mt-2">
-            <PipelineStrip pipeline={task.pipeline} variant="mini" />
-          </div>
-        ) : null}
-        {task.needs_spec ? (
-          <p data-spec-badge className="mt-1 font-mono text-[11px] text-muted">
-            Needs GitHub repo
-          </p>
-        ) : null}
-        {task.sealing ? (
-          <p data-seal-badge className="mt-1 font-mono text-[11px] text-muted">
-            Sealing hidden checks…
-          </p>
-        ) : null}
-        {showAttention && !statusLine?.includes(attentionReason(task)) ? (
-          <p className="mt-1 truncate text-xs text-muted">{attentionReason(task)}</p>
-        ) : null}
-      </Link>
-      {task.waiting_git_grant ? (
-        <div className="mt-2 px-1" data-board-git-grant>
-          <GitGrantPanel taskId={task.id} />
-        </div>
-      ) : null}
-      {task.pr_url ? (
-        <a
-          href={task.pr_url}
-          target="_blank"
-          rel="noreferrer"
-          className="mt-1 inline-block px-1 font-mono text-[11px] text-brand-300 hover:underline"
-          onClick={(e) => e.stopPropagation()}
-        >
-          Open pull request ↗
-        </a>
-      ) : null}
-    </li>
-  );
 }
 
 // One client-side pager per list: 10 rows per page with prev/next and a
@@ -339,6 +233,12 @@ function BoardHome() {
   const [activity, setActivity] = useState<BoardEvent[]>([]);
   const [activityError, setActivityError] = useState("");
   const [activityLoading, setActivityLoading] = useState(true);
+  const [actionBusy, setActionBusy] = useState<{
+    id: number;
+    action: TaskAction;
+  } | null>(null);
+  const [actionMsgs, setActionMsgs] = useState<Record<number, string>>({});
+  const [nowMs, setNowMs] = useState(() => Date.now());
 
   // One loader for stats and sections: every call replaces the single
   // tasks state, so counts and lists always come from the same response.
@@ -358,6 +258,7 @@ function BoardHome() {
           return;
         }
         setTasks(data.items);
+        setNowMs(Date.now());
       } catch (err) {
         setError(err instanceof Error ? err.message : "board failed");
       } finally {
@@ -455,6 +356,78 @@ function BoardHome() {
       alive.current = false;
     };
   }, [loadActivity, planSlug]);
+
+  async function runTaskAction(task: TaskRow, action: TaskAction) {
+    setActionBusy({ id: task.id, action });
+    const phase = task.resume_at || "build";
+    const pending =
+      action === "approve"
+        ? "approving…"
+        : action === "restart"
+          ? "restarting from build…"
+          : `resuming at ${phase}…`;
+    setActionMsgs((s) => ({ ...s, [task.id]: pending }));
+    try {
+      if (action === "approve") {
+        const { error: trErr, response } = await ws.POST("/api/tasks/{id}/transition", {
+          params: { path: { id: String(task.id) } },
+          body: {
+            to: "done",
+            idempotency_key: `board-approve-${task.id}-${Date.now()}`,
+          },
+          headers: csrfHeaders(),
+        });
+        if (response.status === 401) {
+          router.push("/workspace/login");
+          return;
+        }
+        if (!response.ok) {
+          const detailMsg =
+            trErr && typeof trErr === "object" && "detail" in trErr
+              ? String((trErr as { detail: unknown }).detail)
+              : `approve failed (${response.status})`;
+          setActionMsgs((s) => ({ ...s, [task.id]: detailMsg }));
+          return;
+        }
+        setActionMsgs((s) => ({ ...s, [task.id]: "approved" }));
+        void load(true);
+        return;
+      }
+
+      const { data, error: startErr, response } = await ws.POST("/api/tasks/{id}/start", {
+        params: { path: { id: String(task.id) } },
+        body: action === "restart" ? { restart: true } : {},
+        headers: csrfHeaders(),
+      });
+      if (response.status === 401) {
+        router.push("/workspace/login");
+        return;
+      }
+      if (!response.ok || !data) {
+        const detailMsg =
+          startErr && typeof startErr === "object" && "detail" in startErr
+            ? String((startErr as { detail: unknown }).detail)
+            : `${action} failed (${response.status})`;
+        setActionMsgs((s) => ({ ...s, [task.id]: detailMsg }));
+        return;
+      }
+      setActionMsgs((s) => ({
+        ...s,
+        [task.id]:
+          action === "restart"
+            ? `wf ${data.workflow_id} · restarted from build`
+            : `wf ${data.workflow_id} · resume at ${phase}`,
+      }));
+      void load(true);
+    } catch (err) {
+      setActionMsgs((s) => ({
+        ...s,
+        [task.id]: err instanceof Error ? err.message : `${action} failed`,
+      }));
+    } finally {
+      setActionBusy(null);
+    }
+  }
 
   async function createTask(e: React.FormEvent) {
     e.preventDefault();
@@ -826,7 +799,17 @@ function BoardHome() {
                   className="max-h-[480px] space-y-1.5 overflow-y-auto overscroll-contain pr-1"
                 >
                   {attentionPage.rows.map((t) => (
-                    <TaskCard key={t.id} task={t} showAttention />
+                    <BoardTaskCard
+                      key={t.id}
+                      task={t}
+                      showAttention
+                      nowMs={nowMs}
+                      actionBusy={
+                        actionBusy?.id === t.id ? actionBusy.action : null
+                      }
+                      actionMsg={actionMsgs[t.id]}
+                      onAction={runTaskAction}
+                    />
                   ))}
                 </ul>
                 <Pager
@@ -858,7 +841,17 @@ function BoardHome() {
                   className="max-h-[480px] space-y-1.5 overflow-y-auto overscroll-contain pr-1"
                 >
                   {progressPage.rows.map((t) => (
-                    <TaskCard key={t.id} task={t} showAttention={false} />
+                    <BoardTaskCard
+                      key={t.id}
+                      task={t}
+                      showAttention={false}
+                      nowMs={nowMs}
+                      actionBusy={
+                        actionBusy?.id === t.id ? actionBusy.action : null
+                      }
+                      actionMsg={actionMsgs[t.id]}
+                      onAction={runTaskAction}
+                    />
                   ))}
                 </ul>
                 <Pager
@@ -890,7 +883,12 @@ function BoardHome() {
                   className="max-h-[480px] space-y-1.5 overflow-y-auto overscroll-contain pr-1"
                 >
                   {donePage.rows.map((t) => (
-                    <TaskCard key={t.id} task={t} showAttention={false} />
+                    <BoardTaskCard
+                      key={t.id}
+                      task={t}
+                      showAttention={false}
+                      nowMs={nowMs}
+                    />
                   ))}
                 </ul>
                 <Pager

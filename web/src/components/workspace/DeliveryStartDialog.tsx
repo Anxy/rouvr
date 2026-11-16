@@ -9,6 +9,8 @@ export type PlanStartTarget = {
   title: string;
   tenant: string;
   project: string;
+  /** True = clear phase cursors and rebuild from coder. */
+  restart?: boolean;
 };
 
 type Props = {
@@ -113,10 +115,11 @@ export function DeliveryStartDialog({ open, plan, onClose, onDone }: Props) {
         setHasGrant(true);
       }
 
-      setStatus("Starting plan chain…");
+      const restart = Boolean(plan.restart);
+      setStatus(restart ? "Restarting plan chain from build…" : "Starting plan chain…");
       const { data, error: startErr, response } = await ws.POST("/api/plans/{slug}/start", {
         params: { path: { slug: plan.slug } },
-        body: {},
+        body: restart ? { restart: true } : {},
         headers: csrfHeaders(),
       });
       if (!response.ok || !data) {
@@ -172,12 +175,13 @@ export function DeliveryStartDialog({ open, plan, onClose, onDone }: Props) {
         }}
       >
         <h2 id="delivery-start-title" className="text-lg font-semibold text-white">
-          Start delivery
+          {plan.restart ? "Restart from build" : "Start delivery"}
         </h2>
         <p className="mt-1 text-sm text-muted">
-          Starts the whole plan chain for{" "}
-          <span className="text-fog">{plan.title}</span> — not individual slices.
-          Confirm the GitHub repository first.
+          {plan.restart
+            ? "Clears phase checkpoints and rebuilds every startable chain task from coder."
+            : "Resumes each startable chain task from its last checkpoint (build → test → verify → close)."}{" "}
+          Plan: <span className="text-fog">{plan.title}</span>. Confirm the GitHub repository first.
         </p>
         <p className="mt-2 font-mono text-[11px] text-dim">{plan.slug}</p>
         <label className="mt-4 block text-xs font-mono uppercase tracking-wider text-dim">
@@ -231,7 +235,13 @@ export function DeliveryStartDialog({ open, plan, onClose, onDone }: Props) {
             Cancel
           </Button>
           <Button type="submit" disabled={busy || !repo.trim()}>
-            {busy ? "Starting…" : "Start plan delivery"}
+            {busy
+              ? plan.restart
+                ? "Restarting…"
+                : "Starting…"
+              : plan.restart
+                ? "Restart plan from build"
+                : "Start plan delivery"}
           </Button>
         </div>
       </form>

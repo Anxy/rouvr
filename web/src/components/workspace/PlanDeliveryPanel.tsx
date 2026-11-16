@@ -33,23 +33,52 @@ const GROUP_LABEL: Record<string, string> = {
   attention: "Needs attention",
 };
 
+const STARTABLE = new Set(["open", "claimed", "blocked", "failed"]);
+
 function TaskCard({
   task,
   startStatus,
+  resumeBusy,
+  onResume,
 }: {
   task: PlanTaskCard;
   startStatus?: string;
+  resumeBusy?: boolean;
+  onResume?: (task: PlanTaskCard) => void;
 }) {
+  const phase = task.resume_at || "build";
+  const canResume = STARTABLE.has(task.state) && !!onResume;
+  const resumeHint =
+    task.state !== "done" && phase !== "build"
+      ? `will resume at ${phase}`
+      : task.failure_class
+        ? `failure: ${task.failure_class}`
+        : null;
+  const resumeLabel =
+    phase === "build" ? "Resume" : `Resume at ${phase}`;
   return (
     <li className="rounded-xl border border-line bg-abyss/60 px-3 py-2">
       <div className="flex flex-wrap items-start justify-between gap-2">
         <Link href={task.link} className="text-[13px] font-medium text-fog hover:text-white">
           #{task.id} {task.title}
         </Link>
+        {canResume ? (
+          <Button
+            type="button"
+            variant="secondary"
+            data-task-resume={task.id}
+            disabled={resumeBusy}
+            onClick={() => onResume?.(task)}
+            className="h-7 px-3 text-[11px]"
+          >
+            {resumeBusy ? "Resuming…" : resumeLabel}
+          </Button>
+        ) : null}
       </div>
       <p className="mt-0.5 font-mono text-[11px] text-dim">
         {task.state}
         {task.worker ? ` · worker ${task.worker}` : ""}
+        {resumeHint ? ` · ${resumeHint}` : ""}
         {startStatus ? ` · ${startStatus}` : ""}
       </p>
       {task.pipeline ? (
@@ -88,6 +117,7 @@ export function PlanDeliveryPanel({ planSlug }: { planSlug: string }) {
   const [dispatchMsg, setDispatchMsg] = useState("");
   const [startPlan, setStartPlan] = useState<PlanStartTarget | null>(null);
   const [startStatuses, setStartStatuses] = useState<Record<number, string>>({});
+  const [resumeBusyId, setResumeBusyId] = useState<number | null>(null);
   const timer = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const load = useCallback(
@@ -148,14 +178,52 @@ export function PlanDeliveryPanel({ planSlug }: { planSlug: string }) {
     }
   }
 
-  function openPlanStart() {
+  function openPlanStart(restart = false) {
     if (!detail) return;
     setStartPlan({
       slug: planSlug,
       title: detail.entry.title,
       tenant: detail.tenant,
       project: detail.project,
+      restart,
     });
+  }
+
+  async function resumeTask(task: PlanTaskCard) {
+    const phase = task.resume_at || "build";
+    setResumeBusyId(task.id);
+    setStartStatuses((s) => ({ ...s, [task.id]: `resuming at ${phase}…` }));
+    try {
+      const { data, error: startErr, response } = await ws.POST("/api/tasks/{id}/start", {
+        params: { path: { id: String(task.id) } },
+        body: {},
+        headers: csrfHeaders(),
+      });
+      if (response.status === 401) {
+        router.push("/workspace/login");
+        return;
+      }
+      if (!response.ok || !data) {
+        const detailMsg =
+          startErr && typeof startErr === "object" && "detail" in startErr
+            ? String((startErr as { detail: unknown }).detail)
+            : `resume failed (${response.status})`;
+        setStartStatuses((s) => ({ ...s, [task.id]: detailMsg }));
+        return;
+      }
+      setStartStatuses((s) => ({
+        ...s,
+        [task.id]: `wf ${data.workflow_id} · resume at ${phase}`,
+      }));
+      void load(planSlug);
+    } catch (err) {
+      setStartStatuses((s) => ({
+        ...s,
+        [task.id]: err instanceof Error ? err.message : "resume failed",
+      }));
+    } finally {
+      setResumeBusyId(null);
+    }
   }
 
   const groups: Record<string, PlanTaskCard[]> = {
@@ -202,9 +270,18 @@ export function PlanDeliveryPanel({ planSlug }: { planSlug: string }) {
               data-start-all
               data-plan-start
               disabled={startable.length === 0 || detail.status !== "materialized"}
-              onClick={() => openPlanStart()}
+              onClick={() => openPlanStart(false)}
             >
               Start delivery ({startable.length})
+            </Button>
+            <Button
+              type="button"
+              variant="secondary"
+              data-plan-restart
+              disabled={startable.length === 0 || detail.status !== "materialized"}
+              onClick={() => openPlanStart(true)}
+            >
+              Restart from build
             </Button>
             <Button
               type="button"
@@ -245,6 +322,10 @@ export function PlanDeliveryPanel({ planSlug }: { planSlug: string }) {
                         key={t.id}
                         task={t}
                         startStatus={startStatuses[t.id]}
+                        resumeBusy={resumeBusyId === t.id}
+                        onResume={
+                          detail.status === "materialized" ? resumeTask : undefined
+                        }
                       />
                     ))}
                   </ul>

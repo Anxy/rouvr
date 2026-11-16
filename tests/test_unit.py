@@ -264,8 +264,11 @@ def test_credentials_refuse_bad_perms(tmp_path: Path):
 
 
 def test_branch_for():
-    assert branch_for("task-9") == "rouvr/task-9"
-    assert branch_for("task-9", 1) == branch_for("task-9", 2) == "rouvr/task-9"
+    # Flat under rouvr/task-* so we never collide with legacy rouvr/{id}/a{N} refs.
+    assert branch_for("9") == "rouvr/task-9"
+    assert branch_for("9", 1) == branch_for("9", 2) == "rouvr/task-9"
+    assert branch_for("5") == "rouvr/task-5"
+    assert not branch_for("5").startswith("rouvr/5/")  # would conflict with rouvr/5/a*
 
 
 def test_build_task_prompt_has_essentials():
@@ -307,10 +310,27 @@ async def test_container_names_unique_run_id_deterministic(tmp_path, monkeypatch
     fake.write_text(f'#!/bin/sh\necho "$@" >> "{log}"\nexit 0\n')
     fake.chmod(0o755)
     monkeypatch.setenv("PATH", f"{tmp_path}:{__import__('os').environ['PATH']}")
+    monkeypatch.delenv("ROUVR_DOCKER_VOLUMES_FROM", raising=False)
+    monkeypatch.setattr("rouvr.testrunner._docker_in_docker", lambda: False)
     r1 = await ContainerTestRunner("img").run(tmp_path, ["true"], timeout_s=5, run_key="k1")
     r2 = await ContainerTestRunner("img").run(tmp_path, ["true"], timeout_s=5, run_key="k1")
     names = [ln.split("--name ", 1)[1].split()[0] for ln in log.read_text().splitlines()]
     assert r1.run_id == r2.run_id and len(set(names)) == 2
+    assert any(tok == "-v" for ln in log.read_text().splitlines() for tok in ln.split())
+
+
+async def test_container_runner_uses_volumes_from_in_docker(tmp_path, monkeypatch):
+    from rouvr.testrunner import ContainerTestRunner
+    log = tmp_path / "docker.log"
+    fake = tmp_path / "docker"
+    fake.write_text(f'#!/bin/sh\necho "$@" >> "{log}"\nexit 0\n')
+    fake.chmod(0o755)
+    monkeypatch.setenv("PATH", f"{tmp_path}:{__import__('os').environ['PATH']}")
+    monkeypatch.setenv("ROUVR_DOCKER_VOLUMES_FROM", "worker-test")
+    await ContainerTestRunner("img").run(tmp_path, ["true"], timeout_s=5, run_key="vf")
+    line = log.read_text().strip()
+    assert "--volumes-from worker-test" in line
+    assert " -v " not in f" {line} "
 
 
 async def test_outcome_parse_sees_beyond_tail_window(tmp_path):

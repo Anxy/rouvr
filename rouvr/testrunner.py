@@ -55,8 +55,36 @@ def _run_id(prefix: str, run_key: str) -> str:
     return f"{prefix}-{hashlib.sha256(run_key.encode()).hexdigest()[:16]}"
 
 
+def _docker_in_docker() -> bool:
+    return Path("/.dockerenv").exists()
+
+
+def _volumes_from() -> str:
+    """Share the worker's mounts with the test container.
+
+    When the test worker itself runs in Docker and talks to the host docker
+    daemon via a mounted socket, ``-v /data/...:/src`` resolves on the *host*
+    and is empty. ``--volumes-from`` keeps the clone visible.
+    """
+    explicit = (os.environ.get("ROUVR_DOCKER_VOLUMES_FROM") or "").strip()
+    if explicit:
+        return explicit
+    if _docker_in_docker():
+        return (os.environ.get("HOSTNAME") or "").strip()
+    return ""
+
+
+def _host_mount_cwd(cwd: Path) -> str:
+    """Rewrite /data/... to the host bind path when ROUVR_DOCKER_HOST_DATA is set."""
+    cwd_s = str(cwd.resolve())
+    host_data = (os.environ.get("ROUVR_DOCKER_HOST_DATA") or "").rstrip("/")
+    if host_data and (cwd_s == "/data" or cwd_s.startswith("/data/")):
+        return host_data + cwd_s[len("/data"):]
+    return cwd_s
+
+
 class ContainerTestRunner:
-    """Run tests in a clean container: the clone is mounted read-only, no network."""
+    """Run tests in a clean container: the clone is mounted, no network."""
 
     def __init__(self, image: str) -> None:
         self.image = image
@@ -68,8 +96,14 @@ class ContainerTestRunner:
         # (.pytest_cache, module-level sqlite files, snapshot artifacts)
         # legitimately land next to the code. Isolation that matters (no
         # network, pinned image, ephemeral container) is unchanged.
-        argv = ["docker", "run", "--rm", "--name", name, "--network", "none", "--pull", "never",
-               "-v", f"{cwd}:/src", "-w", "/src", self.image, *command]
+        base = ["docker", "run", "--rm", "--name", name, "--network", "none", "--pull", "never"]
+        volumes_from = _volumes_from()
+        if volumes_from:
+            argv = [*base, "--volumes-from", volumes_from, "-w", str(cwd.resolve()),
+                    self.image, *command]
+        else:
+            argv = [*base, "-v", f"{_host_mount_cwd(cwd)}:/src", "-w", "/src",
+                    self.image, *command]
         try:
             rc, full = await _exec(argv, cwd, timeout_s, container_name=name)
         except FileNotFoundError as e:

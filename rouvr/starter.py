@@ -43,9 +43,14 @@ async def create_schedule(client: Client, wf: TaskWorkflowInput, schedule_id: st
         policy=SchedulePolicy(overlap=ScheduleOverlapPolicy.SKIP)))
 
 
-async def run_start(*, task_number: int, requested_by: str) -> str:
-    """Operator start: read the task, idempotently start its workflow. Returns the workflow id."""
+async def run_start(*, task_number: int, requested_by: str, restart: bool = False) -> str:
+    """Operator start: read the task, idempotently start its workflow. Returns the workflow id.
+
+    restart=False (default): honor the durable phase cursor (Retry).
+    restart=True: clear cursor inside the workflow and rebuild from coder.
+    """
     wf, s = await _input_for(task_number, requested_by)
+    wf.restart_from_build = bool(restart)
     client = await Client.connect(s.temporal_address, namespace=s.temporal_namespace)
     return await start_task_workflow(client, wf)
 

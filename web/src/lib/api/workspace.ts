@@ -174,12 +174,19 @@ export interface ProxyPaths {
     post: {
       parameters: { path: { id: string } };
       requestBody: {
-        content: { "application/json": { requested_by?: string } };
+        content: {
+          "application/json": { requested_by?: string; restart?: boolean };
+        };
       };
       responses: {
         200: {
           content: {
-            "application/json": { workflow_id: string; task_id: number; started: boolean };
+            "application/json": {
+              workflow_id: string;
+              task_id: number;
+              started: boolean;
+              restart?: boolean;
+            };
           };
         };
         401: { content: { "application/json": { detail: string } } };
@@ -571,7 +578,9 @@ export interface ProxyPaths {
     post: {
       parameters: { path: { slug: string } };
       requestBody: {
-        content: { "application/json": { requested_by?: string } };
+        content: {
+          "application/json": { requested_by?: string; restart?: boolean };
+        };
       };
       responses: {
         200: {
@@ -582,6 +591,7 @@ export interface ProxyPaths {
               project: string;
               started: number;
               total: number;
+              restart?: boolean;
               results: {
                 task_id: number;
                 ok: boolean;
@@ -672,6 +682,10 @@ export interface TaskRow {
   waiting_git_grant?: boolean;
   /** Host clone failed (distinct from grant wait). */
   clone_failed?: string | null;
+  /** Next phase Retry will enter: build | test | verify | close */
+  resume_at?: "build" | "test" | "verify" | "close" | null;
+  cursor_phase?: string | null;
+  failure_class?: "infra" | "product" | "policy" | string | null;
 }
 
 export interface TaskDetail extends TaskRow {
@@ -731,6 +745,10 @@ export interface PlanTaskCard {
   needs_spec?: boolean;
   sealing?: boolean;
   pipeline?: PipelineState;
+  /** Next phase Retry will enter: build | test | verify | close */
+  resume_at?: "build" | "test" | "verify" | "close" | null;
+  cursor_phase?: string | null;
+  failure_class?: "infra" | "product" | "policy" | string | null;
 }
 
 export interface PlanExecuteResult extends PlanDetail {

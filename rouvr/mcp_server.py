@@ -650,13 +650,16 @@ def _live_peers(task_id: int, task: dict) -> list[dict]:
     peers = _peer_sessions(task)
     root = Path(os.environ.get("WORKSPACE_ROOT", DEFAULT_WORKSPACE_ROOT))
     known = {p["session_id"] for p in peers}
-    # Stable delivery workspace is rouvr__{task_id}; keep __a* for in-flight
-    # legacy attempt checkouts until they drain.
+    # Stable delivery workspace is rouvr__task-{id}; keep legacy
+    # rouvr__{id} / rouvr__{id}__a* until they drain.
     candidates: list = []
     if root.exists():
-        stable = root / f"rouvr__{task_id}"
+        stable = root / f"rouvr__task-{task_id}"
         if stable.is_dir():
             candidates.append(stable)
+        legacy = root / f"rouvr__{task_id}"
+        if legacy.is_dir():
+            candidates.append(legacy)
         candidates.extend(sorted(root.glob(f"rouvr__{task_id}__a*")))
     for ws in candidates:
         sid = discover_session_id(ws)

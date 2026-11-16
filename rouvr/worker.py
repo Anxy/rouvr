@@ -25,8 +25,10 @@ async def run_workers(s: Settings, which: str) -> None:
     all_workers = {
         "orch": Worker(client, task_queue=Q_ORCH, workflows=[TaskWorkflow, ScheduledRunWorkflow, OpsTaskWorkflow],
                        activities=[acts.verify_binding, acts.close_task, acts.mark_blocked, acts.escalate,
-                                   acts.sign_receipt, acts.ops_prepare, acts.ops_compile, acts.ops_claim,
-                                   acts.ops_deliver, acts.ops_verify, acts.ops_close, acts.ops_block]),
+                                   acts.sign_receipt, acts.load_delivery_cursor, acts.save_delivery_cursor,
+                                   acts.clear_delivery_cursor, acts.ops_prepare, acts.ops_compile,
+                                   acts.ops_claim, acts.ops_deliver, acts.ops_verify, acts.ops_close,
+                                   acts.ops_block]),
         "build": Worker(client, task_queue=Q_BUILD, activities=[acts.assign_task],
                         max_concurrent_activities=s.coder_concurrency),
         "test": Worker(client, task_queue=Q_TEST, activities=[acts.run_tests]),

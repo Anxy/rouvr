@@ -3,7 +3,10 @@ import { incomingCookie, LEDGER_URL, passJson } from "@/lib/api/server";
 /** Start Temporal delivery for every chain task on a materialized plan. */
 export async function POST(req: Request, { params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;
-  const body = (await req.json().catch(() => ({}))) as { requested_by?: string };
+  const body = (await req.json().catch(() => ({}))) as {
+    requested_by?: string;
+    restart?: boolean;
+  };
   const csrf = req.headers.get("x-csrf-token") ?? "";
   const headers: Record<string, string> = {
     "content-type": "application/json",
@@ -19,6 +22,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ slug: s
       headers,
       body: JSON.stringify({
         ...(body.requested_by?.trim() ? { requested_by: body.requested_by.trim() } : {}),
+        ...(body.restart ? { restart: true } : {}),
       }),
     },
   );

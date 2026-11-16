@@ -72,6 +72,8 @@ x-worker-env: &worker-env
   LEASE_TTL_S: "180"
   HEARTBEAT_S: "30"
   MAX_REWORK: "2"
+  # Keep verify clones on the shared volume so docker.sock DinD can see them.
+  TMPDIR: /data/tmp
   MUSE_BIN: ${MUSE_BIN:-/data/muse/muse}
   MUSE_UPDATE_INTERVAL_SECONDS: ${MUSE_UPDATE_INTERVAL_SECONDS:-86400}
   ROUVR_LAUNCH_WINDOWS: "0"

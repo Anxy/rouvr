@@ -23,8 +23,13 @@ async def _run(*argv: str, cwd: Path | None = None, env: dict[str, str] | None =
 
 
 def branch_for(task_id: str, attempt_no: int | None = None) -> str:
-    """One delivery branch per task. attempt_no kept for call-site compat; unused."""
-    return f"rouvr/{task_id}"
+    """One delivery branch per task. attempt_no kept for call-site compat; unused.
+
+    Form is ``rouvr/task-{id}`` (not ``rouvr/{id}``): legacy per-attempt branches
+    were ``rouvr/{id}/a{N}``, and Git forbids creating ``refs/heads/rouvr/{id}``
+    while ``refs/heads/rouvr/{id}/a{N}`` still exists (directory/file conflict).
+    """
+    return f"rouvr/task-{task_id}"
 
 
 def workspace_path(root: Path, branch: str) -> Path:

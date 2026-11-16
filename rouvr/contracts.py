@@ -17,6 +17,30 @@ class TaskWorkflowInput:
     max_rework: int = 2
     assign_start_to_close_s: int = 1800
     spec_timeout_s: int = 1500  # ExecSpec.timeout_s: one container run; test activity runs two
+    # True → clear phase cursor and start at build; False (default) → honor cursor.
+    restart_from_build: bool = False
+
+
+@dataclass
+class DeliveryCursor:
+    """Durable checkpoint for cross-run resume. Empty phase means start at build."""
+    phase: str = ""  # build_done | test_passed | verify_approved | closed | ""
+    attempt_no: int = 0
+    attempt_id: str = ""
+    lease_epoch: int = 0
+    muse_session_id: str = ""
+    branch: str = ""
+    pr_url: str = ""
+    head_sha: str = ""
+    evidence_ids: list[str] = field(default_factory=list)
+    test_run_id: str = ""
+    test_summary: str = ""
+    test_evidence_id: str = ""
+    test_failed_output: str = ""
+    verify_verdict: str = ""
+    verify_notes: str = ""
+    verify_reviewer: str = ""
+    verify_evidence_id: str = ""
 
 
 @dataclass

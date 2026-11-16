@@ -18,8 +18,8 @@ from pathlib import Path
 from temporalio import activity
 
 from rouvr.cheatscan import scan_diff
-from rouvr.contracts import (AssignInput, AssignResult, Binding, CloseResult, OpsInput, OpsResult,
-                             TaskWorkflowInput, TestResult, VerifyResult)
+from rouvr.contracts import (AssignInput, AssignResult, Binding, CloseResult, DeliveryCursor,
+                             OpsInput, OpsResult, TaskWorkflowInput, TestResult, VerifyResult)
 from rouvr.errors import Code, RouvrError
 from rouvr.gate import (SUBMIT_ATTEMPT_TYPE, GateEvidence, count_prior_submits, evaluate,
                         read_submission_file)
@@ -34,7 +34,29 @@ from rouvr.lease import (LeaseKeeper, attempt_base, fresh_claim, open_or_reuse_a
 from rouvr.messages import MESSAGE_TYPE, messages_for, read_message_file
 from rouvr.muse import build_task_prompt, build_reviewer_prompt, read_verdict
 from rouvr.ops import OPS_EXECUTOR
+from rouvr.phase_cursor import (CURSOR_KIND, cursor_from_evidence, cursor_payload, failure_class)
 from rouvr.receipts import build_links, load_private_key, sign_links
+
+
+def _test_infra_failure(repo_run, hidden_run) -> str | None:
+    """Detect docker/mount/runner breakage that must not trigger Muse rework."""
+    blob = f"{repo_run.output_full or ''}\n{hidden_run.output_full or ''}"
+    if "file or directory not found: _rouvr_hidden" in blob:
+        return ("test container cannot see _rouvr_hidden — docker volume mount "
+                "broken (use --volumes-from / ROUVR_DOCKER_VOLUMES_FROM)")
+    if "Unable to find image" in blob or "Unable to find the image" in blob:
+        return "test runner image missing on the docker host"
+    if "docker: " in blob.lower() and "error" in blob.lower() and not repo_run.output_full:
+        return "docker test runner failed before producing output"
+    return None
+
+
+def _ephemeral_dir(prefix: str):
+    """Prefer TMPDIR under the shared data volume so DinD can see clones."""
+    base = os.environ.get("TMPDIR") or ""
+    if base and Path(base).is_dir():
+        return tempfile.TemporaryDirectory(prefix=prefix, dir=base)
+    return tempfile.TemporaryDirectory(prefix=prefix)
 
 
 def _ops_ledger():
@@ -273,8 +295,10 @@ class Activities:
             stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
         _, err = await proc.communicate()
         if proc.returncode != 0:
-            raise RouvrError(Code.DOWNSTREAM,
-                             f"git push failed: {err.decode(errors='replace')[:200]}")
+            # Prefer the tail: GitHub's "create a pull request" advisory often
+            # prefixes the real rejection (ref lock, non-fast-forward, auth).
+            msg = err.decode(errors="replace").strip()
+            raise RouvrError(Code.DOWNSTREAM, f"git push failed: {msg[-500:]}")
 
     @activity.defn(name="run_tests")
     @_wrap
@@ -286,17 +310,28 @@ class Activities:
         hidden_dir, manifest = fetch_hidden_suite(s.hidden_tests_root, wf.task_id)
         assert_coder_clean(workspace_path(s.workspace_root, built.branch), hidden_dir, manifest)
         fence = f"{built.attempt_id}:run-tests"
-        with tempfile.TemporaryDirectory(prefix="rouvr-verify-") as tmp:
+        with _ephemeral_dir("rouvr-verify-") as tmp:
             clone = await clone_at(spec.repo, built.head_sha, spec.base_branch, Path(tmp) / "src")
             target = clone / "_rouvr_hidden"
             target.mkdir()  # hidden tests enter the fresh clone only — never the coder workspace
             for n in manifest.files:
                 (target / n).write_bytes((hidden_dir / n).read_bytes())
             # `python -m` puts the clone on sys.path so hidden tests import repo code.
+            staged = list(target.iterdir()) if target.is_dir() else []
+            if not staged:
+                raise RouvrError(
+                    Code.EVIDENCE,
+                    f"hidden suite for task {wf.task_id} staged empty into verify clone",
+                )
             repo_run = await h.tests.run(clone, spec.test_command, spec.timeout_s, f"{fence}:repo")
             hidden_run = await h.tests.run(clone, ["python", "-m", "pytest", "_rouvr_hidden", "-v"],
                                            spec.timeout_s, f"{fence}:hidden")
             diff = await diff_range(clone, f"origin/{spec.base_branch}", built.head_sha)
+        # Infra misconfig (empty docker mount, missing runner image) must not
+        # burn Muse rework loops — fail closed so the workflow blocks.
+        infra = _test_infra_failure(repo_run, hidden_run)
+        if infra:
+            raise RouvrError(Code.EVIDENCE, infra)
         # Parse from the full output: tail-only parsing silently drops sealed
         # groups whose result lines fall outside the display window.
         outcomes = parse_criterion_outcomes(hidden_run.output_full or hidden_run.output_tail)
@@ -377,7 +412,7 @@ class Activities:
             return VerifyResult("request_changes", gv.feedback or "gate rejected", reviewer.principal, ev)
         # Reviewer diff comes from a fresh clone at head_sha, never the coder
         # workspace: mutating the coder ws after submit cannot change review.
-        with tempfile.TemporaryDirectory(prefix="rouvr-review-") as rtmp:
+        with _ephemeral_dir("rouvr-review-") as rtmp:
             rclone = await clone_at(spec.repo, built.head_sha, spec.base_branch, Path(rtmp) / "src")
             diff = await diff_range(rclone, f"origin/{spec.base_branch}", built.head_sha)
         vdir = ws.parent / f"{ws.name}__verify"
@@ -470,6 +505,28 @@ class Activities:
             note = f"approved on {attempt_id}"
         return await self._close_to(wf.task_id, "done", note, ("close", wf.task_id, attempt_id))
 
+    @activity.defn(name="load_delivery_cursor")
+    @_wrap
+    async def load_delivery_cursor(self, wf: TaskWorkflowInput) -> DeliveryCursor:
+        wh = self.h.workhub_for(None)
+        rows = await wh.list_evidence(wf.task_id)
+        return cursor_from_evidence(rows)
+
+    @activity.defn(name="save_delivery_cursor")
+    @_wrap
+    async def save_delivery_cursor(self, wf: TaskWorkflowInput, cursor: DeliveryCursor) -> str:
+        wh = self.h.workhub_for(None)
+        run_id = activity.info().workflow_run_id
+        fence = f"delivery-cursor:{run_id}:{cursor.phase or 'cleared'}"
+        return await wh.attach_evidence_exact(
+            wf.task_id, CURSOR_KIND, fence, cursor_payload(cursor))
+
+    @activity.defn(name="clear_delivery_cursor")
+    @_wrap
+    async def clear_delivery_cursor(self, wf: TaskWorkflowInput) -> str:
+        """Product rework / Restart: next Retry must enter at build."""
+        return await self.save_delivery_cursor(wf, DeliveryCursor())
+
     @activity.defn(name="mark_blocked")
     @_wrap
     async def mark_blocked(self, wf: TaskWorkflowInput, reason: str) -> CloseResult:
@@ -488,8 +545,11 @@ class Activities:
     async def escalate(self, wf: TaskWorkflowInput, reason: str, attempt_id: str) -> bool:
         wh = self.h.workhub_for(None)
         run_id = activity.info().workflow_run_id
-        await wh.attach_evidence_exact(wf.task_id, "escalation", f"escalate:{attempt_id}:{reason}:{run_id}",
-                                       {"reason": reason, "attempt_id": attempt_id, "run_id": run_id})
+        klass = failure_class(reason)
+        await wh.attach_evidence_exact(
+            wf.task_id, "escalation", f"escalate:{attempt_id}:{reason}:{run_id}",
+            {"reason": reason, "attempt_id": attempt_id, "run_id": run_id,
+             "failure_class": klass})
         return True
 
     @activity.defn(name="sign_receipt")

@@ -88,17 +88,26 @@ test("PipelineStrip renders five steps from the ledger pipeline object", () => {
 
 test("board rows render the shared pill and the mini strip without extra fetches", () => {
   const page = read("src/app/workspace/page.tsx");
+  const card = read("src/components/workspace/BoardTaskCard.tsx");
   assert.ok(
-    page.includes("TaskStatePill"),
+    page.includes("BoardTaskCard"),
+    "board rows must use BoardTaskCard",
+  );
+  assert.ok(
+    card.includes("TaskStatePill"),
     "board rows must use the shared TaskStatePill",
   );
   assert.ok(
-    page.includes("PipelineStrip") && page.includes('"mini"'),
+    card.includes("PipelineStrip") && card.includes('"mini"'),
     "board rows must render the mini pipeline strip",
   );
   assert.ok(
-    page.includes("task.pipeline"),
+    card.includes("task.pipeline"),
     "mini strip must read flags from the row's pipeline object",
+  );
+  assert.ok(
+    card.includes("data-delivery-phase") && card.includes("data-task-actions"),
+    "board cards show live delivery phase and an action bar",
   );
   const fetches = page.match(/ws\.GET\(/g) ?? [];
   assert.equal(
@@ -115,8 +124,21 @@ test("board rows render the shared pill and the mini strip without extra fetches
     "board activity feed must read the /api/events snapshot",
   );
   assert.ok(
-    !page.includes("/api/tasks/{id}"),
-    "board must never fan out to per-task detail (strip + activity stay row-level)",
+    page.includes("/api/tasks/{id}/start") && card.includes("data-task-resume"),
+    "board task cards expose Resume via task start (phase cursor)",
+  );
+  assert.ok(
+    card.includes("data-task-restart") && page.includes("restart: true"),
+    "board task cards expose Restart from build",
+  );
+  assert.ok(
+    card.includes("data-task-approve") && page.includes("/api/tasks/{id}/transition"),
+    "board task cards can Approve when verify passed",
+  );
+  assert.ok(
+    !page.includes('ws.GET("/api/tasks/{id}")') &&
+      !card.includes('ws.GET("/api/tasks/{id}")'),
+    "board must never fan out to per-task detail GET (strip + activity stay row-level)",
   );
   const api = read("src/lib/api/workspace.ts");
   assert.ok(
@@ -162,20 +184,22 @@ test("board summary cards show Open / Blocked / Done plus an honest last-activit
 
 test("board cards collapse the repeated tenant/project string into one label", () => {
   const page = read("src/app/workspace/page.tsx");
+  const card = read("src/components/workspace/BoardTaskCard.tsx");
   assert.ok(
     page.includes("scopeLabel"),
     "board must collapse the per-section scope into one compact label",
   );
   assert.ok(
-    !page.includes("{task.tenant} / {task.project}"),
+    !page.includes("{task.tenant} / {task.project}") &&
+      !card.includes("{task.tenant} / {task.project}"),
     "cards must not repeat the tenant / project string on every row",
   );
   assert.ok(
-    page.includes("text-base") && page.includes("<h3"),
+    card.includes("text-base") && card.includes("<h3"),
     "cards must render a large title",
   );
   assert.ok(
-    page.includes("font-mono") && page.includes("updated"),
+    card.includes("font-mono") && card.includes("updated"),
     "cards must keep small metadata (id + updated time)",
   );
 });

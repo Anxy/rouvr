@@ -159,7 +159,7 @@ async def test_escalate_attaches_evidence_and_returns_true():
                                    "rework_exhausted", "att1") is True
     assert fake.rows == [("escalation", "escalate:att1:rework_exhausted:run-9",
                           {"reason": "rework_exhausted", "attempt_id": "att1",
-                           "run_id": "run-9"})]
+                           "run_id": "run-9", "failure_class": "product"})]
 
 
 async def test_verify_writes_submit_after_reviewer_and_clears_stale_verdict(tmp_path, monkeypatch):

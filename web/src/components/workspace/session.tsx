@@ -25,6 +25,7 @@ export type SessionStatus = "loading" | "authenticated" | "anonymous";
 interface SessionValue {
   status: SessionStatus;
   projects: ProjectRow[];
+  /** Auth tenant from the session cookie (available before any project exists). */
   tenant: string | null;
   project: string | null;
   setProject: (name: string) => void;
@@ -56,6 +57,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   const [projects, setProjects] = useState<ProjectRow[]>([]);
   const [activeProject, setActiveProject] = useState<string | null>(null);
   const [username, setUsername] = useState<string | null>(null);
+  const [authTenant, setAuthTenant] = useState<string | null>(null);
   const seq = useRef(0);
 
   // Active project: the stored choice wins when it is still in the live
@@ -82,6 +84,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
         if (sessionCall.response.status === 401) {
           setProjects([]);
           setUsername(null);
+          setAuthTenant(null);
           clearSessionUsername();
           clearCsrfToken();
           setStatus("anonymous");
@@ -91,11 +94,13 @@ export function SessionProvider({ children }: { children: ReactNode }) {
         setCsrfToken(sessionCall.data.csrf_token);
         setSessionUsername(sessionCall.data.username);
         setUsername(sessionCall.data.username);
+        setAuthTenant(sessionCall.data.tenant || null);
         const { data, response } = await ws.GET("/api/projects");
         if (run !== seq.current) return;
         if (response.status === 401) {
           setProjects([]);
           setUsername(null);
+          setAuthTenant(null);
           clearSessionUsername();
           clearCsrfToken();
           setStatus("anonymous");
@@ -131,12 +136,25 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     clearSessionUsername();
     setProjects([]);
     setUsername(null);
+    setAuthTenant(null);
     setStatus("anonymous");
     router.push("/workspace/login");
   }, [router]);
 
+  // First-run gate: authenticated with zero projects must finish onboarding
+  // before the operator shell. Login and onboarding themselves are exempt.
+  useEffect(() => {
+    if (status !== "authenticated") return;
+    if (projects.length > 0) return;
+    if (pathname === "/workspace/login" || pathname === "/workspace/onboarding") return;
+    router.replace("/workspace/onboarding");
+  }, [status, projects.length, pathname, router]);
+
   const value = useMemo<SessionValue>(() => {
-    const tenant = projects.length > 0 ? projects[0].tenant : null;
+    // Prefer auth session tenant (works with zero projects); fall back to
+    // the first project's tenant once any exist.
+    const tenant =
+      authTenant ?? (projects.length > 0 ? projects[0].tenant : null);
     // Active project drives the header, sidebar context, and every page
     // filter; it is the stored choice when live, else the first project.
     const project =
@@ -144,7 +162,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
         ? activeProject
         : (projects[0]?.project ?? null);
     return { status, projects, tenant, project, setProject, username, refresh, logout };
-  }, [status, projects, activeProject, setProject, username, refresh, logout]);
+  }, [status, projects, authTenant, activeProject, setProject, username, refresh, logout]);
 
   return <SessionContext.Provider value={value}>{children}</SessionContext.Provider>;
 }

@@ -24,7 +24,7 @@ const read = (rel: string): string =>
 
 const PAGE = "src/app/workspace/knowledge/page.tsx";
 const EMPTY_GUIDE =
-  "created from approved decisions, task outcomes and chat — search above to browse";
+  "created from approved decisions, task outcomes, and Supervisor chat — search above to browse, or talk to the Supervisor to capture new decisions";
 
 // --- pure helpers -------------------------------------------------------------
 

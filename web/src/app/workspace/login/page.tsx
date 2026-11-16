@@ -34,7 +34,13 @@ export default function WorkspaceLoginPage() {
       }
       setCsrfToken(data.csrf_token);
       setSessionUsername(data.username);
-      router.push("/workspace");
+      // Empty workspace → first-run onboarding; otherwise the board.
+      const projects = await ws.GET("/api/projects");
+      if (projects.response.ok && (projects.data?.projects.length ?? 0) === 0) {
+        router.push("/workspace/onboarding");
+      } else {
+        router.push("/workspace");
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : "login failed");
     } finally {
@@ -57,6 +63,9 @@ export default function WorkspaceLoginPage() {
         }}
       >
         Make it happen.
+      </p>
+      <p className="mt-2 max-w-xs text-sm text-dim">
+        Sign in to set up a project and repo, then tell the supervisor what to build.
       </p>
       <form onSubmit={submit} className="mt-8 w-full space-y-4 text-left">
         <label className="block">

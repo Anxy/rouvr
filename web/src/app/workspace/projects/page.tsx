@@ -1,7 +1,6 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/Button";
 import { useSession } from "@/components/workspace/session";
@@ -475,7 +474,9 @@ export default function ProjectsPage() {
         <p className="font-mono text-sm text-muted">loading…</p>
       ) : visible.length === 0 ? (
         <p className="rounded-2xl border border-steel/40 bg-abyss/60 p-6 text-center text-sm text-muted">
-          {filter === "archived" ? "No archived projects." : "No projects yet — create one above."}
+          {filter === "archived"
+            ? "No archived projects."
+            : "No projects yet — create one above, or finish first-run setup."}
         </p>
       ) : (
         <>
@@ -521,18 +522,26 @@ export default function ProjectsPage() {
                   last activity {formatWhen(s.lastActivity)}
                 </p>
                 <div className="mt-2 flex flex-wrap gap-2">
-                  <Link
-                    href="/workspace"
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setProject(name);
+                      router.push("/workspace");
+                    }}
                     className="rounded-lg border border-steel/40 px-2.5 py-1 text-xs text-cloud transition-colors hover:border-brand/50"
                   >
                     Open in board
-                  </Link>
-                  <Link
-                    href="/workspace/chat"
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setProject(name);
+                      router.push("/workspace/chat");
+                    }}
                     className="rounded-lg border border-steel/40 px-2.5 py-1 text-xs text-cloud transition-colors hover:border-brand/50"
                   >
                     Open in chat
-                  </Link>
+                  </button>
                   <button
                     type="button"
                     onClick={() => openEdit(name)}

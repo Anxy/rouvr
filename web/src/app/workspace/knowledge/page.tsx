@@ -36,7 +36,7 @@ const PAGE_SIZE = "50";
 const PAGE_SIZE_CLIENT = 10;
 
 const EMPTY_GUIDE =
-  "created from approved decisions, task outcomes and chat — search above to browse";
+  "created from approved decisions, task outcomes, and Supervisor chat — search above to browse, or talk to the Supervisor to capture new decisions";
 
 function VerifiedPill({ verified }: { verified: boolean }) {
   return (
@@ -536,7 +536,11 @@ export default function KnowledgePage() {
             </>
           ) : searched && !busy && !error ? (
             <p className="rounded-2xl border border-line bg-panel p-6 text-center text-sm text-muted">
-              No knowledge entries loaded yet — entries are {EMPTY_GUIDE}.
+              No knowledge entries loaded yet — entries are {EMPTY_GUIDE}.{" "}
+              <Link href="/workspace/chat" className="text-brand-300 hover:underline">
+                Talk to the Supervisor
+              </Link>
+              .
             </p>
           ) : null}
         </div>

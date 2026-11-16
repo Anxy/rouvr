@@ -5,10 +5,8 @@ import { usePathname } from "next/navigation";
 import {
   BookOpen,
   ChevronDown,
-  ClipboardList,
   Folder,
   LayoutGrid,
-  ListTodo,
   LogIn,
   MessageSquare,
   Siren,
@@ -19,17 +17,13 @@ import { RouvrMark } from "@/components/workspace/RouvrMark";
 import { ThemeToggle } from "@/components/workspace/ThemeToggle";
 import { shellGreeting } from "@/lib/greeting";
 
-// Figma shell port (sidebar + topbar, 68px brand/topbar bands, 242px rail):
-// contract IA in Figma order, theme tokens only, every control live — the
-// context card is static, account options live only in the header user menu
-// (profile info, Help & support into chat, working Sign out), and a footer
-// links the real destinations. No duplicate account block in the rail.
+// Board-first IA: plans/tasks live on Board (delivery via ?plan=, create via
+// New task). Task detail stays at /workspace/tasks/[id]. Theme tokens only;
+// account options live in the header user menu; footer mirrors NAV.
 const NAV: { href: string; label: string; icon: LucideIcon }[] = [
   { href: "/workspace", label: "Board", icon: LayoutGrid },
   { href: "/workspace/chat", label: "Supervisor", icon: MessageSquare },
-  { href: "/workspace/planner", label: "Planner", icon: ClipboardList },
   { href: "/workspace/projects", label: "Projects", icon: Folder },
-  { href: "/workspace/tasks", label: "Tasks", icon: ListTodo },
   { href: "/workspace/knowledge", label: "Knowledge", icon: BookOpen },
   { href: "/workspace/escalations", label: "Escalations", icon: Siren },
 ];
@@ -100,9 +94,8 @@ function Avatar({ name, size = 30 }: { name: string; size?: number }) {
 function AppShell({ children }: { children: React.ReactNode }) {
   const { status, tenant, project, projects, setProject, username, logout } = useSession();
   const pathname = usePathname();
-  // The login page stands alone: no sidebar, no topbar — just the brand,
-  // the fields, and remember-me. Everything else renders inside the shell.
-  if (pathname === "/workspace/login") {
+  // Login and first-run onboarding stand alone: no sidebar, no topbar.
+  if (pathname === "/workspace/login" || pathname === "/workspace/onboarding") {
     return (
       <div className="min-h-screen bg-abyss">
         <main className="mx-auto w-full max-w-[1600px] px-8 py-[30px]">{children}</main>
@@ -116,10 +109,7 @@ function AppShell({ children }: { children: React.ReactNode }) {
   const greeting = shellGreeting(authed ? username : null, new Date());
 
   const isChatSurface =
-    pathname === "/workspace/chat" ||
-    pathname.startsWith("/workspace/chat/") ||
-    pathname === "/workspace/planner" ||
-    pathname.startsWith("/workspace/planner/");
+    pathname === "/workspace/chat" || pathname.startsWith("/workspace/chat/");
 
   return (
     <div className="min-h-screen bg-abyss">

@@ -38,6 +38,7 @@ test("TaskStatePill maps states to the shared colours", () => {
   for (const [state, token] of [
     ["done", "success"],
     ["open", "brand"],
+    ["claimed", "brand"],
     ["needs_review", "warning"],
     ["blocked", "danger"],
     ["failed", "danger"],
@@ -51,6 +52,10 @@ test("TaskStatePill maps states to the shared colours", () => {
       `TaskStatePill must use the ${token} token`,
     );
   }
+  assert.ok(
+    pill.includes("In progress") && pill.includes("Needs review"),
+    "TaskStatePill must show human-readable labels",
+  );
   assert.ok(
     !/#[0-9a-fA-F]{3,8}/.test(pill),
     "status colours must be theme tokens, not hard-coded hex",
@@ -123,7 +128,7 @@ test("board rows render the shared pill and the mini strip without extra fetches
 test("board states its value in one line under the title", () => {
   const page = read("src/app/workspace/page.tsx");
   assert.ok(
-    page.includes("Project board"),
+    page.includes(">Board<") || page.includes("Board</h1>"),
     "board must keep its title",
   );
   assert.ok(

@@ -132,6 +132,14 @@ test("board attention rows render the reason inline with a fallback", () => {
   );
 });
 
+test("board task cards show live delivery status updates", () => {
+  const page = read("src/app/workspace/page.tsx");
+  assert.ok(page.includes("deliveryStatus"), "board must derive a status line from ledger flags");
+  assert.ok(page.includes('data-task-status'), "board cards must mark the status line");
+  assert.ok(page.includes("GitGrantPanel"), "waiting tasks must offer grant on the board");
+  assert.ok(page.includes("needs_spec") || page.includes("data-spec-badge"), "board must surface needs_spec");
+});
+
 test("board rows link to the task detail route", () => {
   const page = read("src/app/workspace/page.tsx");
   assert.ok(
@@ -390,7 +398,7 @@ test("chat uses the header project only — no duplicate picker above the thread
   );
   assert.ok(
     chat.includes("surface: mode"),
-    "supervisor and planner must send distinct surface ids so their logs stay separate",
+    "chat must send a surface id (supervisor) with each turn",
   );
   assert.ok(
     !chat.includes('"demo"') && !chat.includes("'demo'"),

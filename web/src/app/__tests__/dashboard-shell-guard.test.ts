@@ -61,16 +61,26 @@ test("anonymous greeting never invents a name", () => {
 
 test("shell nav matches the contract IA in order", () => {
   const layout = read("src/app/workspace/layout.tsx");
+  assert.ok(
+    !layout.includes('"/workspace/planner"') || layout.includes("redirect"),
+    "Planner is merged into Supervisor — not a peer nav item",
+  );
   const items = [
     ["/workspace", "Board"],
     ["/workspace/chat", "Supervisor"],
-    ["/workspace/planner", "Planner"],
     ["/workspace/projects", "Projects"],
-    ["/workspace/tasks", "Tasks"],
     ["/workspace/knowledge", "Knowledge"],
     ["/workspace/escalations", "Escalations"],
     ["/workspace/login", "Login"],
   ] as const;
+  assert.ok(
+    !layout.includes('"Execute"') && !layout.includes('"/workspace/execute"'),
+    "Execute is folded into Board — not a peer nav item",
+  );
+  assert.ok(
+    !layout.includes('"Tasks"') && !layout.includes('"/workspace/tasks"'),
+    "Tasks index is folded into Board — not a peer nav item",
+  );
   let lastAt = -1;
   for (const [href, label] of items) {
     const hrefAt = layout.indexOf(`"${href}"`);
@@ -111,20 +121,26 @@ test("unbuilt destinations render a Planned shell with working links only", () =
     projects.includes("description") && projects.includes("setMeta"),
     "projects page must store and render ledger metadata",
   );
-  // Tasks and Projects shipped as real pages (#192): they must no longer
-  // render the Planned shell — each carries its own title marker instead.
-  for (const [rel, marker] of [
-    ["src/app/workspace/tasks/page.tsx", "New task"],
-    ["src/app/workspace/projects/page.tsx", "Create project"],
-  ] as const) {
-    const page = read(rel);
-    assert.ok(!page.includes("<Planned"), `${rel} must not render the Planned shell`);
-    assert.ok(page.includes(marker), `${rel} must render its manager UI (${marker})`);
-    assert.ok(
-      page.includes('"/workspace"'),
-      `${rel} must link onward instead of stranding the visitor`,
-    );
-  }
+  // Board owns New task; Projects keeps create-project; Tasks index redirects.
+  const board = read("src/app/workspace/page.tsx");
+  assert.ok(!board.includes("<Planned"), "Board must not render the Planned shell");
+  assert.ok(board.includes("New task"), "Board must offer New task create");
+  const projectsPage = read("src/app/workspace/projects/page.tsx");
+  assert.ok(!projectsPage.includes("<Planned"), "projects must not render the Planned shell");
+  assert.ok(
+    projectsPage.includes("Create project"),
+    "projects must render its manager UI (Create project)",
+  );
+  assert.ok(
+    projectsPage.includes('"/workspace"'),
+    "projects must link onward instead of stranding the visitor",
+  );
+  const tasksIndex = read("src/app/workspace/tasks/page.tsx");
+  assert.ok(
+    tasksIndex.includes('router.replace("/workspace")') ||
+      tasksIndex.includes('redirect("/workspace")'),
+    "Tasks index must redirect to Board",
+  );
 });
 
 test("the shell's only button is the working Sign out", () => {
@@ -263,53 +279,79 @@ test("shell slice keeps theme tokens, no hard-coded colour, no hand fetch", () =
   );
 });
 
-test("planner opens a thread from the real plan entry, hands off to chat", () => {
-  const page = read("src/app/workspace/planner/page.tsx");
-  assert.ok(page.includes("data-plan-list"), "planner must mark its plan list");
-  assert.ok(page.includes("data-plan-thread"), "open plan must mark its thread");
+test("supervisor hosts plans inbox; planner URL redirects", () => {
+  const redirect = read("src/app/workspace/planner/page.tsx");
   assert.ok(
-    page.includes("parsePlanThread") && page.includes("/api/knowledge/{key}"),
+    redirect.includes('redirect("/workspace/chat")'),
+    "legacy /workspace/planner must redirect into Supervisor",
+  );
+  const chat = read("src/app/workspace/chat/page.tsx");
+  assert.ok(
+    chat.includes("PlansInbox") && chat.includes('mode="supervisor"'),
+    "Supervisor page must mount chat + Plans inbox",
+  );
+  const inbox = read("src/components/workspace/PlansInbox.tsx");
+  assert.ok(inbox.includes("data-plan-list"), "plans inbox must mark its plan list");
+  assert.ok(inbox.includes("data-plan-thread"), "open plan must mark its thread");
+  assert.ok(
+    inbox.includes("parsePlanThread") && inbox.includes("/api/knowledge/{key}"),
     "thread must parse the real entry body, never invent steps",
   );
   assert.ok(
-    page.includes("Open in chat"),
-    "every plan must hand off to the chat thread",
+    inbox.includes("Continue in chat"),
+    "every plan must hand off back to the Supervisor composer",
   );
   assert.ok(
-    page.includes("data-plan-approve") && page.includes("/api/plans/{slug}/approve"),
-    "planner must approve through the idempotent approve proxy",
+    inbox.includes("data-plan-approve") && inbox.includes("/api/plans/{slug}/approve"),
+    "plans inbox must approve through the idempotent approve proxy",
   );
   assert.ok(
-    page.includes("data-plan-execute") && page.includes("/workspace/execute?plan="),
-    "materialized plans must link to the execution view",
+    inbox.includes("data-plan-execute") &&
+      inbox.includes("DeliveryStartDialog") &&
+      inbox.includes("setStartPlan"),
+    "materialized plans must Start delivery for the whole plan via the repo dialog",
   );
   assert.ok(
-    page.includes("data-plan-request-changes"),
+    inbox.includes("/workspace?plan="),
+    "materialized plans must still offer Watch on Board",
+  );
+  assert.ok(
+    inbox.includes("data-plan-request-changes"),
     "every plan must offer a request-changes path back to chat",
   );
   assert.ok(
-    !page.includes("fet" + "ch(") && !page.includes("XMLHttp" + "Request"),
-    "planner must not hand-write fetch",
+    !inbox.includes("fet" + "ch(") && !inbox.includes("XMLHttp" + "Request"),
+    "plans inbox must not hand-write fetch",
   );
 });
 
-test("execute view polls the derived chain and dispatches honestly", () => {
-  const page = read("src/app/workspace/execute/page.tsx");
-  assert.ok(page.includes("data-execute-chain"), "execute must mark its chain");
+test("plan delivery on Board polls the derived chain and dispatches honestly", () => {
+  const board = read("src/app/workspace/page.tsx");
   assert.ok(
-    page.includes("data-dispatch") && page.includes("/api/plans/{slug}/execute"),
+    board.includes("PlanDeliveryPanel") && board.includes('searchParams.get("plan")'),
+    "Board must host plan delivery when ?plan= is set",
+  );
+  const panel = read("src/components/workspace/PlanDeliveryPanel.tsx");
+  assert.ok(panel.includes("data-execute-chain"), "delivery panel must mark its chain");
+  assert.ok(
+    panel.includes("data-dispatch") && panel.includes("/api/plans/{slug}/execute"),
     "dispatch must go through the execute proxy",
   );
   assert.ok(
-    page.includes("data-waiting-worker"),
+    panel.includes("data-waiting-worker"),
     "an idle chain must say it is waiting for a worker",
   );
   assert.ok(
-    page.includes("3000") && page.includes("clearInterval"),
+    panel.includes("3000") && panel.includes("clearInterval"),
     "polling must tick every 3s and stop on unmount",
   );
   assert.ok(
-    !page.includes("fet" + "ch(") && !page.includes("XMLHttp" + "Request"),
-    "execute must not hand-write fetch",
+    !panel.includes("fet" + "ch(") && !panel.includes("XMLHttp" + "Request"),
+    "delivery panel must not hand-write fetch",
+  );
+  const execute = read("src/app/workspace/execute/page.tsx");
+  assert.ok(
+    execute.includes("router.replace") && execute.includes("/workspace"),
+    "legacy Execute route must redirect to Board",
   );
 });

@@ -1,15 +1,17 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
+import { Suspense, useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { ChevronDown } from "lucide-react";
 import { Combobox } from "@/components/ui/Select";
 import { TaskStatePill } from "@/components/ui/StatusPill";
+import { GitGrantPanel } from "@/components/workspace/GitGrantPanel";
 import { PipelineStrip } from "@/components/workspace/PipelineStrip";
+import { PlanDeliveryPanel } from "@/components/workspace/PlanDeliveryPanel";
 import { Button } from "@/components/ui/Button";
 import { useSession } from "@/components/workspace/session";
-import { parseSseFrames, ws, type TaskRow } from "@/lib/api/workspace";
+import { csrfHeaders, parseSseFrames, ws, type TaskRow } from "@/lib/api/workspace";
 import { cn } from "@/lib/utils";
 
 const NEEDS_ATTENTION = new Set(["blocked", "failed", "needs_review"]);
@@ -36,6 +38,35 @@ const EVENTS_MAX_PAGES = 5;
 function attentionReason(task: TaskRow): string {
   const reason = task.attention?.trim();
   return reason ? reason : "reason unavailable";
+}
+
+/** One plain-language status line from ledger flags — never invents progress. */
+function deliveryStatus(task: TaskRow): string | null {
+  if (task.clone_failed) return `Clone failed: ${task.clone_failed}`;
+  if (task.waiting_git_grant) return "Waiting for GitHub access grant";
+  if (task.needs_spec) return "Needs GitHub repo before delivery";
+  if (task.sealing) return "Sealing hidden checks…";
+  if (task.state === "needs_review") {
+    if (task.head_verdict === "pass") return "Passed verify — awaiting your approval";
+    if (task.head_verdict) return `Review verdict: ${task.head_verdict}`;
+    return "Needs your review";
+  }
+  if (task.state === "claimed") {
+    const p = task.pipeline;
+    if (p?.review === "attention") return "Rework — reviewer sent feedback";
+    if (p?.build === "attention") return "Build needs attention";
+    if (p?.build === "done" && p.review === "pending") return "Waiting on reviewer";
+    if (p?.build === "pending" || p?.build === undefined) return "Worker coding…";
+    return "In progress with a worker";
+  }
+  if (task.state === "blocked" || task.state === "failed") {
+    return task.attention?.trim() || null;
+  }
+  if (task.pr_url) return "Pull request ready";
+  if (task.state === "open" && task.pipeline?.contract === "done") {
+    return "Queued — ready to start delivery";
+  }
+  return null;
 }
 
 function byUpdatedAt(direction: "newest" | "oldest") {
@@ -95,8 +126,9 @@ function eventLabel(env: EventEnvelope): string {
 }
 
 function TaskCard({ task, showAttention }: { task: TaskRow; showAttention: boolean }) {
+  const statusLine = deliveryStatus(task);
   return (
-    <li>
+    <li data-board-task={task.id} data-board-task-state={task.state}>
       <Link
         href={`/workspace/tasks/${task.id}`}
         className="block rounded-2xl border border-steel/30 bg-navy/60 px-4 py-3 transition-colors hover:border-brand/50"
@@ -113,20 +145,55 @@ function TaskCard({ task, showAttention }: { task: TaskRow; showAttention: boole
           #{task.id} · updated{" "}
           <time dateTime={task.updated_at}>{formatWhen(task.updated_at)}</time>
         </p>
+        {statusLine ? (
+          <p
+            data-task-status
+            className={`mt-1.5 text-xs ${
+              task.clone_failed || task.state === "failed" || task.state === "blocked"
+                ? "text-danger"
+                : task.waiting_git_grant || task.state === "needs_review"
+                  ? "text-warning"
+                  : "text-cloud"
+            }`}
+          >
+            {statusLine}
+          </p>
+        ) : null}
         {task.pipeline ? (
           <div className="mt-2">
             <PipelineStrip pipeline={task.pipeline} variant="mini" />
           </div>
+        ) : null}
+        {task.needs_spec ? (
+          <p data-spec-badge className="mt-1 font-mono text-[11px] text-muted">
+            Needs GitHub repo
+          </p>
         ) : null}
         {task.sealing ? (
           <p data-seal-badge className="mt-1 font-mono text-[11px] text-muted">
             Sealing hidden checks…
           </p>
         ) : null}
-        {showAttention ? (
+        {showAttention && !statusLine?.includes(attentionReason(task)) ? (
           <p className="mt-1 truncate text-xs text-muted">{attentionReason(task)}</p>
         ) : null}
       </Link>
+      {task.waiting_git_grant ? (
+        <div className="mt-2 px-1" data-board-git-grant>
+          <GitGrantPanel taskId={task.id} />
+        </div>
+      ) : null}
+      {task.pr_url ? (
+        <a
+          href={task.pr_url}
+          target="_blank"
+          rel="noreferrer"
+          className="mt-1 inline-block px-1 font-mono text-[11px] text-brand-300 hover:underline"
+          onClick={(e) => e.stopPropagation()}
+        >
+          Open pull request ↗
+        </a>
+      ) : null}
     </li>
   );
 }
@@ -225,17 +292,36 @@ function BoardSection({
   );
 }
 
-export default function BoardPage() {
+function BoardHome() {
   const router = useRouter();
-  // Choosing a project here moves the whole workspace with it (header,
-  // sidebar, chat); "All projects" stays a board-only view.
-  const { projects, setProject: setSessionProject } = useSession();
+  const searchParams = useSearchParams();
+  const planSlug = searchParams.get("plan")?.trim() || null;
+  // Filter follows the header Active project; choosing here updates session
+  // (sidebar, chat). "All projects" remains available as a board-wide view.
+  const { projects, project: sessionProject, setProject: setSessionProject } = useSession();
   const [tasks, setTasks] = useState<TaskRow[]>([]);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
   const [query, setQuery] = useState("");
-  const [projectFilter, setProjectFilter] = useState("All");
-  const [projectInput, setProjectInput] = useState("All projects");
+  const [projectFilter, setProjectFilter] = useState(sessionProject ?? "All");
+  const [projectInput, setProjectInput] = useState(
+    sessionProject ? sessionProject : "All projects",
+  );
+  const [showCreate, setShowCreate] = useState(false);
+  const [cTitle, setCTitle] = useState("");
+  const [cIntent, setCIntent] = useState("");
+  const [cProject, setCProject] = useState("");
+  const [cCriteria, setCCriteria] = useState("");
+  const [cBusy, setCBusy] = useState(false);
+  const [cError, setCError] = useState("");
+
+  // Keep the board filter in sync when the header switcher changes.
+  useEffect(() => {
+    if (sessionProject) {
+      setProjectFilter(sessionProject);
+      setProjectInput(sessionProject);
+    }
+  }, [sessionProject]);
   const [stateFilter, setStateFilter] = useState<
     "all" | "open" | "claimed" | "needs_review" | "stuck" | "done"
   >("all");
@@ -282,12 +368,14 @@ export default function BoardPage() {
   );
 
   useEffect(() => {
+    // Skip triage polling while focused on plan delivery.
+    if (planSlug) return;
     // Fresh board read per tick, not a render cascade.
     // eslint-disable-next-line react-hooks/set-state-in-effect
     void load();
     const timer = setInterval(() => void load(true), BOARD_POLL_MS);
     return () => clearInterval(timer);
-  }, [load]);
+  }, [load, planSlug]);
 
   const loadActivity = useCallback(
     async (alive: { current: boolean }) => {
@@ -358,6 +446,7 @@ export default function BoardPage() {
   );
 
   useEffect(() => {
+    if (planSlug) return;
     // Mount fetch: one closed backlog snapshot (live=0), not a live tail.
     const alive = { current: true };
     // eslint-disable-next-line react-hooks/set-state-in-effect
@@ -365,7 +454,44 @@ export default function BoardPage() {
     return () => {
       alive.current = false;
     };
-  }, [loadActivity]);
+  }, [loadActivity, planSlug]);
+
+  async function createTask(e: React.FormEvent) {
+    e.preventDefault();
+    const criteria = cCriteria.split("\n").map((c) => c.trim()).filter(Boolean);
+    if (!cTitle.trim() || criteria.length === 0) return;
+    setCBusy(true);
+    setCError("");
+    try {
+      const { data, response } = await ws.POST("/api/tasks", {
+        body: {
+          title: cTitle.trim(),
+          intent: cIntent.trim() || undefined,
+          project: cProject.trim() || undefined,
+          acceptance_criteria: criteria,
+        },
+        headers: csrfHeaders(),
+      });
+      if (response.status === 401) {
+        router.push("/workspace/login");
+        return;
+      }
+      if (!response.ok || !data) {
+        setCError(`create failed (${response.status})`);
+        return;
+      }
+      setCTitle("");
+      setCIntent("");
+      setCCriteria("");
+      setShowCreate(false);
+      void load();
+      router.push(`/workspace/tasks/${data.id}`);
+    } catch (err) {
+      setCError(err instanceof Error ? err.message : "create failed");
+    } finally {
+      setCBusy(false);
+    }
+  }
 
   const projectOptions = useMemo(() => {
     const names = new Set<string>();
@@ -463,22 +589,124 @@ export default function BoardPage() {
     [projectOptions],
   );
 
+  if (planSlug) {
+    return (
+      <div>
+        <div className="mb-6 flex flex-wrap items-center gap-3">
+          <div>
+            <p className="font-mono text-[10px] uppercase tracking-widest text-cyan2">
+              Deliver the work
+            </p>
+            <h1 className="mt-1 text-2xl font-semibold text-white">Board</h1>
+            <p className="mt-1 max-w-2xl text-sm text-muted">
+              Plan delivery — confirm the GitHub repo, then Start delivery for the
+              headless coder → reviewer loop.
+            </p>
+          </div>
+          <div className="ml-auto flex gap-2">
+            <Button href="/workspace" variant="secondary">
+              ← Back to Board
+            </Button>
+            <Button href="/workspace/chat" variant="secondary">
+              Talk to Supervisor
+            </Button>
+          </div>
+        </div>
+        <PlanDeliveryPanel planSlug={planSlug} />
+      </div>
+    );
+  }
+
   return (
     <div>
       <div className="mb-6 flex flex-wrap items-center gap-3">
         <div>
-          <h1 className="text-2xl font-semibold text-white">Project board</h1>
+          <h1 className="text-2xl font-semibold text-white">Board</h1>
           <p className="mt-1 text-sm text-muted">
             What needs you first, what is moving, and what is done — live from the
-            ledger. Refreshes every 3 seconds.
+            ledger. Refreshes every 3 seconds. Prefer asking the Supervisor to
+            slice new work.
           </p>
         </div>
         <div className="ml-auto flex gap-2">
           <Button href="/workspace/chat" variant="secondary">
-            New slice
+            Talk to Supervisor
+          </Button>
+          <Button onClick={() => setShowCreate((v) => !v)} variant="secondary">
+            {showCreate ? "Close" : "New task"}
           </Button>
         </div>
       </div>
+
+      {showCreate ? (
+        <form
+          onSubmit={(e) => void createTask(e)}
+          className="mb-6 space-y-3 rounded-2xl border border-steel/40 bg-abyss/60 p-4"
+        >
+          <label className="block">
+            <span className="mb-1 block font-mono text-[11px] uppercase tracking-wider text-muted">
+              Title
+            </span>
+            <input
+              value={cTitle}
+              onChange={(e) => setCTitle(e.target.value)}
+              placeholder="What should the pack do?"
+              aria-label="New task title"
+              className="w-full rounded-xl border border-steel/40 bg-navy/60 px-3 py-2 text-sm text-cloud placeholder:text-muted/60 focus:border-brand/60 focus:outline-none"
+            />
+          </label>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <label className="block">
+              <span className="mb-1 block font-mono text-[11px] uppercase tracking-wider text-muted">
+                Project (optional — defaults to your session project)
+              </span>
+              <Combobox
+                id="board-new-task-project"
+                value={cProject}
+                onChange={setCProject}
+                options={projectOptions.filter((n) => n !== "All")}
+                ariaLabel="New task project — type to filter"
+                placeholder="project name…"
+                inputClassName="w-full rounded-xl border border-steel/40 bg-navy/60 px-3 py-2 text-sm text-cloud placeholder:text-muted/60 focus:border-brand/60 focus:outline-none"
+              />
+            </label>
+            <label className="block">
+              <span className="mb-1 block font-mono text-[11px] uppercase tracking-wider text-muted">
+                Intent (optional)
+              </span>
+              <input
+                value={cIntent}
+                onChange={(e) => setCIntent(e.target.value)}
+                placeholder="Why does this matter?"
+                aria-label="New task intent"
+                className="w-full rounded-xl border border-steel/40 bg-navy/60 px-3 py-2 text-sm text-cloud placeholder:text-muted/60 focus:border-brand/60 focus:outline-none"
+              />
+            </label>
+          </div>
+          <label className="block">
+            <span className="mb-1 block font-mono text-[11px] uppercase tracking-wider text-muted">
+              Acceptance criteria — one per line (required)
+            </span>
+            <textarea
+              value={cCriteria}
+              onChange={(e) => setCCriteria(e.target.value)}
+              rows={3}
+              placeholder={"The bot can log in\nThe board shows the new task"}
+              aria-label="New task acceptance criteria, one per line"
+              className="w-full rounded-xl border border-steel/40 bg-navy/60 px-3 py-2 text-sm text-cloud placeholder:text-muted/60 focus:border-brand/60 focus:outline-none"
+            />
+          </label>
+          <div className="flex items-center gap-3">
+            <Button
+              type="submit"
+              disabled={cBusy || !cTitle.trim() || cCriteria.trim().length === 0}
+            >
+              {cBusy ? "Creating…" : "Create task"}
+            </Button>
+            {cError ? <p className="text-sm text-danger">{cError}</p> : null}
+          </div>
+        </form>
+      ) : null}
 
       <div className="mb-4 flex flex-wrap gap-2" role="group" aria-label="Filter tasks by state">
         {(
@@ -571,8 +799,11 @@ export default function BoardPage() {
         <p className="font-mono text-sm text-muted">loading…</p>
       ) : tasks.length === 0 && !error ? (
         <p className="rounded-2xl border border-steel/40 bg-abyss/60 p-6 text-center text-sm text-muted">
-          No tasks yet — send a message in <Link href="/workspace/chat">Chat</Link> to create
-          one.
+          No tasks yet —{" "}
+          <Link href="/workspace/chat" className="text-brand-300 hover:underline">
+            talk to the Supervisor
+          </Link>{" "}
+          to describe what to build.
         </p>
       ) : (
         <div className="space-y-6">
@@ -716,5 +947,14 @@ export default function BoardPage() {
         </div>
       )}
     </div>
+  );
+}
+
+/** Board: triage + New task; plan delivery when ?plan= is set. */
+export default function BoardPage() {
+  return (
+    <Suspense fallback={<p className="font-mono text-sm text-muted">loading…</p>}>
+      <BoardHome />
+    </Suspense>
   );
 }

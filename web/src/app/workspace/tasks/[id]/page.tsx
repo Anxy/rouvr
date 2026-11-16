@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { TaskStatePill } from "@/components/ui/StatusPill";
+import { GitGrantPanel } from "@/components/workspace/GitGrantPanel";
 import { PipelineStrip } from "@/components/workspace/PipelineStrip";
 import { Button } from "@/components/ui/Button";
 import { useSession } from "@/components/workspace/session";
@@ -425,7 +426,30 @@ export default function TaskPage() {
             ) : null}
             {task.needs_spec ? (
               <p data-spec-badge className="mt-2 font-mono text-xs text-muted">
-                Needs exec spec — the worker host has no spec for this project yet.
+                Needs GitHub repo — bind it when you Start delivery on the plan.
+              </p>
+            ) : null}
+            {task.rework ? (
+              <p data-rework className="mt-2 font-mono text-xs text-warning">
+                Rework in progress — headless coder addressing review feedback.
+              </p>
+            ) : null}
+            {task.clone_failed ? (
+              <p data-clone-failed className="mt-2 text-sm text-danger">
+                Clone failed (host GitHub token / repo visibility): {task.clone_failed}
+              </p>
+            ) : null}
+            {task.pr_url ? (
+              <p className="mt-2">
+                <a
+                  data-pr-url
+                  href={task.pr_url}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="font-mono text-sm text-brand-300 hover:underline"
+                >
+                  Open pull request ↗
+                </a>
               </p>
             ) : null}
             <p className="mt-3 max-w-2xl whitespace-pre-wrap text-sm leading-relaxed text-dim">
@@ -478,6 +502,11 @@ export default function TaskPage() {
             </nav>
           </div>
           <div className="flex flex-wrap gap-2">
+            {task.state === "open" || task.state === "claimed" ? (
+              <Button href="/workspace/chat" variant="primary">
+                Start delivery on plan
+              </Button>
+            ) : null}
             {APPROVABLE.has(task.state) ? (
               approveBlocker(task) ? (
                 <p className="text-sm text-muted">{approveBlocker(task)}</p>
@@ -501,6 +530,11 @@ export default function TaskPage() {
               </Button>
             ) : null}
           </div>
+          {task.waiting_git_grant ? (
+            <div className="mt-3">
+              <GitGrantPanel taskId={task.id} onGranted={() => void load()} />
+            </div>
+          ) : null}
           {actionError ? <p className="text-sm text-danger">{actionError}</p> : null}
           {task.state !== "retired" ? (
             <section

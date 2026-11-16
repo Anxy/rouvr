@@ -434,7 +434,14 @@ def criterion_lines(criteria: list) -> list[str]:
 def build_task_prompt(task: dict, spec_repo: str, branch: str, rework_notes: str,
                       peer_messages: list[str] | None = None) -> str:
     parts = [f"Task {task.get('number', task.get('id'))}: {task.get('title', '')}", "",
-             str(task.get("description") or ""), "",
+             str(task.get("description") or task.get("intent") or ""), "",
+             "You are the implementation coder. Deliver working software in this repository — "
+             "source modules, APIs, UI, config, and tests that exercise real behavior.",
+             "Do NOT stop at planning documents, architecture write-ups, or markdown-only plans. "
+             "Docs are fine as supporting files, but the PR must contain runnable implementation code "
+             "that advances the product. If the title sounds like design/requirements, still implement "
+             "the corresponding software (schemas as code/migrations, roleified endpoints, UI screens, etc.).",
+             "",
              "Project knowledge cited above as knowledge:<id>@v<n> is authoritative where marked verified: follow it.",
              "", "Acceptance criteria:"]
     parts += criterion_lines(task.get("acceptance_criteria") or [])
@@ -473,6 +480,8 @@ def build_reviewer_prompt(task: dict, diff: str, tests_summary: str,
     parts += ["", f"Test runs: {tests_summary}", "", "PR diff:", diff[:12000],
               "", 'Write verdict.json in the working directory: {"verdict": "approve|request_changes|reject",',
               '"notes": "<one paragraph>"}. Approve only if every criterion is met by the diff and tests.',
+              "For feature/build work, request_changes if the PR is docs-only or lacks runnable implementation "
+              "(source, APIs, UI, migrations, or tests). Name which criteria the code satisfies.",
               "Check the diff against project knowledge cited in the task as knowledge:<id>@v<n>; in your notes, name the citation ids you checked and whether the diff complies.",
               'To reply to the coder, also write message-coder.json: {"text": "<message>"}. '
               'Before writing any file, say it as a plain chat message (normal text, not JSON): Message to coder : <message>']

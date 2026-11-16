@@ -1,0 +1,278 @@
+# Complete Rouvr stack for local Docker.
+# Not hardened — do not expose publicly.
+#
+# Lite (default): ledger :8221 + web :3000
+#   docker compose up --build
+#
+# Full (Temporal + Postgres + Redis + workers):
+#   docker compose --profile full up --build
+#
+# Secrets: copy .env.example → .env and fill ROUVR_AUTH_SECRET,
+# ROUVR_ADMIN_PASSWORD, ROUVR_LEDGER_TOKEN before first boot.
+
+name: rouvr
+
+x-ledger-env: &ledger-env
+  ROUVR_AUTH_SECRET: ${ROUVR_AUTH_SECRET:?set ROUVR_AUTH_SECRET in .env}
+  ROUVR_ADMIN_PASSWORD: ${ROUVR_ADMIN_PASSWORD:?set ROUVR_ADMIN_PASSWORD in .env}
+  ROUVR_LEDGER_TOKEN: ${ROUVR_LEDGER_TOKEN:?set ROUVR_LEDGER_TOKEN in .env}
+  ROUVR_LEDGER_DATABASE_URL: ${ROUVR_LEDGER_DATABASE_URL:-sqlite:////data/ledger.db}
+  ROUVR_MODEL_PROVIDER: ${ROUVR_MODEL_PROVIDER:-stub}
+  META_API_KEY: ${META_API_KEY:-}
+  META_MODEL_API_BASE_URL: ${META_MODEL_API_BASE_URL:-}
+  META_MODEL_NAME: ${META_MODEL_NAME:-muse-spark-1.3}
+  OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-http://host.docker.internal:11434/v1}
+  OLLAMA_MODEL: ${OLLAMA_MODEL:-llama3.1}
+  OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
+  ROUVR_EGM_ENABLED: ${ROUVR_EGM_ENABLED:-}
+  ROUVR_EGM_PLUGIN: ${ROUVR_EGM_PLUGIN:-}
+  ROUVR_EGM_MODEL: ${ROUVR_EGM_MODEL:-}
+  ROUVR_EGM_MUSE_TIMEOUT_S: ${ROUVR_EGM_MUSE_TIMEOUT_S:-}
+  META_MODEL_API_KEY: ${META_MODEL_API_KEY:-${META_API_KEY:-}}
+  RECEIPT_SIGNING_KEY_PATH: /data/keys/receipt_ed25519.pem
+  RECEIPT_KEY_ID: ${RECEIPT_KEY_ID:-rouvr-receipt-1}
+  HIDDEN_TESTS_ROOT: /data/hidden-tests
+  # Shared with workers on rouvr-data: exec-spec PUT + git-grant write the same paths.
+  SPEC_ROOT: /data/specs
+  WORKSPACE_ROOT: /data/workspaces
+  EVIDENCE_ROOT: /data/evidence
+  # POST /v1/tasks/{id}/start runs rouvr.starter inside the ledger process —
+  # Settings.from_env requires these (workers already get them via x-worker-env).
+  WORKHUB_BACKEND: ledger
+  WORKHUB_BASE_URL: http://127.0.0.1:8221
+  ROUVR_DATABASE_URL: ${ROUVR_LEDGER_DATABASE_URL:-sqlite:////data/ledger.db}
+  TEMPORAL_ADDRESS: ${TEMPORAL_ADDRESS:-temporal:7233}
+  TEMPORAL_NAMESPACE: ${TEMPORAL_NAMESPACE:-default}
+  PERSONA_SOURCE: yaml
+  PERSONA_REGISTRY_PATH: /app/personas/tenants.yaml
+  MUSE_BIN: ${MUSE_BIN:-/data/muse/muse}
+  MUSE_UPDATE_INTERVAL_SECONDS: ${MUSE_UPDATE_INTERVAL_SECONDS:-86400}
+  ROUVR_LAUNCH_WINDOWS: "0"
+  ROUVR_BIND_HOST: 127.0.0.1
+  # When set, Board/Execute assign this principal on dispatch (omit body.worker).
+  # Full profile demo-runner defaults the same principal via its own env.
+  ROUVR_EXECUTE_WORKER: ${ROUVR_EXECUTE_WORKER:-}
+
+x-worker-env: &worker-env
+  <<: *ledger-env
+  WORKHUB_BACKEND: ledger
+  WORKHUB_BASE_URL: http://ledger:8221
+  ROUVR_LEDGER_URL: http://ledger:8221
+  ROUVR_DATABASE_URL: postgresql://rouvr:rouvr@db:5432/rouvr
+  ROUVR_TENANT_ID: ${ROUVR_TENANT_ID:-demo}
+  ROUVR_PROJECT_ID: ${ROUVR_PROJECT_ID:-demo}
+  PERSONA_SOURCE: yaml
+  PERSONA_REGISTRY_PATH: /app/personas/tenants.yaml
+  SPEC_ROOT: /data/specs
+  WORKSPACE_ROOT: /data/workspaces
+  EVIDENCE_ROOT: /data/evidence
+  TEMPORAL_ADDRESS: temporal:7233
+  TEMPORAL_NAMESPACE: default
+  ORCHESTRATOR_TOKEN: ledger
+  LEASE_TTL_S: "180"
+  HEARTBEAT_S: "30"
+  MAX_REWORK: "2"
+  MUSE_BIN: ${MUSE_BIN:-/data/muse/muse}
+  MUSE_UPDATE_INTERVAL_SECONDS: ${MUSE_UPDATE_INTERVAL_SECONDS:-86400}
+  ROUVR_LAUNCH_WINDOWS: "0"
+
+services:
+  ledger:
+    build:
+      context: .
+      dockerfile: docker/ledger.Dockerfile
+    image: rouvr-ledger:local
+    environment:
+      <<: *ledger-env
+    volumes:
+      - rouvr-data:/data
+      - ${ROUVR_MUSE_BIN_DIR:-${HOME}/.local/bin}:/opt/muse-host:ro
+    ports:
+      - "${ROUVR_LEDGER_PORT:-8221}:8221"
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://127.0.0.1:8221/health"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+      start_period: 10s
+    restart: unless-stopped
+
+  web:
+    build:
+      context: .
+      dockerfile: docker/web.Dockerfile
+    image: rouvr-web:local
+    environment:
+      ROUVR_LEDGER_URL: http://ledger:8221
+      PORT: "3000"
+      HOSTNAME: 0.0.0.0
+    ports:
+      - "${ROUVR_WEB_PORT:-3000}:3000"
+    depends_on:
+      ledger:
+        condition: service_healthy
+    restart: unless-stopped
+
+  # Opt-in: docker compose --profile seed up seed
+  # Default full bring-up leaves tenants/projects empty for first-run onboarding.
+  seed:
+    profiles: ["seed"]
+    image: curlimages/curl:8.12.1
+    environment:
+      ROUVR_LEDGER_URL: http://ledger:8221
+      ROUVR_LEDGER_TOKEN: ${ROUVR_LEDGER_TOKEN:?set ROUVR_LEDGER_TOKEN in .env}
+      ROUVR_SEED_TENANT: ${ROUVR_SEED_TENANT:-demo}
+      ROUVR_SEED_PROJECT: ${ROUVR_SEED_PROJECT:-demo}
+    volumes:
+      - ./docker/seed.sh:/seed.sh:ro
+    entrypoint: ["/bin/sh", "/seed.sh"]
+    depends_on:
+      ledger:
+        condition: service_healthy
+    restart: "no"
+
+  # --- Experimental full stack (profile: full) ----------------------------
+  db:
+    profiles: ["full"]
+    image: postgres:16
+    environment:
+      POSTGRES_USER: rouvr
+      POSTGRES_PASSWORD: rouvr
+      POSTGRES_DB: rouvr
+    ports:
+      - "${ROUVR_DB_PORT:-5432}:5432"
+    volumes:
+      - rouvr-pg:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U rouvr"]
+      interval: 5s
+      retries: 20
+    restart: unless-stopped
+
+  redis:
+    profiles: ["full"]
+    image: redis:7
+    ports:
+      - "${ROUVR_REDIS_PORT:-6379}:6379"
+    restart: unless-stopped
+
+  temporal:
+    profiles: ["full"]
+    image: temporalio/auto-setup:1.24
+    environment:
+      DB: postgres12
+      DB_PORT: "5432"
+      POSTGRES_USER: rouvr
+      POSTGRES_PWD: rouvr
+      POSTGRES_SEEDS: db
+    depends_on:
+      db:
+        condition: service_healthy
+    ports:
+      - "${ROUVR_TEMPORAL_PORT:-7233}:7233"
+    restart: unless-stopped
+
+  temporal-ui:
+    profiles: ["full"]
+    image: temporalio/ui:2.26.2
+    environment:
+      TEMPORAL_ADDRESS: temporal:7233
+    depends_on:
+      - temporal
+    ports:
+      - "${ROUVR_TEMPORAL_UI_PORT:-8080}:8080"
+    restart: unless-stopped
+
+  worker-orch:
+    profiles: ["full"]
+    image: rouvr-ledger:local
+    build:
+      context: .
+      dockerfile: docker/ledger.Dockerfile
+    command: ["worker", "orch"]
+    environment:
+      <<: *worker-env
+    volumes:
+      - rouvr-data:/data
+      - ${ROUVR_MUSE_BIN_DIR:-${HOME}/.local/bin}:/opt/muse-host:ro
+    depends_on:
+      ledger:
+        condition: service_healthy
+      temporal:
+        condition: service_started
+    restart: unless-stopped
+
+  worker-build:
+    profiles: ["full"]
+    image: rouvr-ledger:local
+    command: ["worker", "build"]
+    environment:
+      <<: *worker-env
+    volumes:
+      - rouvr-data:/data
+      - ${ROUVR_MUSE_BIN_DIR:-${HOME}/.local/bin}:/opt/muse-host:ro
+    depends_on:
+      ledger:
+        condition: service_healthy
+      temporal:
+        condition: service_started
+    restart: unless-stopped
+
+  worker-test:
+    profiles: ["full"]
+    image: rouvr-ledger:local
+    command: ["worker", "test"]
+    environment:
+      <<: *worker-env
+      RUNNER_IMAGE: ${RUNNER_IMAGE:-rouvr-runner:py313-p9}
+    # ContainerTestRunner shells out to docker against the host daemon.
+    group_add:
+      - ${DOCKER_GID:-124}
+    volumes:
+      - rouvr-data:/data
+      - ${ROUVR_MUSE_BIN_DIR:-${HOME}/.local/bin}:/opt/muse-host:ro
+      - /var/run/docker.sock:/var/run/docker.sock
+    depends_on:
+      ledger:
+        condition: service_healthy
+      temporal:
+        condition: service_started
+    restart: unless-stopped
+
+  worker-verify:
+    profiles: ["full"]
+    image: rouvr-ledger:local
+    command: ["worker", "verify"]
+    environment:
+      <<: *worker-env
+    volumes:
+      - rouvr-data:/data
+      - ${ROUVR_MUSE_BIN_DIR:-${HOME}/.local/bin}:/opt/muse-host:ro
+    depends_on:
+      ledger:
+        condition: service_healthy
+      temporal:
+        condition: service_started
+    restart: unless-stopped
+
+  # Completes plan-chain tasks after Board Execute when Muse/exec-specs are
+  # not installed. Opt-in: ROUVR_DEMO_RUNNER=1 docker compose --profile demo up -d
+  worker-demo:
+    profiles: ["demo"]
+    image: rouvr-ledger:local
+    command: ["demo-runner"]
+    environment:
+      <<: *worker-env
+      ROUVR_EXECUTE_WORKER: ${ROUVR_EXECUTE_WORKER:-svc-demo-coder}
+      ROUVR_DEMO_RUNNER: ${ROUVR_DEMO_RUNNER:-1}
+    volumes:
+      - rouvr-data:/data
+      - ${ROUVR_MUSE_BIN_DIR:-${HOME}/.local/bin}:/opt/muse-host:ro
+    depends_on:
+      ledger:
+        condition: service_healthy
+    restart: unless-stopped
+
+volumes:
+  rouvr-data:
+  rouvr-pg:

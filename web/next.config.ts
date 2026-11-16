@@ -1,6 +1,8 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
+  // Required for docker/web.Dockerfile (copies .next/standalone).
+  output: "standalone",
   poweredByHeader: false,
   // The dev badge defaults to the bottom-left, on top of the sidebar profile.
   devIndicators: { position: "bottom-right" },

@@ -1,0 +1,23 @@
+# Runtime deps for ledger + Temporal workers (not the full host requirements.txt).
+aiosqlite==0.22.1
+asyncpg==0.31.0
+bleach
+cryptography==50.0.2
+fastapi
+fastapi-users[sqlalchemy]==15.0.5
+httpx
+jsonschema
+mcp
+prometheus-client
+pwdlib[argon2]==0.3.0
+pydantic-settings==2.15.0
+pyjwt
+python-multipart
+python-ulid==4.0.1
+pyyaml
+rapidfuzz==3.14.6
+redis==5.0.8
+sqlalchemy==2.0.52
+structlog
+temporalio==1.23.0
+uvicorn

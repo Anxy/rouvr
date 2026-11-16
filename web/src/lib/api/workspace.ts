@@ -170,6 +170,121 @@ export interface ProxyPaths {
       };
     };
   };
+  "/api/tasks/{id}/start": {
+    post: {
+      parameters: { path: { id: string } };
+      requestBody: {
+        content: { "application/json": { requested_by?: string } };
+      };
+      responses: {
+        200: {
+          content: {
+            "application/json": { workflow_id: string; task_id: number; started: boolean };
+          };
+        };
+        401: { content: { "application/json": { detail: string } } };
+        404: { content: { "application/json": { detail: string } } };
+        409: { content: { "application/json": { detail: string } } };
+        503: { content: { "application/json": { detail: string } } };
+      };
+    };
+  };
+  "/api/tasks/{id}/git-grant": {
+    post: {
+      parameters: { path: { id: string } };
+      requestBody: {
+        content: { "application/json": { github_token: string } };
+      };
+      responses: {
+        200: { content: { "application/json": { accepted: boolean; task_id: number } } };
+        401: { content: { "application/json": { detail: string } } };
+        404: { content: { "application/json": { detail: string } } };
+        422: { content: { "application/json": { detail: string } } };
+        503: { content: { "application/json": { detail: string } } };
+      };
+    };
+  };
+  "/api/projects/{name}/exec-spec": {
+    get: {
+      parameters: { path: { name: string }; query?: { tenant?: string } };
+      responses: {
+        200: {
+          content: {
+            "application/json": {
+              tenant: string;
+              project: string;
+              repo: string | null;
+              base_branch: string;
+              needs_spec: boolean;
+              repo_empty?: boolean | null;
+              has_git_grant?: boolean;
+              warning?: string;
+            };
+          };
+        };
+        401: { content: { "application/json": { detail: string } } };
+        404: { content: { "application/json": { detail: string } } };
+      };
+    };
+    put: {
+      parameters: { path: { name: string } };
+      requestBody: {
+        content: {
+          "application/json": {
+            tenant?: string;
+            repo: string;
+            base_branch?: string;
+            test_command?: string[];
+            timeout_s?: number;
+          };
+        };
+      };
+      responses: {
+        200: {
+          content: {
+            "application/json": {
+              tenant: string;
+              project: string;
+              repo: string;
+              base_branch: string;
+              needs_spec: boolean;
+              repo_empty?: boolean | null;
+              has_git_grant?: boolean;
+              warning?: string;
+            };
+          };
+        };
+        401: { content: { "application/json": { detail: string } } };
+        404: { content: { "application/json": { detail: string } } };
+        422: { content: { "application/json": { detail: string } } };
+      };
+    };
+  };
+  "/api/projects/{name}/git-grant": {
+    post: {
+      parameters: { path: { name: string } };
+      requestBody: {
+        content: {
+          "application/json": { github_token: string; tenant?: string };
+        };
+      };
+      responses: {
+        200: {
+          content: {
+            "application/json": {
+              accepted: boolean;
+              tenant: string;
+              project: string;
+            };
+          };
+        };
+        401: { content: { "application/json": { detail: string } } };
+        404: { content: { "application/json": { detail: string } } };
+        422: { content: { "application/json": { detail: string } } };
+        503: { content: { "application/json": { detail: string } } };
+      };
+    };
+  };
   "/api/chat": {
     post: {
       requestBody: {
@@ -452,6 +567,38 @@ export interface ProxyPaths {
       };
     };
   };
+  "/api/plans/{slug}/start": {
+    post: {
+      parameters: { path: { slug: string } };
+      requestBody: {
+        content: { "application/json": { requested_by?: string } };
+      };
+      responses: {
+        200: {
+          content: {
+            "application/json": {
+              slug: string;
+              tenant: string;
+              project: string;
+              started: number;
+              total: number;
+              results: {
+                task_id: number;
+                ok: boolean;
+                workflow_id: string | null;
+                detail: string;
+              }[];
+            };
+          };
+        };
+        401: { content: { "application/json": { detail: string } } };
+        403: { content: { "application/json": { detail: string } } };
+        404: { content: { "application/json": { detail: string } } };
+        409: { content: { "application/json": { detail: string } } };
+        422: { content: { "application/json": { detail: string } } };
+      };
+    };
+  };
   "/api/knowledge/{key}/versions": {
     post: {
       parameters: { path: { key: string } };
@@ -519,6 +666,12 @@ export interface TaskRow {
   // Latest results.verdict, or null when no result exists. Owner approve
   // is legal only when this is "pass" (ledger transition, non-supervisor).
   head_verdict?: string | null;
+  /** Latest PR URL from pr_record evidence, when the coder opened one. */
+  pr_url?: string | null;
+  /** Waiting on a user PAT grant to push/open the PR. */
+  waiting_git_grant?: boolean;
+  /** Host clone failed (distinct from grant wait). */
+  clone_failed?: string | null;
 }
 
 export interface TaskDetail extends TaskRow {
@@ -528,6 +681,8 @@ export interface TaskDetail extends TaskRow {
   contracts: { id: number; body: string }[];
   evidence: { id: number; kind: string; body: string; created_at: string }[];
   receipts: { id: number; action: string; body: string; created_at: string }[];
+  /** Claimed after a negative reviewer verdict — headless rework in progress. */
+  rework?: boolean;
 }
 
 export interface ProjectRow {
@@ -570,6 +725,12 @@ export interface PlanTaskCard {
   link: string;
   worker?: string | null;
   lease_expires_at?: string | null;
+  pr_url?: string | null;
+  waiting_git_grant?: boolean;
+  clone_failed?: string | null;
+  needs_spec?: boolean;
+  sealing?: boolean;
+  pipeline?: PipelineState;
 }
 
 export interface PlanExecuteResult extends PlanDetail {

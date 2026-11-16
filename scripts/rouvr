@@ -33,7 +33,11 @@ EOF
 }
 
 write_operands() {
-  mkdir -p "$OPS/personas" "$OPS/specs/supervisor" "$OPS/workspaces" "$OPS/evidence" "$OPS/hidden-tests" "$OPS/logs" "$OPS/keys"
+  # grants/ sits BESIDE workspaces (not inside): ledger git-grant writes and
+  # Temporal workers read the same path (grant_path = WORKSPACE_ROOT.parent/grants).
+  mkdir -p "$OPS/personas" "$OPS/specs/supervisor" "$OPS/workspaces" "$OPS/grants" \
+    "$OPS/evidence" "$OPS/hidden-tests" "$OPS/logs" "$OPS/keys"
+  chmod 700 "$OPS/grants" 2>/dev/null || true
   # Persona JSON lives under XDG config unless the operator points elsewhere.
   local ws="${ROUVR_PERSONA_CREDS_DIR:-${XDG_CONFIG_HOME:-$HOME/.config}/rouvr/personas}"
   [ -f "$OPS/personas/tenants.yaml" ] || cat > "$OPS/personas/tenants.yaml" <<EOF
@@ -86,7 +90,9 @@ export WORKHUB_BACKEND=ledger WORKHUB_BASE_URL=http://127.0.0.1:8221 ROUVR_LEDGE
 export ROUVR_LEDGER_TOKEN="\$(cat $OPS/api-token)"
 export RECEIPT_SIGNING_KEY_PATH=$OPS/keys/receipt_ed25519.pem
 export ROUVR_GH_TOKEN_FILE=$OPS/gh-token
-export ROUVR_LAUNCH_WINDOWS="${ROUVR_LAUNCH_WINDOWS:-1}"
+# Headless Muse by default: coder/reviewer use muse exec (no chat windows).
+# Set ROUVR_LAUNCH_WINDOWS=1 only when interactive persona windows are wanted.
+export ROUVR_LAUNCH_WINDOWS="${ROUVR_LAUNCH_WINDOWS:-0}"
 EOF
 }
 
@@ -225,9 +231,10 @@ Use Rouvr:
   (auto-installed above) — no manual MCP setup. The supervisor muse
   session opens automatically below (SUPERVISOR.md persona); chat normally:
        "Create a task to <change> with criteria <...> and start it."
-     The supervisor delivers it to WorkHub via MCP; coder/reviewer muse chat
-     windows open on your screen and loop until the task is done.
+     Or use the web workspace: name the GitHub repo, Start delivery, grant a
+     PAT when asked. Coder/reviewer run headless (ROUVR_LAUNCH_WINDOWS=0).
   Watch:  ./scripts/rouvr status   |   tasks: curl -s http://127.0.0.1:8221/v1/tasks
+  Grants: $OPS/grants (shared with workers; ledger POST /v1/tasks/{id}/git-grant)
 EOF
   if [ "$CHAT" = "1" ] && [ -t 0 ]; then
     local ws="${ROUVR_SUPERVISOR_WORKSPACE:-$ROOT}"

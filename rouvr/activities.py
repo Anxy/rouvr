@@ -156,7 +156,25 @@ class Activities:
         resume = inp.resume_session_id or (details[0].get("session_id") if details else None)
         if resume and not s.resume_supported:
             resume = None
-        ws = await prepare_workspace(s.workspace_root, spec.repo, spec.base_branch, branch)
+        # Empty repos are first-class: clone without a base, await a git grant if
+        # needed, bootstrap origin/{base}, then continue. Never require the user
+        # to seed the remote by hand.
+        from rouvr.gitops import EmptyRepoNeedsGrant
+        project = str(task.get("project") or "")
+        grant = self._git_grant(wf.task_id, tenant=wf.tenant_id, project=project)
+        try:
+            ws = await prepare_workspace(
+                s.workspace_root, spec.repo, spec.base_branch, branch, token=grant,
+            )
+        except EmptyRepoNeedsGrant:
+            grant = await self._await_git_grant(
+                wf.task_id, fence, branch, state, ev, wh,
+                tenant=wf.tenant_id, project=project,
+                reason="git credential needed to bootstrap empty repo base branch",
+            )
+            ws = await prepare_workspace(
+                s.workspace_root, spec.repo, spec.base_branch, branch, token=grant,
+            )
         creds = persona.credentials()
         # META_API_KEY: verified name headless `muse` honors (R6 probe; MUSE_API_KEY is ignored).
         # No git credential for the coder: it commits locally; push/PR happen only
@@ -185,7 +203,11 @@ class Activities:
             ev.append(await wh.attach_evidence_exact(
                 wf.task_id, "peer_session", f"{fence}:peer",
                 {"role": "coder", "session_id": turn.session_id, "workspace": str(ws)}))
-        grant = await self._await_git_grant(wf.task_id, fence, branch, state, ev, wh)
+        if not grant:
+            grant = await self._await_git_grant(
+                wf.task_id, fence, branch, state, ev, wh,
+                tenant=wf.tenant_id, project=project,
+            )
         await self._push_branch(ws, branch, grant)
         pr_url, head = await ensure_pr(ws, spec.repo, spec.base_branch, branch,
                                        f"[Rouvr] {task.get('title', wf.task_id)}",
@@ -210,42 +232,43 @@ class Activities:
                             muse_session_id=turn.session_id, branch=branch, pr_url=pr_url, head_sha=head,
                             evidence_ids=ev)
 
-    def _git_grant(self, task_id: str) -> str:
-        """Supervisor-written grant file (0600, never in WorkHub): {github_token}.
+    def _git_grant(self, task_id: str, *, tenant: str = "", project: str = "") -> str:
+        """Supervisor-written grant (0600, never in WorkHub): task file, else project default.
 
-        Lives beside the workspace tree (see gitops.grant_path): a coder turn
+        Lives beside the workspace tree (see gitops.read_git_grant): a coder turn
         running as the worker uid must not find its grant next to its checkout.
         """
-        from rouvr.gitops import grant_path
-        p = grant_path(self.h.settings.workspace_root, task_id)
-        try:
-            if p.stat().st_mode & 0o077:
-                return ""
-            return str(json.loads(p.read_text()).get("github_token") or "")
-        except (OSError, ValueError):
-            return ""
+        from rouvr.gitops import read_git_grant
+        return read_git_grant(
+            self.h.settings.workspace_root, task_id,
+            tenant=tenant or None, project=project or None,
+        )
 
     async def _await_git_grant(self, task_id: str, fence: str, branch: str,
-                               state: dict, ev: list, wh) -> str:
+                               state: dict, ev: list, wh, *,
+                               tenant: str = "", project: str = "",
+                               reason: str = "git credential needed to push branch and open PR",
+                               ) -> str:
         """No credential, no push: request one from the supervisor and wait.
 
         The coder never holds a git credential and never talks to the user;
         the request lands as WorkHub evidence, the supervisor polls it, asks
-        the user, and writes the grant file. Heartbeats keep the lease alive."""
-        if (token := self._git_grant(task_id)):
+        the user, and writes the grant file. Heartbeats keep the lease alive.
+        Project-default grants from onboarding satisfy the wait without a
+        per-task file. Also used to bootstrap an empty remote base branch."""
+        if (token := self._git_grant(task_id, tenant=tenant, project=project)):
             return token
         ev.append(await wh.attach_evidence_exact(
             task_id, "credential_request", f"{fence}:git-grant",
             {"from": "coder", "to": "supervisor",
-             "reason": "git credential needed to push branch and open PR", "branch": branch}))
+             "reason": reason, "branch": branch}))
         for _ in range(90):  # ~30 min at 20 s, inside the 1800 s activity timeout
             await asyncio.sleep(20)
             activity.heartbeat(state)
-            if (token := self._git_grant(task_id)):
+            if (token := self._git_grant(task_id, tenant=tenant, project=project)):
                 return token
         raise RouvrError(Code.DOWNSTREAM, "awaiting supervisor git credential grant",
                          details={"task_id": task_id})
-
     async def _push_branch(self, ws, branch: str, token: str) -> None:
         from rouvr.gitops import clone_env
         env = clone_env()
@@ -324,7 +347,14 @@ class Activities:
         spec = await h.exec_specs.get(wf.tenant_id, task)
         rows = await wh.list_evidence(wf.task_id)
         ws = workspace_path(s.workspace_root, built.branch)
-        pr_branch, ci = await pr_facts(built.pr_url, {"GH_TOKEN": self._git_grant(wf.task_id)})
+        pr_branch, ci = await pr_facts(
+            built.pr_url,
+            {"GH_TOKEN": self._git_grant(
+                wf.task_id,
+                tenant=wf.tenant_id,
+                project=str(task.get("project") or ""),
+            )},
+        )
         facts = GateEvidence(
             expected_branch=built.branch, pr_url=built.pr_url, pr_head_branch=pr_branch, ci_status=ci,
             criteria=tuple(c["id"] if isinstance(c, dict) else str(c)

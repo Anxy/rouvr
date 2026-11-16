@@ -5,6 +5,10 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/Button";
 import { TaskStatePill } from "@/components/ui/StatusPill";
+import {
+  DeliveryStartDialog,
+  type PlanStartTarget,
+} from "@/components/workspace/DeliveryStartDialog";
 import { PipelineStrip } from "@/components/workspace/PipelineStrip";
 import { useSession } from "@/components/workspace/session";
 import {
@@ -35,6 +39,9 @@ interface ChatTask {
   title: string;
   state?: string;
   pipeline?: PipelineState | null;
+  tenant?: string;
+  project?: string;
+  pr_url?: string | null;
 }
 
 interface ChatResult {
@@ -68,18 +75,10 @@ const EMPTY_TURN = { question: null, slice: null, tasks: [], badge: null, offer:
 
 const EXAMPLE_PROMPTS = [
   "Slice onboarding into small tasks",
+  "Draft a plan I can approve below",
   "What is blocked right now and why?",
-  "Turn this thread into a plan I can convert",
   "Which tasks are waiting for review?",
-  "Prepare a plan from this conversation",
-];
-
-const PLANNER_PROMPTS = [
-  "Draft a plan to ship the onboarding slice",
-  "Revise the latest plan — drop the optional polish tasks",
-  "Add acceptance criteria for the auth step",
-  "Turn this into a plan I can approve",
-  "What plans are still draft for this project?",
+  "Revise the latest plan — drop optional polish",
 ];
 
 const COPY: Record<
@@ -87,16 +86,19 @@ const COPY: Record<
   { title: string; blurb: string; placeholder: string; examples: string[] }
 > = {
   supervisor: {
-    title: "Supervisor chat",
-    blurb: "Rouvr turns requests into tracked work: contract, build, review, evidence.",
+    title: "Supervisor",
+    blurb:
+      "Rouvr turns requests into tracked work: contract, build, review, evidence. Draft plans here, approve in the Plans panel, then Start delivery.",
     placeholder: "e.g. Slice onboarding into small tasks",
     examples: EXAMPLE_PROMPTS,
   },
+  // Legacy mode kept for API surface=planner; UI routes to supervisor.
   planner: {
-    title: "Planner chat",
-    blurb: "Shape and revise plans with the pack. Approve materializes work; Request changes comes back here.",
-    placeholder: "e.g. Draft a plan to ship the onboarding slice",
-    examples: PLANNER_PROMPTS,
+    title: "Supervisor",
+    blurb:
+      "Rouvr turns requests into tracked work: contract, build, review, evidence. Draft plans here, approve in the Plans panel, then Start delivery.",
+    placeholder: "e.g. Slice onboarding into small tasks",
+    examples: EXAMPLE_PROMPTS,
   },
 };
 
@@ -178,11 +180,22 @@ function ExampleRotator({
 
 type PlanAction = "convert" | "edit" | "keep";
 
-export function ChatSurface({ mode }: { mode: ChatMode }) {
+export function ChatSurface({
+  mode,
+  justOnboarded = false,
+}: {
+  mode: ChatMode;
+  /** Shown once after first-run onboarding lands on Supervisor. */
+  justOnboarded?: boolean;
+}) {
   const router = useRouter();
-  const { project: sessionProject, status: sessionStatus } = useSession();
+  const { project: sessionProject, tenant: sessionTenant, status: sessionStatus } = useSession();
   const copy = COPY[mode];
   const shownProject = sessionProject ?? "";
+  const [startPlan, setStartPlan] = useState<PlanStartTarget | null>(null);
+  const [showOnboardBanner, setShowOnboardBanner] = useState(
+    mode === "supervisor" && justOnboarded,
+  );
   const [message, setMessage] = useState("");
   const [turns, setTurns] = useState<Turn[]>([]);
   const [historyError, setHistoryError] = useState("");
@@ -459,6 +472,27 @@ export function ChatSurface({ mode }: { mode: ChatMode }) {
       <div data-chat-header className="shrink-0 pb-3">
         <h1 className="text-2xl font-semibold text-white">{copy.title}</h1>
         <p className="mt-1 text-sm text-muted">{copy.blurb}</p>
+        {showOnboardBanner ? (
+          <div
+            data-onboarded-banner
+            className="mt-3 flex items-start justify-between gap-3 rounded-2xl border border-brand/40 bg-brand/10 px-4 py-3"
+          >
+            <p className="text-sm text-fog">
+              Workspace ready. Tell the supervisor what to build — it will slice work into
+              tasks you can start for coding delivery.
+            </p>
+            <button
+              type="button"
+              className="shrink-0 font-mono text-[11px] uppercase tracking-wider text-dim hover:text-cloud"
+              onClick={() => {
+                setShowOnboardBanner(false);
+                router.replace("/workspace/chat");
+              }}
+            >
+              Dismiss
+            </button>
+          </div>
+        ) : null}
         {historyError ? <p className="mt-2 text-sm text-danger">{historyError}</p> : null}
       </div>
 
@@ -613,7 +647,7 @@ export function ChatSurface({ mode }: { mode: ChatMode }) {
                         </li>
                       ) : null}
                       {turn.tasks.map((t) => (
-                        <li key={t.id}>
+                        <li key={t.id} className="space-y-1">
                           <Link
                             href={`/workspace/tasks/${t.id}`}
                             data-task-card
@@ -630,9 +664,38 @@ export function ChatSurface({ mode }: { mode: ChatMode }) {
                                 <PipelineStrip pipeline={t.pipeline} variant="mini" />
                               </span>
                             ) : null}
+                            {t.pr_url ? (
+                              <span className="mt-1 block font-mono text-[11px] text-brand-300">
+                                PR ready
+                              </span>
+                            ) : null}
                           </Link>
                         </li>
                       ))}
+                      {mode === "supervisor" &&
+                      turn.offer?.plan_slug &&
+                      turn.tasks.some(
+                        (t) => t.state === "open" || t.state === "claimed" || !t.state,
+                      ) ? (
+                        <li className="pt-1">
+                          <Button
+                            type="button"
+                            variant="secondary"
+                            data-start-delivery="plan"
+                            onClick={() =>
+                              setStartPlan({
+                                slug: turn.offer!.plan_slug,
+                                title: turn.offer!.plan_slug,
+                                tenant:
+                                  turn.tasks[0]?.tenant || sessionTenant || "",
+                                project: turn.tasks[0]?.project || shownProject,
+                              })
+                            }
+                          >
+                            Start delivery (whole plan)
+                          </Button>
+                        </li>
+                      ) : null}
                     </ul>
                   ) : null}
                   {turn.status === "error" ? (
@@ -696,6 +759,13 @@ export function ChatSurface({ mode }: { mode: ChatMode }) {
           </Button>
           <ExampleRotator prompts={copy.examples} onPick={(prompt) => setMessage(prompt)} />
         </form>
+      {startPlan && startPlan.tenant && startPlan.project ? (
+        <DeliveryStartDialog
+          open
+          plan={startPlan}
+          onClose={() => setStartPlan(null)}
+        />
+      ) : null}
     </div>
   );
 }

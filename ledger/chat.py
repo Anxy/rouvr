@@ -53,7 +53,14 @@ object), task (direct imperative: task object + contract, category set),
 ambiguous (one question, null slice, empty tasks). Plans (non-null slice)
 carry category for the confirm gate. "answer" holds the user-facing reply
 text for chat/knowledge turns. "question" null, slice title <80 chars with
-criteria, <=8 tasks."""
+criteria, <=8 tasks.
+
+When the user asks to build a product/system, emit an IMPLEMENTATION plan
+(category feature), not a planning/design study. Each task title/intent must
+describe code to ship (modules, APIs, UI, data layer, tests). Acceptance
+criteria must be testable against running software. Avoid tasks whose only
+deliverable is a document (requirements brief, architecture memo, UX write-up)
+unless the user explicitly asked for docs."""
 INTAKE_CLASSES = ("chat", "knowledge", "task", "ambiguous")
 TASK_CATEGORIES = ("feature", "bugfix", "research", "ops", "docs")
 AUTONOMY_LEVELS = ("ask-for-everything", "only-important", "free")
@@ -124,7 +131,9 @@ OFFER_TEMPLATE = ("Shall I turn this into an actionable plan? "
 REVISE_PROMPT = """Revise the plan for the supervisor chat. Reply STRICT JSON only, no prose:
 {"slice": {"title": str, "intent": str, "acceptance_criteria": [str]},
 "tasks": [{"title": str, "intent": str}]}
-Apply the user revision note to the current plan (titles <80 chars, <=8 tasks)."""
+Apply the user revision note to the current plan (titles <80 chars, <=8 tasks).
+Prefer implementation tasks that ship code; do not rewrite into docs-only steps
+unless the user asked for documentation."""
 
 _PROVIDER_PRESETS = {
     "meta": ("META_MODEL_API_BASE_URL", "", "META_API_KEY", "META_MODEL_NAME", MODEL_DEFAULT),

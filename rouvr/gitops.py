@@ -71,6 +71,39 @@ def grant_path(root: Path, task_id: str) -> Path:
     return root.parent / "grants" / f".git-grant-{task_id}.json"
 
 
+def default_grant_path(root: Path, tenant: str, project: str) -> Path:
+    """Project-default grant from onboarding (fallback when no per-task file)."""
+    safe_t = str(tenant).replace("/", "_")
+    safe_p = str(project).replace("/", "_")
+    return root.parent / "grants" / f".git-grant-default-{safe_t}-{safe_p}.json"
+
+
+def read_git_grant(
+    root: Path,
+    task_id: str,
+    *,
+    tenant: str | None = None,
+    project: str | None = None,
+) -> str:
+    """Return github_token from task grant, else project default. Empty if none.
+
+    Files must be mode 0600 (no group/other bits); otherwise refuse the secret.
+    """
+    candidates = [grant_path(root, task_id)]
+    if tenant and project:
+        candidates.append(default_grant_path(root, tenant, project))
+    for p in candidates:
+        try:
+            if p.stat().st_mode & 0o077:
+                continue
+            token = str(json.loads(p.read_text()).get("github_token") or "")
+            if token:
+                return token
+        except (OSError, ValueError):
+            continue
+    return ""
+
+
 def revoke_git_grant(root: Path, task_id: str) -> bool:
     """Delete the per-task git grant file. Best-effort: False when absent."""
     try:
@@ -83,14 +116,99 @@ def revoke_git_grant(root: Path, task_id: str) -> bool:
 _GH_HELPER = ("-c", "credential.helper=!gh auth git-credential")
 
 
-async def prepare_workspace(root: Path, repo: str, base: str, branch: str) -> Path:
+def _clone_url(repo: str, token: str = "") -> str:
+    """HTTPS clone URL. Token embeds only when supplied (never logged)."""
+    if token:
+        return f"https://x-access-token:{token}@github.com/{repo}.git"
+    return f"https://github.com/{repo}.git"
+
+
+def _git_auth_args(token: str = "") -> tuple[str, ...]:
+    """Prefer gh credential helper when GH_TOKEN is set; else bare git."""
+    if token or gh_token():
+        return _GH_HELPER
+    return ()
+
+
+async def _remote_has_branch(ws: Path, base: str, env: dict[str, str]) -> bool:
+    out = await _run("git", "ls-remote", "--heads", "origin", base, cwd=ws, env=env)
+    return bool(out.strip())
+
+
+class EmptyRepoNeedsGrant(RouvrError):
+    """Remote has no base branch yet — caller should await a git grant, then retry."""
+
+    def __init__(self, repo: str, base: str) -> None:
+        super().__init__(
+            Code.DOWNSTREAM,
+            f"empty_repo_needs_grant:{repo}:{base}",
+            details={"repo": repo, "base": base, "empty": True},
+        )
+
+
+async def _bootstrap_empty_base(ws: Path, repo: str, base: str, token: str,
+                                env: dict[str, str]) -> None:
+    """Create origin/{base} on an empty GitHub repo (needs push credential)."""
+    if not token:
+        raise EmptyRepoNeedsGrant(repo, base)
+    # Empty clone leaves detached/unborn HEAD — orphan base and push it.
+    await _run("git", "checkout", "--orphan", base, cwd=ws, env=env)
+    readme = ws / "README.md"
+    if not readme.exists():
+        readme.write_text(f"# {repo.split('/')[-1]}\n\nBootstrapped by Rouvr.\n")
+    await _run("git", "add", "README.md", cwd=ws, env=env)
+    await _run(
+        "git", "-c", "user.email=rouvr@local", "-c", "user.name=Rouvr",
+        "commit", "-m", "chore: initial commit (Rouvr bootstrap)",
+        cwd=ws, env=env,
+    )
+    push_env = {**env, "GH_TOKEN": token}
+    auth = _git_auth_args(token)
+    try:
+        await _run("git", *auth, "push", "-u", "origin", base, cwd=ws, env=push_env)
+    except RouvrError:
+        # gh may be absent — fall back to token URL remote.
+        await _run("git", "remote", "set-url", "origin", _clone_url(repo, token),
+                   cwd=ws, env=env)
+        await _run("git", "push", "-u", "origin", base, cwd=ws, env=push_env)
+        await _run("git", "remote", "set-url", "origin", _clone_url(repo),
+                   cwd=ws, env=env)
+
+
+async def prepare_workspace(root: Path, repo: str, base: str, branch: str,
+                            *, token: str = "") -> Path:
+    """Clone origin/{base} and create the task branch. Empty remotes are
+    bootstrapped when ``token`` (git grant) can push an initial commit."""
     ws = workspace_path(root, branch)
     env = clone_env()
+    if token:
+        env["GH_TOKEN"] = token
+    auth = _git_auth_args(token)
+    url = _clone_url(repo, token)
     if not (ws / ".git").exists():
         ws.parent.mkdir(parents=True, exist_ok=True)
-        await _run("git", *_GH_HELPER, "clone", "--branch", base,
-                   f"https://github.com/{repo}.git", str(ws), env=env)
-    await _run("git", *_GH_HELPER, "fetch", "origin", cwd=ws, env=env)
+        try:
+            await _run("git", *auth, "clone", "--branch", base, url, str(ws), env=env)
+        except RouvrError as e:
+            err = str(e)
+            # Empty repo or wrong base: clone without --branch, then ensure base.
+            if "not found in upstream" in err or "Remote branch" in err or "not found" in err:
+                # Failed --branch clone can leave an empty dest; clear it.
+                if ws.exists():
+                    import shutil
+                    shutil.rmtree(ws, ignore_errors=True)
+                await _run("git", *auth, "clone", url, str(ws), env=env)
+            else:
+                raise
+    # Never leave a token URL in remote config after clone.
+    try:
+        await _run("git", "remote", "set-url", "origin", _clone_url(repo), cwd=ws, env=env)
+    except RouvrError:
+        pass
+    await _run("git", *auth, "fetch", "origin", cwd=ws, env=env)
+    if not await _remote_has_branch(ws, base, env):
+        await _bootstrap_empty_base(ws, repo, base, token, env)
+        await _run("git", *auth, "fetch", "origin", cwd=ws, env=env)
     await checkout_branch(ws, branch, base)
     return ws
 

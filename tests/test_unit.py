@@ -271,6 +271,7 @@ def test_build_task_prompt_has_essentials():
     p = build_task_prompt({"id": "7", "title": "Fix it", "description": "d",
                            "acceptance_criteria": ["a1", "a2"]}, "org/repo", "rouvr/7/a1", "")
     assert "Fix it" in p and "- a1" in p and "rouvr/7/a1" in p and "do not merge" in p
+    assert "working software" in p and "markdown-only" in p
 
 
 async def test_local_exec_spec(tmp_path: Path):

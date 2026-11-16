@@ -1,0 +1,16 @@
+# Default persona registry for the Docker full profile.
+# Override by mounting your own file at /app/personas/tenants.yaml.
+# credential_file paths are written by entrypoint-ledger.sh (0600 JSON).
+tenants:
+  demo:
+    personas:
+      coder-1:
+        role: coder
+        principal: svc-demo-coder
+        muse_model: ""
+        credential_file: /app/personas/coder-1.json
+      reviewer-1:
+        role: reviewer
+        principal: svc-demo-reviewer
+        muse_model: ""
+        credential_file: /app/personas/reviewer-1.json

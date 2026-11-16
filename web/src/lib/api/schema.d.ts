@@ -712,6 +712,30 @@ export interface paths {
         patch: operations["edit_project_lite_api_v1_projects__project__patch"];
         trace?: never;
     };
+    "/api/v1/projects/{project}/exec-spec": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Exec Spec Lite
+         * @description Return the bound GitHub exec spec for a project (or needs_spec).
+         */
+        get: operations["get_exec_spec_lite_api_v1_projects__project__exec_spec_get"];
+        /**
+         * Put Exec Spec Lite
+         * @description Ask/confirm the GitHub repo for coding delivery; writes SPEC_ROOT yaml.
+         */
+        put: operations["put_exec_spec_lite_api_v1_projects__project__exec_spec_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/tasks": {
         parameters: {
             query?: never;
@@ -876,6 +900,27 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/tasks/{tid}/git-grant": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Post Git Grant Lite
+         * @description Accept a per-task GitHub PAT for push/PR. Writes 0600 grant file;
+         *     never echoes the token or stores it in evidence.
+         */
+        post: operations["post_git_grant_lite_api_v1_tasks__tid__git_grant_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/tasks/{tid}/leases/renew": {
         parameters: {
             query?: never;
@@ -951,6 +996,26 @@ export interface paths {
          *     instead of raising — the task stays valid, the async hold persists.
          */
         post: operations["seal_task_lite_api_v1_tasks__tid__seal_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/tasks/{tid}/start": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Start Task Delivery Lite
+         * @description Start Temporal TaskWorkflow (idempotent). Same path as rouvr_start_task.
+         */
+        post: operations["start_task_delivery_lite_api_v1_tasks__tid__start_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1868,6 +1933,30 @@ export interface paths {
         patch: operations["edit_project_v1_projects__project__patch"];
         trace?: never;
     };
+    "/v1/projects/{project}/exec-spec": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Exec Spec
+         * @description Return the bound GitHub exec spec for a project (or needs_spec).
+         */
+        get: operations["get_exec_spec_v1_projects__project__exec_spec_get"];
+        /**
+         * Put Exec Spec
+         * @description Ask/confirm the GitHub repo for coding delivery; writes SPEC_ROOT yaml.
+         */
+        put: operations["put_exec_spec_v1_projects__project__exec_spec_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/tasks": {
         parameters: {
             query?: never;
@@ -2032,6 +2121,27 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/tasks/{tid}/git-grant": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Post Git Grant
+         * @description Accept a per-task GitHub PAT for push/PR. Writes 0600 grant file;
+         *     never echoes the token or stores it in evidence.
+         */
+        post: operations["post_git_grant_v1_tasks__tid__git_grant_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/tasks/{tid}/leases/renew": {
         parameters: {
             query?: never;
@@ -2107,6 +2217,26 @@ export interface paths {
          *     instead of raising — the task stays valid, the async hold persists.
          */
         post: operations["seal_task_v1_tasks__tid__seal_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/tasks/{tid}/start": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Start Task Delivery
+         * @description Start Temporal TaskWorkflow (idempotent). Same path as rouvr_start_task.
+         */
+        post: operations["start_task_delivery_v1_tasks__tid__start_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -3484,6 +3614,76 @@ export interface operations {
             };
         };
     };
+    get_exec_spec_lite_api_v1_projects__project__exec_spec_get: {
+        parameters: {
+            query?: {
+                tenant?: string | null;
+            };
+            header?: never;
+            path: {
+                project: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    put_exec_spec_lite_api_v1_projects__project__exec_spec_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    [key: string]: unknown;
+                };
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     list_tasks_lite_api_v1_tasks_get: {
         parameters: {
             query?: {
@@ -3871,6 +4071,43 @@ export interface operations {
             };
         };
     };
+    post_git_grant_lite_api_v1_tasks__tid__git_grant_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                tid: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    [key: string]: unknown;
+                };
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     renew_lease_lite_api_v1_tasks__tid__leases_renew_post: {
         parameters: {
             query?: never;
@@ -3983,6 +4220,43 @@ export interface operations {
         };
     };
     seal_task_lite_api_v1_tasks__tid__seal_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                tid: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    [key: string]: unknown;
+                };
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    start_task_delivery_lite_api_v1_tasks__tid__start_post: {
         parameters: {
             query?: never;
             header?: never;
@@ -5548,6 +5822,76 @@ export interface operations {
             };
         };
     };
+    get_exec_spec_v1_projects__project__exec_spec_get: {
+        parameters: {
+            query?: {
+                tenant?: string | null;
+            };
+            header?: never;
+            path: {
+                project: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    put_exec_spec_v1_projects__project__exec_spec_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    [key: string]: unknown;
+                };
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     list_tasks_v1_tasks_get: {
         parameters: {
             query?: {
@@ -5935,6 +6279,43 @@ export interface operations {
             };
         };
     };
+    post_git_grant_v1_tasks__tid__git_grant_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                tid: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    [key: string]: unknown;
+                };
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     renew_lease_v1_tasks__tid__leases_renew_post: {
         parameters: {
             query?: never;
@@ -6047,6 +6428,43 @@ export interface operations {
         };
     };
     seal_task_v1_tasks__tid__seal_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                tid: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    [key: string]: unknown;
+                };
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    start_task_delivery_v1_tasks__tid__start_post: {
         parameters: {
             query?: never;
             header?: never;

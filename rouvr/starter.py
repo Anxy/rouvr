@@ -24,11 +24,14 @@ async def start_task_workflow(client: Client, wf: TaskWorkflowInput, *, report: 
     wid = workflow_id(wf.tenant_id, wf.task_id, wf.contract_rev)
     started = True
     try:
+        # ALLOW_DUPLICATE: one concurrent run per task id, but a closed
+        # (blocked/done) run may be restarted after reopen — REJECT_DUPLICATE
+        # left blocked tasks stuck on the finished workflow id forever.
         await client.start_workflow(TaskWorkflow.run, wf, id=wid, task_queue=Q_ORCH,
-                                    id_reuse_policy=WorkflowIDReusePolicy.REJECT_DUPLICATE,
+                                    id_reuse_policy=WorkflowIDReusePolicy.ALLOW_DUPLICATE,
                                     execution_timeout=timedelta(hours=6))
     except WorkflowAlreadyStartedError:
-        started = False  # same task+revision already running/finished: return the same id
+        started = False  # already running: return the same id
     return (wid, started) if report else wid
 
 

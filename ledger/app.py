@@ -792,12 +792,14 @@ def make_app(db_url: str = DB_URL) -> FastAPI:
         verdicts = [r["verdict"] for r in c.execute(text(
             "SELECT verdict FROM results WHERE task_id=:i ORDER BY id"),
             {"i": t["id"]}).mappings()]
-        return {"id": t["id"], "title": t["title"], "state": t.get("state"),
+        card = {"id": t["id"], "title": t["title"], "state": t.get("state"),
                 "tenant": t.get("tenant"), "project": t.get("project"),
                 "pipeline": _pipeline_flags(t.get("state"), contracts,
                                            evidence, receipts, verdicts),
                 "sealing": _sealing(evidence),
                 "needs_spec": _needs_exec_spec(t.get("tenant"), t.get("project"))}
+        card.update(_task_delivery_flags(evidence))
+        return card
 
     def _materialize_plan(c, ident, msg_id, model_name, spec, tasks, category,
                           plan_slug, tenant, project, pre_sealed=None):
@@ -918,7 +920,6 @@ def make_app(db_url: str = DB_URL) -> FastAPI:
         code, description, domain) is stored when provided and updated on
         re-creation; unprovided fields keep their stored values."""
         ident = _identity(request)
-        tenant, project = _scope(body)
         meta = {}
         for field in ("title", "code", "description", "domain"):
             value = body.get(field)
@@ -931,10 +932,17 @@ def make_app(db_url: str = DB_URL) -> FastAPI:
             if ident != "supervisor":
                 if getattr(request.state, "session_role", None) != "owner":
                     raise HTTPException(403, "worker-only operation")
-                if tenant != _caller_tenant(request, c):
-                    raise HTTPException(403, f"project {project!r} is outside your tenant")
-            if not row(c, "SELECT * FROM tenants WHERE tenant=:t", t=tenant):
-                raise HTTPException(404, f"tenant not registered: create {tenant!r} first")
+                # Session tenant is authoritative; body.tenant may only restate it.
+                tenant, project = _session_scope(request, c, body)
+                # First-run onboarding: owners may create a project before any
+                # stack seed; ensure their auth tenant row exists (idempotent).
+                c.execute(text("INSERT INTO tenants(tenant,created_at) VALUES(:t,:n)"
+                               " ON CONFLICT(tenant) DO NOTHING"),
+                          {"t": tenant, "n": _now()})
+            else:
+                tenant, project = _scope(body)
+                if not row(c, "SELECT * FROM tenants WHERE tenant=:t", t=tenant):
+                    raise HTTPException(404, f"tenant not registered: create {tenant!r} first")
             cols = [r[1] for r in c.execute(text("PRAGMA table_info(projects)"))]
             meta = {k: v for k, v in meta.items() if k in cols}
             c.execute(text("INSERT INTO projects(tenant,project,created_at) VALUES(:t,:p,:n)"
@@ -3564,17 +3572,137 @@ def make_app(db_url: str = DB_URL) -> FastAPI:
         return (hidden / str(tid) / MANIFEST).exists()
 
     def _needs_exec_spec(tenant: str | None, project: str | None) -> bool:
-        """True when the worker host has no exec spec for this project (the
-        E_CONTRACT fail-closed the pipeline hits at attempt time). Creating
-        specs picks the coder's repo — a supervisor trust decision, so Convert
-        flags it instead of auto-creating. Unknown (no spec root) reads False."""
+        """True when the worker host has no usable exec spec for this project
+        (missing file or placeholder OWNER/REPO). Creating specs picks the
+        coder's repo — the UI asks the user; Convert only flags the gap."""
+        spec = _read_exec_spec(tenant, project)
+        if spec is None:
+            _, root = _seal_paths()
+            t, p = str(tenant or ""), str(project or "")
+            if root is None or not root.is_dir():
+                return False
+            if not t or not p or "/" in t or "/" in p or ".." in t or ".." in p:
+                return False
+            return not (root / t / f"{p}.yaml").exists()
+        repo = str(spec.get("repo") or "").strip()
+        return (not repo) or repo.upper() in ("OWNER/REPO", "OWNER/NAME")
+
+    def _read_exec_spec(tenant: str | None, project: str | None) -> dict | None:
+        """Load SPEC_ROOT/<tenant>/<project>.yaml or None."""
+        import yaml
         _, root = _seal_paths()
         t, p = str(tenant or ""), str(project or "")
-        if root is None or not root.is_dir():
+        if root is None or not t or not p:
+            return None
+        if "/" in t or "/" in p or ".." in t or ".." in p or "\\" in t or "\\" in p:
+            return None
+        path = root / t / f"{p}.yaml"
+        if not path.is_file():
+            return None
+        try:
+            raw = yaml.safe_load(path.read_text()) or {}
+        except (OSError, ValueError):
+            return None
+        return raw if isinstance(raw, dict) else None
+
+    def _pr_url_from_evidence(evidence) -> str | None:
+        """Latest pr_record URL (coder delivery artifact)."""
+        url = None
+        for e in evidence or []:
+            if e.get("kind") != "pr_record":
+                continue
+            body = _pipeline_json(e.get("body"))
+            cand = body.get("url") or body.get("pr_url")
+            if isinstance(cand, str) and cand.startswith("https://"):
+                url = cand
+        return url
+
+    def _waiting_git_grant(evidence) -> bool:
+        """True when a credential_request is newer than any pr_record."""
+        last_cred = last_pr = -1
+        for i, e in enumerate(evidence or []):
+            if e.get("kind") == "credential_request":
+                last_cred = i
+            elif e.get("kind") == "pr_record":
+                last_pr = i
+        return last_cred > last_pr
+
+    def _clone_failed_reason(evidence) -> str | None:
+        """Surface clone/auth failures from escalation evidence (distinct from grant wait)."""
+        for e in reversed(list(evidence or [])):
+            if e.get("kind") != "escalation":
+                continue
+            body = _pipeline_json(e.get("body"))
+            reason = str(body.get("reason") or body.get("summary") or "")
+            low = reason.lower()
+            if (
+                "clone" in low
+                or "authentication failed" in low
+                or "could not read from remote" in low
+                or "remote branch" in low
+                or "not found in upstream" in low
+                or "has no branch" in low
+                or "empty or missing" in low
+            ):
+                return reason[:300] or "clone failed"
+        return None
+
+    def _github_repo_empty(repo: str) -> bool | None:
+        """True when GitHub reports zero branches. None when the probe fails."""
+        import urllib.error
+        import urllib.request
+        url = f"https://api.github.com/repos/{repo}"
+        req = urllib.request.Request(url, headers={"Accept": "application/vnd.github+json",
+                                                   "User-Agent": "rouvr-ledger"})
+        try:
+            with urllib.request.urlopen(req, timeout=5) as resp:
+                data = json.loads(resp.read().decode() or "{}")
+        except (urllib.error.URLError, urllib.error.HTTPError, TimeoutError, ValueError):
+            return None
+        if not isinstance(data, dict):
+            return None
+        # size==0 and no pushed commits ⇒ unborn default branch
+        try:
+            return int(data.get("size") or 0) == 0
+        except (TypeError, ValueError):
+            return None
+
+    def _validate_github_repo(repo: str) -> str:
+        """Accept owner/name only; refuse URLs, blanks, placeholders."""
+        r = (repo or "").strip().removeprefix("https://github.com/").removeprefix("http://github.com/")
+        r = r.removesuffix(".git").strip("/")
+        if not r or "/" not in r or r.upper() in ("OWNER/REPO", "OWNER/NAME"):
+            raise HTTPException(422, "repo must be owner/name (not a placeholder)")
+        owner, _, name = r.partition("/")
+        if not owner or not name or "/" in name or ".." in owner or ".." in name:
+            raise HTTPException(422, "repo must be owner/name")
+        if any(c in r for c in (" ", "@", ":", "?", "#")):
+            raise HTTPException(422, "repo must be owner/name without credentials or query")
+        return f"{owner}/{name}"
+
+    def _grant_dir() -> Path:
+        """Directory for per-task git grants (beside WORKSPACE_ROOT)."""
+        ws = Path(os.environ.get("WORKSPACE_ROOT", "/srv/rouvr/workspaces"))
+        return ws.parent / "grants"
+
+    def _project_has_git_grant(tenant: str, project: str) -> bool:
+        """True when a usable project-default grant file exists (0600 + token)."""
+        safe_t = str(tenant).replace("/", "_")
+        safe_p = str(project).replace("/", "_")
+        path = _grant_dir() / f".git-grant-default-{safe_t}-{safe_p}.json"
+        try:
+            if path.stat().st_mode & 0o077:
+                return False
+            return bool(json.loads(path.read_text()).get("github_token"))
+        except (OSError, ValueError):
             return False
-        if not t or not p or "/" in t or "/" in p or ".." in t or ".." in p:
-            return False
-        return not (root / t / f"{p}.yaml").exists()
+
+    def _task_delivery_flags(evidence) -> dict:
+        return {
+            "pr_url": _pr_url_from_evidence(evidence),
+            "waiting_git_grant": _waiting_git_grant(evidence),
+            "clone_failed": _clone_failed_reason(evidence),
+        }
 
     def _pipeline_flags(state, contracts, evidence, receipts, result_verdicts) -> dict:
         flags = {"contract": "pending", "knowledge": "pending",
@@ -3656,6 +3784,7 @@ def make_app(db_url: str = DB_URL) -> FastAPI:
             d["head_verdict"] = b["verdicts"][-1] if b["verdicts"] else None
             d["sealing"] = _sealing(b["evidence"])
             d["needs_spec"] = _needs_exec_spec(d.get("tenant"), d.get("project"))
+            d.update(_task_delivery_flags(b["evidence"]))
 
     @app.get("/v1/tasks")
     def list_tasks(request: Request, state: str | None = None, tenant: str | None = None,
@@ -3724,6 +3853,13 @@ def make_app(db_url: str = DB_URL) -> FastAPI:
             t["head_verdict"] = verdicts[-1] if verdicts else None
             t["sealing"] = _sealing(t["evidence"])
             t["needs_spec"] = _needs_exec_spec(t.get("tenant"), t.get("project"))
+            t.update(_task_delivery_flags(t["evidence"]))
+            # Rework: claimed after a negative reviewer verdict, coder looping headless.
+            rev = [_pipeline_verdict(_pipeline_json(e.get("body")))
+                   for e in t["evidence"] if e.get("kind") in _PIPELINE_REVIEW_KINDS]
+            rev = [v for v in rev if v]
+            t["rework"] = bool(
+                t.get("state") == "claimed" and rev and rev[-1] in _PIPELINE_NEGATIVE)
             return t
 
     @app.post("/v1/tasks/{tid}/contracts")
@@ -3897,6 +4033,319 @@ def make_app(db_url: str = DB_URL) -> FastAPI:
             return {"sealed": sealed[0][0],
                     "reason": None if sealed[0][0] else sealed[0][1],
                     "task_id": tid}
+
+    @app.get("/v1/projects/{project}/exec-spec")
+    def get_exec_spec(project: str, request: Request, tenant: str | None = None):
+        """Return the bound GitHub exec spec for a project (or needs_spec)."""
+        with eng.begin() as c:
+            if _identity(request) == "supervisor":
+                tname = (tenant or "").strip()
+                if not tname:
+                    raise HTTPException(422, "tenant is required")
+            else:
+                if getattr(request.state, "session_role", None) != "owner":
+                    raise HTTPException(403, "worker-only operation")
+                tname = _caller_tenant(request, c)
+            if not row(c, "SELECT * FROM projects WHERE tenant=:t AND project=:p",
+                       t=tname, p=project):
+                raise HTTPException(404, f"project {project!r} not found")
+        spec = _read_exec_spec(tname, project) or {}
+        repo = str(spec.get("repo") or "").strip()
+        empty = _github_repo_empty(repo) if repo else None
+        out = {
+            "tenant": tname,
+            "project": project,
+            "repo": repo or None,
+            "base_branch": str(spec.get("base_branch") or "main"),
+            "needs_spec": _needs_exec_spec(tname, project),
+            "has_git_grant": _project_has_git_grant(tname, project),
+            "repo_empty": empty,
+        }
+        if empty:
+            out["warning"] = (
+                f"GitHub repo {repo} is empty — Rouvr will create "
+                f"{out['base_branch']} on start when a git grant PAT is available."
+            )
+        return out
+
+    @app.put("/v1/projects/{project}/exec-spec")
+    def put_exec_spec(project: str, body: dict, request: Request):
+        """Ask/confirm the GitHub repo for coding delivery; writes SPEC_ROOT yaml."""
+        _transition_allowed(request)
+        with eng.begin() as c:
+            if _identity(request) == "supervisor":
+                tname = str(body.get("tenant") or "").strip()
+                if not tname:
+                    raise HTTPException(422, "tenant is required")
+            else:
+                tname = _caller_tenant(request, c)
+            if not row(c, "SELECT * FROM projects WHERE tenant=:t AND project=:p",
+                       t=tname, p=project):
+                raise HTTPException(404, f"project {project!r} not found")
+        repo = _validate_github_repo(str(body.get("repo") or ""))
+        base = str(body.get("base_branch") or "main").strip() or "main"
+        if "/" in base or ".." in base or not base:
+            raise HTTPException(422, "base_branch must be a simple branch name")
+        test_command = body.get("test_command")
+        if test_command is None:
+            test_command = ["python", "-m", "pytest", "-q"]
+        if (not isinstance(test_command, list)
+                or not test_command
+                or not all(isinstance(x, str) and x.strip() for x in test_command)):
+            raise HTTPException(422, "test_command must be a non-empty list of strings")
+        timeout_s = body.get("timeout_s", 900)
+        if isinstance(timeout_s, bool) or not isinstance(timeout_s, int) or timeout_s <= 0:
+            raise HTTPException(422, "timeout_s must be a positive int")
+        empty = _github_repo_empty(repo)
+        _, root = _seal_paths()
+        if root is None:
+            raise HTTPException(503, "SPEC_ROOT is not configured")
+        dest = root / tname / f"{project}.yaml"
+        try:
+            dest.parent.mkdir(parents=True, exist_ok=True)
+            import yaml
+            payload = {
+                "repo": repo,
+                "base_branch": base,
+                "test_command": list(test_command),
+                "timeout_s": timeout_s,
+            }
+            dest.write_text(yaml.safe_dump(payload, default_flow_style=False))
+        except OSError as e:
+            raise HTTPException(503, f"cannot write exec spec: {e}") from e
+        out = {"tenant": tname, "project": project, "repo": repo,
+               "base_branch": base, "needs_spec": False, "repo_empty": empty,
+               "has_git_grant": _project_has_git_grant(tname, project)}
+        if empty:
+            # Empty is supported: workers bootstrap {base} with the git grant.
+            out["warning"] = (
+                f"GitHub repo {repo} is empty — Rouvr will create {base} on "
+                f"start (paste a GitHub PAT with repo scope if you have not "
+                f"already saved a git grant)."
+            )
+        return out
+
+    def _write_grant_file(path: Path, token: str) -> None:
+        """Write a 0600 grant JSON beside WORKSPACE_ROOT. Never logs the token."""
+        gdir = path.parent
+        try:
+            gdir.mkdir(parents=True, exist_ok=True)
+            os.chmod(gdir, 0o700)
+            fd = os.open(str(path), os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+            try:
+                os.write(fd, json.dumps({"github_token": token}).encode())
+            finally:
+                os.close(fd)
+            os.chmod(path, 0o600)
+        except OSError as e:
+            raise HTTPException(
+                503,
+                "grants directory is not writable — mount WORKSPACE_ROOT parent "
+                f"shared with workers ({gdir}): {type(e).__name__}",
+            ) from e
+
+    @app.post("/v1/projects/{project}/git-grant")
+    def post_project_git_grant(project: str, body: dict, request: Request):
+        """Accept a project-default GitHub PAT for push/PR (onboarding).
+
+        Writes grants/.git-grant-default-{tenant}-{project}.json (0600).
+        Task-scoped grants still win when present; never echoes the token."""
+        _transition_allowed(request)
+        token = body.get("github_token")
+        if not isinstance(token, str) or not token.strip():
+            raise HTTPException(422, "github_token is required")
+        token = token.strip()
+        with eng.begin() as c:
+            if _identity(request) == "supervisor":
+                tname = str(body.get("tenant") or "").strip()
+                if not tname:
+                    raise HTTPException(422, "tenant is required")
+            else:
+                tname = _caller_tenant(request, c)
+            if not row(c, "SELECT * FROM projects WHERE tenant=:t AND project=:p",
+                       t=tname, p=project):
+                raise HTTPException(404, f"project {project!r} not found")
+        safe_t = tname.replace("/", "_")
+        safe_p = project.replace("/", "_")
+        path = _grant_dir() / f".git-grant-default-{safe_t}-{safe_p}.json"
+        _write_grant_file(path, token)
+        # Outbox only (receipts.task_id is NOT NULL / FK to tasks).
+        with eng.begin() as c:
+            _emit(c, tname, project, "project.step", None,
+                  {"kind": "git_grant_default_accepted", "project": project})
+        return {"accepted": True, "tenant": tname, "project": project}
+    @app.post("/v1/tasks/{tid}/git-grant")
+    def post_git_grant(tid: int, body: dict, request: Request):
+        """Accept a per-task GitHub PAT for push/PR. Writes 0600 grant file;
+        never echoes the token or stores it in evidence."""
+        _transition_allowed(request)
+        token = body.get("github_token")
+        if not isinstance(token, str) or not token.strip():
+            raise HTTPException(422, "github_token is required")
+        token = token.strip()
+        with eng.begin() as c:
+            t = _own_or_stack(c, tid, request)
+        path = _grant_dir() / f".git-grant-{tid}.json"
+        _write_grant_file(path, token)
+        # Receipt without the secret — proves the user acted.
+        with eng.begin() as c:
+            _own_or_stack(c, tid, request)
+            key = f"git-grant:{tid}:{_now()}"
+            s, _ = _canon({"task_id": tid, "accepted": True})
+            c.execute(text("INSERT INTO receipts(task_id,idempotency_key,action,body,created_at)"
+                           " VALUES(:i,:k,'git-grant',:b,:n)"),
+                      {"i": tid, "k": key, "b": s, "n": _now()})
+            _emit(c, t["tenant"], t["project"], "task.step", tid,
+                  {"task_id": tid, "kind": "git_grant_accepted"})
+        return {"accepted": True, "task_id": tid}
+
+    def _start_one_delivery(tid: int, request: Request, requested_by: str) -> dict:
+        """Seal (if needed), reopen blocked/failed, start Temporal for one task."""
+        with eng.begin() as c:
+            t = _own_or_stack(c, tid, request)
+            contracts = [dict(r) for r in c.execute(
+                text("SELECT * FROM contracts WHERE task_id=:i ORDER BY id"),
+                {"i": tid}).mappings()]
+            evidence = [dict(r) for r in c.execute(
+                text("SELECT kind FROM evidence WHERE task_id=:i ORDER BY id"),
+                {"i": tid}).mappings()]
+        if not contracts:
+            raise HTTPException(409, "start requires a contract")
+        if _needs_exec_spec(t.get("tenant"), t.get("project")):
+            raise HTTPException(
+                409,
+                "needs_spec: bind a GitHub repo via PUT /v1/projects/{project}/exec-spec first",
+            )
+        # Claim only moves open/needs_review → claimed; reopen blocked/failed first.
+        if t["state"] in ("blocked", "failed"):
+            with eng.begin() as c:
+                _own_or_stack(c, tid, request)
+                cur = task_or_404(c, tid)
+                if cur["state"] in ("blocked", "failed"):
+                    c.execute(text("UPDATE tasks SET state='open', updated_at=:n WHERE id=:i"),
+                              {"i": tid, "n": _now()})
+                    _emit(c, cur["tenant"], cur["project"], "task.transition", tid,
+                          {"task_id": tid, "from": cur["state"], "to": "open",
+                           "owner": requested_by,
+                           "reason": "reopen on delivery start"})
+                    t = {**cur, "state": "open"}
+        sealed = any(e.get("kind") == "suite_sealed" for e in evidence) or _suite_on_disk(tid)
+        if not sealed:
+            seal_resp = seal_task(tid, {}, request)
+            if not seal_resp.get("sealed"):
+                reason = seal_resp.get("reason") or "seal failed"
+                raise HTTPException(
+                    409,
+                    f"hidden suite not sealed — {reason}",
+                )
+        try:
+            import asyncio
+            from rouvr.starter import run_start
+            wid = asyncio.run(run_start(task_number=tid, requested_by=requested_by))
+        except Exception as e:  # noqa: BLE001 — surface Temporal/config errors as 503
+            raise HTTPException(503, f"workflow start failed: {type(e).__name__}: {e}") from e
+        with eng.begin() as c:
+            _own_or_stack(c, tid, request)
+            key = f"workflow:start:{tid}:{wid}"
+            prior = row(c, "SELECT * FROM receipts WHERE task_id=:i AND idempotency_key=:k",
+                        i=tid, k=key)
+            if not prior:
+                s, _ = _canon({"workflow_id": wid, "requested_by": requested_by})
+                c.execute(text("INSERT INTO receipts(task_id,idempotency_key,action,body,created_at)"
+                               " VALUES(:i,:k,'workflow:start',:b,:n)"),
+                          {"i": tid, "k": key, "b": s, "n": _now()})
+                _emit(c, t["tenant"], t["project"], "task.step", tid,
+                      {"task_id": tid, "workflow_id": wid, "kind": "workflow_start"})
+        return {"workflow_id": wid, "task_id": tid, "started": True}
+
+    @app.post("/v1/tasks/{tid}/start")
+    def start_task_delivery(tid: int, body: dict, request: Request):
+        """Start Temporal TaskWorkflow for one task. Prefer POST /v1/plans/{slug}/start
+        for plan delivery (starts the whole chain, never the slice head alone)."""
+        _transition_allowed(request)
+        requested_by = str(body.get("requested_by") or "").strip()
+        if not requested_by:
+            requested_by = getattr(request.state, "session_user", None) or "supervisor"
+        return _start_one_delivery(tid, request, requested_by)
+
+    @app.post("/v1/plans/{slug}/start")
+    def start_plan_delivery(slug: str, body: dict, request: Request):
+        """Start Temporal delivery for every chain task on a materialized plan.
+
+        Uses plan:convert task_ids (step tasks only — not the slice head).
+        Reopens blocked/failed members. Returns per-task results; partial
+        success is allowed so one seal/Temporal failure does not abort the rest.
+        """
+        _transition_allowed(request)
+        ident = _identity(request)
+        requested_by = str(body.get("requested_by") or "").strip()
+        if not requested_by:
+            requested_by = getattr(request.state, "session_user", None) or "supervisor"
+        with eng.begin() as c:
+            if ident == "supervisor":
+                t = None
+            else:
+                if getattr(request.state, "session_role", None) != "owner":
+                    raise HTTPException(403, "worker-only operation")
+                t = _caller_tenant(request, c)
+            entry = None
+            if t is None:
+                rows = [dict(r) for r in c.execute(
+                    text("SELECT * FROM knowledge_entries WHERE slug=:s"
+                         " AND tags LIKE '%\"plan\"%' ORDER BY id DESC"),
+                    {"s": slug}).mappings()]
+                entry = rows[0] if rows else None
+            else:
+                entry = _plan_lookup(c, t, slug)
+            if entry is None:
+                raise HTTPException(404, f"no plan {slug!r}")
+            if t is not None and entry["tenant"] != t:
+                raise HTTPException(404, f"no plan {slug!r} in your tenant")
+            if _parse_plan_body(entry) is None:
+                raise HTTPException(422, "entry body is not a plan")
+            rep = row(c, "SELECT * FROM receipts WHERE idempotency_key=:k"
+                         " AND action='plan:convert'",
+                      k=f"plan-convert:{entry['id']}")
+            if rep is None:
+                raise HTTPException(422, "plan is not materialized — approve first")
+            try:
+                rb = json.loads(rep["body"])
+            except ValueError:
+                rb = {}
+            tids = [x for x in (rb.get("task_ids") or []) if isinstance(x, int)]
+            et, ep = entry["tenant"], entry["project"]
+            startable = []
+            for tid in tids:
+                tr = row(c, "SELECT * FROM tasks WHERE id=:i", i=tid)
+                if not tr:
+                    continue
+                if tr["state"] not in ("open", "claimed", "blocked", "failed"):
+                    continue
+                startable.append(tid)
+        if not startable:
+            raise HTTPException(409, "no startable chain tasks on this plan")
+        if _needs_exec_spec(et, ep):
+            raise HTTPException(
+                409,
+                "needs_spec: bind a GitHub repo via PUT /v1/projects/{project}/exec-spec first",
+            )
+        results = []
+        for tid in startable:
+            try:
+                out = _start_one_delivery(tid, request, requested_by)
+                results.append({"task_id": tid, "ok": True,
+                                "workflow_id": out["workflow_id"], "detail": out["workflow_id"]})
+            except HTTPException as e:
+                detail = e.detail if isinstance(e.detail, str) else str(e.detail)
+                results.append({"task_id": tid, "ok": False, "workflow_id": None,
+                                "detail": detail})
+        started = sum(1 for r in results if r["ok"])
+        with eng.begin() as c:
+            _emit(c, et, ep, "plan.start", rep["task_id"] if rep else startable[0],
+                  {"slug": slug, "plan_entry": entry["id"], "task_ids": startable,
+                   "started": started, "results": results})
+        return {"slug": slug, "tenant": et, "project": ep,
+                "started": started, "total": len(results), "results": results}
 
     @app.patch("/v1/tasks/{tid}")
     def edit_task(tid: int, body: dict, request: Request):

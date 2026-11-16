@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { TaskStatePill } from "@/components/ui/StatusPill";
+import { GitGrantPanel } from "@/components/workspace/GitGrantPanel";
 import { PipelineStrip } from "@/components/workspace/PipelineStrip";
 import { Button } from "@/components/ui/Button";
 import { csrfHeaders, ws, type TaskRow } from "@/lib/api/workspace";
@@ -63,7 +64,11 @@ export default function EscalationsPage() {
         setError(`escalations failed (${response.status})`);
         return;
       }
-      setTasks(data.items.filter((t) => ESCALATION_STATES.has(t.state)));
+      setTasks(
+        data.items.filter(
+          (t) => ESCALATION_STATES.has(t.state) || t.waiting_git_grant || !!t.clone_failed,
+        ),
+      );
     } catch (err) {
       setError(err instanceof Error ? err.message : "escalations failed");
     } finally {
@@ -270,7 +275,8 @@ export default function EscalationsPage() {
       <div className="mb-6">
         <h1 className="text-2xl font-semibold text-white">Escalations inbox</h1>
         <p className="mt-1 text-sm text-muted">
-          Approve a verified head, retry, or request changes. Grants are issued by the stack — this inbox can only look one up.
+          Approve a verified head, retry, request changes, or grant a GitHub PAT when
+          a coding task is waiting to push its pull request.
         </p>
       </div>
 
@@ -326,7 +332,15 @@ export default function EscalationsPage() {
         <p className="font-mono text-sm text-muted">loading…</p>
       ) : visible.length === 0 && !error ? (
         <p className="rounded-2xl border border-steel/40 bg-abyss/60 p-6 text-center text-sm text-muted">
-          Inbox empty — nothing needs review, blocked, or failed right now.
+          Inbox empty — nothing needs review, blocked, or failed. Check the{" "}
+          <Link href="/workspace" className="text-brand-300 hover:underline">
+            Board
+          </Link>{" "}
+          for in-flight work, or{" "}
+          <Link href="/workspace/chat" className="text-brand-300 hover:underline">
+            talk to the Supervisor
+          </Link>
+          .
         </p>
       ) : (
         <ul className="space-y-3">
@@ -361,6 +375,26 @@ export default function EscalationsPage() {
                   </div>
                 ) : null}
                 <p className="mt-1 truncate text-xs text-muted">{attentionReason(task)}</p>
+                {task.clone_failed ? (
+                  <p className="mt-2 text-sm text-danger">
+                    Clone failed (host token / repo visibility): {task.clone_failed}
+                  </p>
+                ) : null}
+                {task.waiting_git_grant ? (
+                  <div className="mt-3">
+                    <GitGrantPanel taskId={task.id} onGranted={() => void load()} />
+                  </div>
+                ) : null}
+                {task.pr_url ? (
+                  <a
+                    href={task.pr_url}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="mt-2 inline-block font-mono text-[11px] text-brand-300 hover:underline"
+                  >
+                    Open pull request ↗
+                  </a>
+                ) : null}
 
                 <div className="mt-3 flex flex-wrap gap-2">
                   {actions.includes("approve") ? (

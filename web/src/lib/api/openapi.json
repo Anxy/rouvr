@@ -1770,6 +1770,108 @@
         "summary": "Edit Project Lite"
       }
     },
+    "/api/v1/projects/{project}/exec-spec": {
+      "get": {
+        "description": "Return the bound GitHub exec spec for a project (or needs_spec).",
+        "operationId": "get_exec_spec_lite_api_v1_projects__project__exec_spec_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project",
+            "required": true,
+            "schema": {
+              "title": "Project",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "tenant",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Tenant"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Exec Spec Lite"
+      },
+      "put": {
+        "description": "Ask/confirm the GitHub repo for coding delivery; writes SPEC_ROOT yaml.",
+        "operationId": "put_exec_spec_lite_api_v1_projects__project__exec_spec_put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project",
+            "required": true,
+            "schema": {
+              "title": "Project",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": true,
+                "title": "Body",
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Put Exec Spec Lite"
+      }
+    },
     "/api/v1/tasks": {
       "get": {
         "operationId": "list_tasks_lite_api_v1_tasks_get",
@@ -2314,6 +2416,56 @@
         "summary": "Lookup Evidence Lite"
       }
     },
+    "/api/v1/tasks/{tid}/git-grant": {
+      "post": {
+        "description": "Accept a per-task GitHub PAT for push/PR. Writes 0600 grant file;\nnever echoes the token or stores it in evidence.",
+        "operationId": "post_git_grant_lite_api_v1_tasks__tid__git_grant_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "tid",
+            "required": true,
+            "schema": {
+              "title": "Tid",
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": true,
+                "title": "Body",
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Post Git Grant Lite"
+      }
+    },
     "/api/v1/tasks/{tid}/leases/renew": {
       "post": {
         "operationId": "renew_lease_lite_api_v1_tasks__tid__leases_renew_post",
@@ -2510,6 +2662,56 @@
           }
         },
         "summary": "Seal Task Lite"
+      }
+    },
+    "/api/v1/tasks/{tid}/start": {
+      "post": {
+        "description": "Start Temporal TaskWorkflow (idempotent). Same path as rouvr_start_task.",
+        "operationId": "start_task_delivery_lite_api_v1_tasks__tid__start_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "tid",
+            "required": true,
+            "schema": {
+              "title": "Tid",
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": true,
+                "title": "Body",
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Start Task Delivery Lite"
       }
     },
     "/api/v1/tasks/{tid}/transition": {
@@ -4525,6 +4727,108 @@
         "summary": "Edit Project"
       }
     },
+    "/v1/projects/{project}/exec-spec": {
+      "get": {
+        "description": "Return the bound GitHub exec spec for a project (or needs_spec).",
+        "operationId": "get_exec_spec_v1_projects__project__exec_spec_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project",
+            "required": true,
+            "schema": {
+              "title": "Project",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "tenant",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Tenant"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Exec Spec"
+      },
+      "put": {
+        "description": "Ask/confirm the GitHub repo for coding delivery; writes SPEC_ROOT yaml.",
+        "operationId": "put_exec_spec_v1_projects__project__exec_spec_put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project",
+            "required": true,
+            "schema": {
+              "title": "Project",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": true,
+                "title": "Body",
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Put Exec Spec"
+      }
+    },
     "/v1/tasks": {
       "get": {
         "operationId": "list_tasks_v1_tasks_get",
@@ -5069,6 +5373,56 @@
         "summary": "Lookup Evidence"
       }
     },
+    "/v1/tasks/{tid}/git-grant": {
+      "post": {
+        "description": "Accept a per-task GitHub PAT for push/PR. Writes 0600 grant file;\nnever echoes the token or stores it in evidence.",
+        "operationId": "post_git_grant_v1_tasks__tid__git_grant_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "tid",
+            "required": true,
+            "schema": {
+              "title": "Tid",
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": true,
+                "title": "Body",
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Post Git Grant"
+      }
+    },
     "/v1/tasks/{tid}/leases/renew": {
       "post": {
         "operationId": "renew_lease_v1_tasks__tid__leases_renew_post",
@@ -5265,6 +5619,56 @@
           }
         },
         "summary": "Seal Task"
+      }
+    },
+    "/v1/tasks/{tid}/start": {
+      "post": {
+        "description": "Start Temporal TaskWorkflow (idempotent). Same path as rouvr_start_task.",
+        "operationId": "start_task_delivery_v1_tasks__tid__start_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "tid",
+            "required": true,
+            "schema": {
+              "title": "Tid",
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": true,
+                "title": "Body",
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Start Task Delivery"
       }
     },
     "/v1/tasks/{tid}/transition": {

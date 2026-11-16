@@ -10,8 +10,20 @@ Copy `.env.example` to `.env`. Secrets are read from the environment only; never
 | `HYEVE_AIX_SERVICE_*` | see `.env.example` | Core service settings (database, Redis, Temporal) |
 | `RECEIPT_SIGNING_KEY_PATH` | `/srv/rouvr/keys/receipt_ed25519.pem` | Ed25519 private key (PEM, PKCS8, no encryption) for signed receipts; file must be `0600` |
 | `RECEIPT_KEY_ID` | `rouvr-receipt-1` | Key identifier carried in every receipt envelope (`key_id`) |
+| `ROUVR_LAUNCH_WINDOWS` | `0` | `0` = headless `muse exec` for coder/reviewer; `1` = interactive Muse chat windows |
+| `WORKSPACE_ROOT` | `.data/workspaces` | Task checkouts; per-task git grants live at `WORKSPACE_ROOT/../grants/.git-grant-<id>.json` |
+| `SPEC_ROOT` | `.data/specs` | Exec specs (`<tenant>/<project>.yaml`); UI `PUT /v1/projects/{project}/exec-spec` writes here |
 
 `PYTHONPATH` must include `.:core:core/src:core/libs`; the Makefile sets it. See `.env.example` for the full list.
+
+## Shared volumes (coding delivery from the web)
+
+Ledger `POST /v1/tasks/{id}/git-grant` and Temporal workers must see the **same**
+`WORKSPACE_ROOT` parent (so `grants/` resolves identically). With `./scripts/rouvr`,
+both use `.data/workspaces` and `.data/grants` on the host. If the ledger runs in
+Docker, bind-mount that host `.data` directory read-write into the ledger and
+worker containers at the same path. Git-grant refuses with a clear error when
+the grants directory is not writable.
 
 ## Receipt signing key (S010)
 

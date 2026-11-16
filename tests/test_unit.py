@@ -264,13 +264,14 @@ def test_credentials_refuse_bad_perms(tmp_path: Path):
 
 
 def test_branch_for():
-    assert branch_for("task-9", 2) == "rouvr/task-9/a2"
+    assert branch_for("task-9") == "rouvr/task-9"
+    assert branch_for("task-9", 1) == branch_for("task-9", 2) == "rouvr/task-9"
 
 
 def test_build_task_prompt_has_essentials():
     p = build_task_prompt({"id": "7", "title": "Fix it", "description": "d",
-                           "acceptance_criteria": ["a1", "a2"]}, "org/repo", "rouvr/7/a1", "")
-    assert "Fix it" in p and "- a1" in p and "rouvr/7/a1" in p and "do not merge" in p
+                           "acceptance_criteria": ["a1", "a2"]}, "org/repo", "rouvr/7", "")
+    assert "Fix it" in p and "- a1" in p and "rouvr/7" in p and "do not merge" in p
     assert "working software" in p and "markdown-only" in p
 
 

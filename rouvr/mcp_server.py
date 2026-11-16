@@ -650,7 +650,15 @@ def _live_peers(task_id: int, task: dict) -> list[dict]:
     peers = _peer_sessions(task)
     root = Path(os.environ.get("WORKSPACE_ROOT", DEFAULT_WORKSPACE_ROOT))
     known = {p["session_id"] for p in peers}
-    for ws in sorted(root.glob(f"rouvr__{task_id}__a*")) if root.exists() else []:
+    # Stable delivery workspace is rouvr__{task_id}; keep __a* for in-flight
+    # legacy attempt checkouts until they drain.
+    candidates: list = []
+    if root.exists():
+        stable = root / f"rouvr__{task_id}"
+        if stable.is_dir():
+            candidates.append(stable)
+        candidates.extend(sorted(root.glob(f"rouvr__{task_id}__a*")))
+    for ws in candidates:
         sid = discover_session_id(ws)
         if sid and sid not in known:
             known.add(sid)

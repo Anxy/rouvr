@@ -214,17 +214,9 @@ class Activities:
                                        {"GH_TOKEN": grant})
         ev.append(await wh.attach_evidence_exact(wf.task_id, "pr_record", fence,
                                                  {"url": pr_url, "head_sha": head, "branch": branch}))
-        if inp.attempt_no > 1:  # S013: close the superseded attempt's PR
-            from rouvr.gitops import close_superseded_pr
-            prev = branch_for(wf.task_id, lease.attempt_no - 1)
-            try:
-                closed = await close_superseded_pr(spec.repo, prev, pr_url, {"GH_TOKEN": grant})
-                note = {"closed_pr": closed, "superseded_by": pr_url} if closed \
-                    else {"closed_pr": "", "note": "no open PR on previous branch"}
-            except Exception as e:  # failure is evidence, never silent
-                note = {"close_failed": f"{type(e).__name__}: {e}"[:200], "prev_branch": prev}
-            ev.append(await wh.attach_evidence_exact(wf.task_id, "pr_superseded",
-                                                     f"{fence}:pr-superseded", note))
+        # One branch/PR per task: rework pushes new commits to the same head;
+        # attempt numbers stay in the ledger. close_superseded_pr is for
+        # explicit abandon/reset only, not per-attempt hygiene.
         # No record_result here: one result per attempt, written by run_tests as
         # "tested" (the build facts live in pr_record evidence). A second core
         # for the same attempt 409s on both backends (R10 rehearsal finding).

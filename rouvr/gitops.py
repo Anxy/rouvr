@@ -22,8 +22,9 @@ async def _run(*argv: str, cwd: Path | None = None, env: dict[str, str] | None =
     return out.decode().strip()
 
 
-def branch_for(task_id: str, attempt_no: int) -> str:
-    return f"rouvr/{task_id}/a{attempt_no}"
+def branch_for(task_id: str, attempt_no: int | None = None) -> str:
+    """One delivery branch per task. attempt_no kept for call-site compat; unused."""
+    return f"rouvr/{task_id}"
 
 
 def workspace_path(root: Path, branch: str) -> Path:

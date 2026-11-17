@@ -9,6 +9,7 @@ import {
   DeliveryStartDialog,
   type PlanStartTarget,
 } from "@/components/workspace/DeliveryStartDialog";
+import { GitGrantPanel } from "@/components/workspace/GitGrantPanel";
 import { PipelineStrip } from "@/components/workspace/PipelineStrip";
 import { useSession } from "@/components/workspace/session";
 import {
@@ -34,6 +35,14 @@ interface PlanOffer {
   category: string;
 }
 
+interface ChatAction {
+  id: string;
+  label: string;
+  op: string;
+  args?: Record<string, unknown>;
+  needs_dialog?: string;
+}
+
 interface ChatTask {
   id: number;
   title: string;
@@ -53,6 +62,9 @@ interface ChatResult {
   created: number;
   badge: ChatBadge | null;
   offer: PlanOffer | null;
+  actions?: ChatAction[] | null;
+  op_offer?: { op: string; args?: Record<string, unknown>; label?: string } | null;
+  op_result?: Record<string, unknown> | null;
 }
 
 interface Turn {
@@ -68,10 +80,18 @@ interface Turn {
   tasks: ChatTask[];
   badge: ChatBadge | null;
   offer: PlanOffer | null;
+  actions: ChatAction[];
   messageId?: string;
 }
 
-const EMPTY_TURN = { question: null, slice: null, tasks: [], badge: null, offer: null };
+const EMPTY_TURN = {
+  question: null,
+  slice: null,
+  tasks: [],
+  badge: null,
+  offer: null,
+  actions: [] as ChatAction[],
+};
 
 const EXAMPLE_PROMPTS = [
   "Slice onboarding into small tasks",
@@ -88,16 +108,16 @@ const COPY: Record<
   supervisor: {
     title: "Supervisor",
     blurb:
-      "Rouvr turns requests into tracked work: contract, build, review, evidence. Draft plans here, approve in the Plans panel, then Start delivery.",
-    placeholder: "e.g. Slice onboarding into small tasks",
+      "Rouvr turns requests into tracked work: contract, build, review, evidence. Draft here, then approve or start delivery with chips or phrases like “approve this plan”.",
+    placeholder: "e.g. Slice onboarding into small tasks — or “approve this plan”",
     examples: EXAMPLE_PROMPTS,
   },
   // Legacy mode kept for API surface=planner; UI routes to supervisor.
   planner: {
     title: "Supervisor",
     blurb:
-      "Rouvr turns requests into tracked work: contract, build, review, evidence. Draft plans here, approve in the Plans panel, then Start delivery.",
-    placeholder: "e.g. Slice onboarding into small tasks",
+      "Rouvr turns requests into tracked work: contract, build, review, evidence. Draft here, then approve or start delivery with chips or phrases like “approve this plan”.",
+    placeholder: "e.g. Slice onboarding into small tasks — or “approve this plan”",
     examples: EXAMPLE_PROMPTS,
   },
 };
@@ -132,6 +152,7 @@ function errorDetail(raw: string): string {
 function badgeFromClass(cls: string): ChatBadge | null {
   const c = cls.trim().toLowerCase();
   if (!c) return null;
+  if (c === "op") return { kind: "op", label: "Action" };
   if (c === "task" || c.startsWith("task")) return { kind: "task", label: "Task" };
   if (c === "knowledge" || c === "saved" || c.includes("knowledge"))
     return { kind: "saved", label: "Saved" };
@@ -143,6 +164,7 @@ const INTAKE_BADGE_TONES: Record<string, { pill: string; dot: string }> = {
   task: { pill: "border-brand/40 text-brand-300 bg-brand/10", dot: "bg-brand" },
   saved: { pill: "border-success/35 text-success bg-success/10", dot: "bg-success" },
   logged: { pill: "border-steel/60 text-muted bg-navy/60", dot: "bg-steel-400" },
+  op: { pill: "border-brand/40 text-brand-300 bg-brand/10", dot: "bg-brand" },
 };
 const INTAKE_BADGE_FALLBACK = { pill: "border-steel/60 text-muted bg-navy/60", dot: "bg-steel-400" };
 
@@ -193,6 +215,7 @@ export function ChatSurface({
   const copy = COPY[mode];
   const shownProject = sessionProject ?? "";
   const [startPlan, setStartPlan] = useState<PlanStartTarget | null>(null);
+  const [grantTaskId, setGrantTaskId] = useState<string | null>(null);
   const [showOnboardBanner, setShowOnboardBanner] = useState(
     mode === "supervisor" && justOnboarded,
   );
@@ -309,9 +332,55 @@ export function ChatSurface({
     await runTurn(note, { plan_action: action, plan_entry: entryId });
   }
 
+  async function actOp(action: ChatAction) {
+    if (busy) return;
+    const dialog = action.needs_dialog;
+    if (dialog === "delivery_start" || action.op === "plan.start.dialog") {
+      const args = action.args || {};
+      const slug = String(args.slug || "");
+      if (!slug) return;
+      setStartPlan({
+        slug,
+        title: String(args.title || slug),
+        tenant: String(args.tenant || sessionTenant || ""),
+        project: String(args.project || shownProject),
+      });
+      return;
+    }
+    if (dialog === "git_grant" || dialog === "project_git_grant") {
+      const args = action.args || {};
+      const tid = args.task_id;
+      if (typeof tid === "number" || typeof tid === "string") {
+        setGrantTaskId(String(tid));
+        return;
+      }
+      // Project-level grant: open delivery dialog so the PAT field is available.
+      if (args.name || shownProject) {
+        setStartPlan({
+          slug: String(args.slug || "setup"),
+          title: "Bind repo & grant",
+          tenant: String(args.tenant || sessionTenant || ""),
+          project: String(args.name || args.project || shownProject),
+        });
+      }
+      return;
+    }
+    if (dialog === "logout") {
+      router.push("/workspace/login");
+      return;
+    }
+    const label = action.label || action.op;
+    await runTurn(label, { op: action.op, op_args: action.args || {} });
+  }
+
   async function runTurn(
     outgoing: string,
-    extra: { plan_action?: string; plan_entry?: number },
+    extra: {
+      plan_action?: string;
+      plan_entry?: number;
+      op?: string;
+      op_args?: Record<string, unknown>;
+    },
   ) {
     const effectiveProject = shownProject.trim();
     if (!effectiveProject) {
@@ -437,6 +506,7 @@ export function ChatSurface({
         tasks: parsed.tasks ?? [],
         badge: parsed.badge ?? null,
         offer: parsed.offer ?? null,
+        actions: Array.isArray(parsed.actions) ? parsed.actions : [],
         messageId: parsed.message_id,
       });
       setTurns((prev) =>
@@ -631,6 +701,30 @@ export function ChatSurface({
                       </div>
                     </div>
                   ) : null}
+                  {turn.status === "done" && turn.actions.length > 0 ? (
+                    <div
+                      data-chat-actions
+                      className="mt-3 flex flex-wrap gap-2"
+                    >
+                      {turn.actions.map((a) => (
+                        <Button
+                          key={`${a.id}-${a.label}-${JSON.stringify(a.args || {})}`}
+                          type="button"
+                          variant={
+                            a.op === "plan.approve" || a.op === "plan.start.dialog"
+                              ? "primary"
+                              : "secondary"
+                          }
+                          data-chat-action={a.op}
+                          data-needs-dialog={a.needs_dialog || undefined}
+                          disabled={busy}
+                          onClick={() => void actOp(a)}
+                        >
+                          {a.label}
+                        </Button>
+                      ))}
+                    </div>
+                  ) : null}
                   {turn.status === "done" && !turn.question ? (
                     <ul className="mt-3 space-y-2">
                       {turn.slice ? (
@@ -765,6 +859,22 @@ export function ChatSurface({
           plan={startPlan}
           onClose={() => setStartPlan(null)}
         />
+      ) : null}
+      {grantTaskId ? (
+        <div className="mt-3 shrink-0" data-chat-git-grant>
+          <GitGrantPanel
+            taskId={Number(grantTaskId)}
+            onGranted={() => setGrantTaskId(null)}
+          />
+          <Button
+            type="button"
+            variant="secondary"
+            className="mt-2"
+            onClick={() => setGrantTaskId(null)}
+          >
+            Dismiss
+          </Button>
+        </div>
       ) : null}
     </div>
   );

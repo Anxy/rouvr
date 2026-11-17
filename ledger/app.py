@@ -28,9 +28,11 @@ from sqlalchemy import create_engine, event, text
 try:
     from ledger import auth as _authmod
     from ledger import chat as _chatmod
+    from ledger import chat_ops as _chatops
 except ImportError:  # run as a bare module (python ledger/app.py)
     import auth as _authmod  # type: ignore[no-redef]
     import chat as _chatmod  # type: ignore[no-redef]
+    import chat_ops as _chatops  # type: ignore[no-redef]
 
 try:
     from ledger import hyeve_auth as _ha
@@ -80,6 +82,7 @@ EVIDENCE_EVENT_KINDS = {
     "reviewer": "review.note",
     "review": "review.note",
     "review_note": "review.note",
+    "reviewer_report": "review.note",
     "receipt": "receipt.signed",
     "escalation": "escalation.opened",
     "escalation_resolved": "escalation.resolved",
@@ -351,6 +354,9 @@ def make_app(db_url: str = DB_URL) -> FastAPI:
             cur.close()
     else:
         eng = create_engine(db_url)
+
+    # Populated after route handlers exist; chat looks up runners at call time.
+    _chat_op_runners: dict = {}
     with eng.begin() as c:
         for stmt in (Path(__file__).with_name("schema.sql").read_text().split(";")):
             body = "\n".join(l for l in stmt.splitlines() if not l.strip().startswith("--"))
@@ -2107,6 +2113,29 @@ def make_app(db_url: str = DB_URL) -> FastAPI:
         if plan_entry is not None and (isinstance(plan_entry, bool)
                                        or not isinstance(plan_entry, int)):
             raise HTTPException(422, "plan_entry must be an integer knowledge id")
+        chat_op = body.get("op")
+        if chat_op is not None and (not isinstance(chat_op, str) or not chat_op.strip()):
+            raise HTTPException(422, "op must be a non-empty string")
+        if isinstance(chat_op, str):
+            chat_op = chat_op.strip()
+        chat_op_args = body.get("op_args")
+        if chat_op_args is not None and not isinstance(chat_op_args, dict):
+            raise HTTPException(422, "op_args must be an object")
+        if chat_op_args is None:
+            chat_op_args = {}
+        # Refuse secret-shaped keys in chat payloads (fail closed).
+        for banned in ("token", "password", "pat", "github_token", "secret",
+                       "api_key", "authorization"):
+            if banned in {k.lower() for k in chat_op_args}:
+                raise HTTPException(
+                    422,
+                    f"{banned} must not be sent via chat — use the grant/login dialog",
+                )
+            if banned in message.lower() and chat_op and "grant" in chat_op:
+                raise HTTPException(
+                    422,
+                    "secrets must not be typed into chat — use the grant dialog",
+                )
         surface = body.get("surface") or "supervisor"
         if surface not in ("supervisor", "planner"):
             raise HTTPException(422, "surface must be supervisor or planner")
@@ -2120,6 +2149,169 @@ def make_app(db_url: str = DB_URL) -> FastAPI:
 
         def _frame(event: str, payload: dict) -> str:
             return f"event: {event}\ndata: {json.dumps(payload)}\n\n"
+
+        def _latest_pending_op_offer(c) -> dict | None:
+            rows = c.execute(text(
+                "SELECT created_ids FROM intake_classifications"
+                " WHERE tenant=:t AND project=:p ORDER BY id DESC LIMIT 20"),
+                {"t": tenant, "p": project}).mappings()
+            for r in rows:
+                try:
+                    d = json.loads(r["created_ids"] or "{}")
+                except (TypeError, ValueError):
+                    continue
+                if isinstance(d, dict) and isinstance(d.get("op_offer"), dict):
+                    return d["op_offer"]
+            return None
+
+        def _latest_plan_ctx(c) -> tuple[str | None, int | None, str | None]:
+            """Newest plan slug/entry and derived status for contextual chips."""
+            rows = [dict(r) for r in c.execute(text(
+                "SELECT * FROM knowledge_entries WHERE tenant=:t AND project=:p"
+                " AND tags LIKE '%\"plan\"%' ORDER BY id DESC LIMIT 5"),
+                {"t": tenant, "p": project}).mappings()]
+            for entry in rows:
+                slug = entry.get("slug")
+                eid = entry.get("id")
+                rep = row(c, "SELECT id FROM receipts WHERE idempotency_key=:k"
+                             " AND action='plan:convert'",
+                          k=f"plan-convert:{eid}")
+                status = "materialized" if rep else (
+                    "agreed" if entry.get("verified") else "draft")
+                return slug, eid, status
+            return None, None, None
+
+        def _build_chat_ctx(c) -> "_chatops.ChatContext":
+            slug, eid, _status = _latest_plan_ctx(c)
+            pending = _latest_pending_op_offer(c)
+            open_ids = [int(r["id"]) for r in c.execute(text(
+                "SELECT id FROM tasks WHERE tenant=:t AND project=:p"
+                " AND state IN ('open','claimed','blocked','failed','review')"
+                " ORDER BY id DESC LIMIT 8"),
+                {"t": tenant, "p": project}).mappings()]
+            kn = row(c, "SELECT slug FROM knowledge_entries WHERE tenant=:t AND project=:p"
+                        " AND (tags IS NULL OR tags NOT LIKE '%\"plan\"%')"
+                        " ORDER BY id DESC LIMIT 1",
+                     t=tenant, p=project)
+            return _chatops.ChatContext(
+                tenant=tenant,
+                project=project,
+                plan_slug=slug,
+                plan_entry_id=eid,
+                task_ids=open_ids,
+                knowledge_key=(kn["slug"] if kn else None),
+                pending_offer=pending,
+            )
+
+        def _op_result_frames(match: "_chatops.OpMatch", reply: str,
+                              op_result: dict | None, actions: list | None,
+                              offer: dict | None = None,
+                              badge: dict | None = None):
+            with eng.begin() as c:
+                level = _chat_level(c)
+                created = {"op": match.op, "args": match.args}
+                if offer:
+                    created["op_offer"] = offer
+                if op_result is not None:
+                    created["op_result"] = {
+                        k: op_result[k] for k in list(op_result)[:12]
+                        if k in ("slug", "started", "total", "ok", "task_id",
+                                 "workflow_id", "detail", "name", "key",
+                                 "verdict", "restart")
+                    }
+                _log_turn(c, "op", reply)
+                _record_class(c, _identity(request), level, "op", 1.0, None, created)
+            result = {
+                "message_id": message_id,
+                "reply": reply,
+                "question": None,
+                "slice": None,
+                "tasks": [],
+                "created": 0,
+                "badge": badge or {"kind": "op", "label": match.label or match.op},
+                "classification": "op",
+                "actions": actions or [],
+                "op_offer": offer,
+                "op_result": op_result,
+            }
+            return [_frame("token", {"text": reply}), _frame("result", result)]
+
+        def _handle_chat_op(match: "_chatops.OpMatch"):
+            """Run or stage a catalog op; yields SSE frame strings."""
+            if match.source == "cancel" or match.op == "__cancel__":
+                reply = "Cancelled."
+                return _op_result_frames(
+                    match, reply, {"ok": True, "detail": "cancelled"},
+                    actions=[], badge={"kind": "op", "label": "Cancelled"})
+            if match.needs_dialog:
+                chip = _chatops.action_chip(
+                    match.op, args=match.args, label=match.label)
+                reply = (
+                    f"Open the {match.needs_dialog.replace('_', ' ')} dialog "
+                    f"to continue — secrets never go through chat."
+                )
+                return _op_result_frames(
+                    match, reply,
+                    {"ok": True, "detail": "needs_dialog",
+                     "needs_dialog": match.needs_dialog},
+                    actions=[chip],
+                    badge={"kind": "op", "label": match.label})
+            missing = _chatops.missing_args(match)
+            if missing or match.confirm:
+                offer = {"op": match.op, "args": match.args, "label": match.label}
+                if missing:
+                    reply = (
+                        f"I can run **{match.label}**, but still need: "
+                        f"{', '.join(missing)}. Confirm when ready, or cancel."
+                    )
+                else:
+                    reply = (
+                        f"Confirm **{match.label}**? Reply yes to run, or cancel."
+                    )
+                chip = _chatops.action_chip(
+                    match.op, args=match.args, label=f"Confirm: {match.label}")
+                cancel = {"id": "__cancel__", "label": "Cancel",
+                          "op": "__cancel__", "args": {}}
+                return _op_result_frames(
+                    match, reply, None,
+                    actions=[chip, cancel], offer=offer,
+                    badge={"kind": "op", "label": "Confirm"})
+            # Plan convert/keep/edit reuse the existing plan_action path.
+            if match.op in ("plan.convert", "plan.keep", "plan.edit"):
+                action = match.op.split(".", 1)[1]
+                nonlocal plan_entry
+                if match.args.get("plan_entry") is not None:
+                    plan_entry = int(match.args["plan_entry"])
+                return list(_run_plan_action(action))
+            runner = _chat_op_runners.get(match.op)
+            if runner is None:
+                reply = f"Op `{match.op}` is registered but not wired yet."
+                return _op_result_frames(
+                    match, reply, {"ok": False, "detail": "not_wired"},
+                    actions=[], badge={"kind": "op", "label": "Unavailable"})
+            try:
+                op_result = runner(match, request)
+            except HTTPException as e:
+                detail = e.detail if isinstance(e.detail, str) else str(e.detail)
+                reply = f"**{match.label}** failed: {detail}"
+                return _op_result_frames(
+                    match, reply, {"ok": False, "detail": detail},
+                    actions=[], badge={"kind": "op", "label": "Failed"})
+            except Exception as e:  # noqa: BLE001
+                reply = f"**{match.label}** failed: {type(e).__name__}: {e}"
+                return _op_result_frames(
+                    match, reply, {"ok": False, "detail": str(e)[:200]},
+                    actions=[], badge={"kind": "op", "label": "Failed"})
+            summary = op_result.get("detail") or op_result.get("slug") or "done"
+            reply = f"**{match.label}** — {summary}"
+            with eng.begin() as c:
+                ctx = _build_chat_ctx(c)
+                _, _, status = _latest_plan_ctx(c)
+                actions = _chatops.contextual_actions(ctx, plan_status=status)
+            return _op_result_frames(
+                match, reply, {**op_result, "ok": True},
+                actions=actions,
+                badge={"kind": "op", "label": match.label})
 
         # ---- Slice C intake router helpers (share the chat closure scope:
         # tenant, project, message_id, provider, autonomy_override). Every
@@ -2238,12 +2430,25 @@ def make_app(db_url: str = DB_URL) -> FastAPI:
             r"|\bplans?\b.{0,20}\bproposal\b", re.IGNORECASE)
 
         def _offer_result(entry, tasks, cls, level, reply, category):
+            eid = entry["id"]
+            slug = entry["slug"]
+            actions = [
+                _chatops.action_chip("plan.convert",
+                                     args={"plan_entry": eid}, label="Convert"),
+                _chatops.action_chip("plan.edit",
+                                     args={"plan_entry": eid}, label="Edit"),
+                _chatops.action_chip("plan.keep",
+                                     args={"plan_entry": eid}, label="Just keep it"),
+                _chatops.action_chip("plan.approve",
+                                     args={"slug": slug}, label="Approve plan"),
+            ]
             return {"message_id": message_id, "reply": reply, "question": None,
                     "slice": None, "tasks": [], "created": 0,
                     "badge": {"kind": "saved", "label": f"Saved: {entry['slug']}"},
-                    "offer": {"plan_entry_id": entry["id"], "plan_slug": entry["slug"],
+                    "offer": {"plan_entry_id": eid, "plan_slug": slug,
                               "task_titles": [t["title"] for t in tasks],
                               "category": category or "feature"},
+                    "actions": actions,
                     "classification": cls, "autonomy": level}
 
         def _existing_intake_task(c):
@@ -2428,11 +2633,27 @@ def make_app(db_url: str = DB_URL) -> FastAPI:
             _record_class(c, ident, level, "task", conf, category, created)
             kids_only = [t for t in all_rows if t["id"] != slice_row["id"]]
             badge_id = head["id"] if head is not None else slice_row["id"]
+            actions = [
+                _chatops.action_chip(
+                    "plan.start.dialog",
+                    args={"slug": entry["slug"], "title": entry["slug"],
+                          "tenant": tenant, "project": project},
+                    label="Start delivery…",
+                ),
+                _chatops.action_chip(
+                    "plan.execute", args={"slug": entry["slug"]},
+                    label="Dispatch plan"),
+            ]
+            for t in kids_only[:4]:
+                actions.append(_chatops.action_chip(
+                    "task.start", args={"task_id": t["id"]},
+                    label=f"Start #{t['id']}"))
             return {"message_id": message_id, "reply": reply, "question": None,
                     "slice": {"id": slice_row["id"], "title": slice_row["title"]},
                     "tasks": [_task_card(c, t) for t in all_rows],
                     "created": 1 + len(all_rows),
                     "badge": {"kind": "task", "label": f"Task #{badge_id}"},
+                    "actions": actions,
                     "classification": "task", "autonomy": level}
 
         def _is_slice_child(c, tid, sid) -> bool:
@@ -2805,11 +3026,38 @@ def make_app(db_url: str = DB_URL) -> FastAPI:
             # emitted as a single real token event, then the result event —
             # the SSE contract and the chat UI are unchanged.
             import time as _time
+            msg_text = message.strip()
+            # Catalog ops (chip click or NL): explicit op > pending confirm >
+            # phrase match. Secrets never execute here (dialog handoff).
+            try:
+                with eng.begin() as c:
+                    ctx = _build_chat_ctx(c)
+            except Exception:  # noqa: BLE001 — context is best-effort
+                ctx = _chatops.ChatContext(tenant=tenant, project=project)
+            op_match = None
+            if chat_op:
+                if chat_op == "__cancel__":
+                    op_match = _chatops.OpMatch(
+                        op="__cancel__", source="cancel", label="Cancelled")
+                else:
+                    try:
+                        op_match = _chatops.match_explicit(
+                            chat_op, chat_op_args, ctx)
+                    except ValueError as e:
+                        yield _frame("error", {"detail": str(e)})
+                        return
+            if op_match is None:
+                op_match = _chatops.match_pending(msg_text, ctx)
+            if op_match is None and plan_action is None:
+                op_match = _chatops.match_phrase(msg_text, ctx)
+            if op_match is not None:
+                for _chunk in _handle_chat_op(op_match):
+                    yield _chunk
+                return
             # Plan actions (Convert/Edit/Just-keep-it buttons, or a plain
             # yes/no/convert reply to a pending offer) never call the model:
             # an explicit plan_action wins, otherwise a matching message
             # resolves the pending offer when one exists.
-            msg_text = message.strip()
             action = plan_action
             if action is None:
                 norm = msg_text.lower()
@@ -3462,17 +3710,17 @@ def make_app(db_url: str = DB_URL) -> FastAPI:
     #     step/tests/test_output/criteria, or a row in results (attempt
     #     verdict). attention when the latest result verdict is negative
     #     (that blocks the approve gate). Otherwise pending.
-    #   review   : done when reviewer-kind evidence (reviewer/review/review_note)
-    #     exists (latest verdict non-negative), or the task is done (approval
-    #     requires a passing verify on needs_review). attention when the latest
-    #     reviewer verdict is negative. Otherwise pending.
+    #   review   : done when reviewer-kind evidence (reviewer/review/review_note/
+    #     reviewer_report) exists (latest verdict non-negative), or the task is
+    #     done (approval requires a passing verify on needs_review). attention
+    #     when the latest reviewer verdict is negative. Otherwise pending.
     #   evidence : done when >= 1 evidence row exists (the approve gate counts
     #     rows, not kinds). A count cannot fail, so no attention state.
     # There is no pr_record/head-SHA evidence kind in this ledger; build and
     # review are derived from the kinds above, which is what intake, workers,
     # and the verify gate actually write.
     _PIPELINE_BUILD_KINDS = frozenset({"step", "tests", "test_output", "criteria"})
-    _PIPELINE_REVIEW_KINDS = ("reviewer", "review", "review_note")
+    _PIPELINE_REVIEW_KINDS = ("reviewer", "review", "review_note", "reviewer_report")
     _PIPELINE_LINK_ACTIONS = frozenset({"chat:create", "plan:convert"})
     _PIPELINE_NEGATIVE = frozenset({"fail", "failed", "failure",
                                     "request_changes", "changes_requested",
@@ -3975,7 +4223,25 @@ def make_app(db_url: str = DB_URL) -> FastAPI:
                     if t["state"] != "needs_review":
                         raise HTTPException(409, f"approve requires needs_review (task is {t['state']})")
                     head = row(c, "SELECT verdict FROM results WHERE task_id=:i ORDER BY id DESC LIMIT 1", i=tid)
-                    if not head or head["verdict"] != "pass":
+                    verified = bool(head and head["verdict"] == "pass")
+                    if not verified:
+                        # Muse delivery writes reviewer_report / reviewer with
+                        # verdict=approve (results stay "tested" from the test
+                        # leg). Treat that approve as the verified head so
+                        # owner Approve completes the reviewer stage.
+                        for er in c.execute(text(
+                            "SELECT kind, body FROM evidence WHERE task_id=:i"
+                            " AND kind IN ('reviewer','review','review_note',"
+                            " 'reviewer_report') ORDER BY id DESC LIMIT 20"),
+                                {"i": tid}).mappings():
+                            body = _pipeline_json(er["body"])
+                            v = _pipeline_verdict(body)
+                            if v == "approve":
+                                verified = True
+                                break
+                            if v in _PIPELINE_NEGATIVE:
+                                break
+                    if not verified:
                         raise HTTPException(409, "approve requires a passing verify on the current head")
             c.execute(text("UPDATE tasks SET state=:s, owner=COALESCE(:o, owner), updated_at=:n WHERE id=:i"),
                       {"s": to, "o": body.get("owner"), "n": _now(), "i": tid})
@@ -4810,6 +5076,197 @@ def make_app(db_url: str = DB_URL) -> FastAPI:
                                  headers={"Cache-Control": "no-cache",
                                           "Connection": "keep-alive",
                                           "X-Accel-Buffering": "no"})
+
+    # Supervisor chat op runners — call the same route handlers the UI uses.
+    def _op_summary(data) -> dict:
+        if not isinstance(data, dict):
+            return {"detail": str(data)[:200]}
+        out = {}
+        for k in ("slug", "started", "total", "restart", "workflow_id",
+                  "task_id", "name", "key", "verdict", "confirmed", "ok",
+                  "detail", "title", "state", "repo", "project"):
+            if k in data:
+                out[k] = data[k]
+        if "results" in data and isinstance(data["results"], list):
+            out["detail"] = (
+                f"started {data.get('started', 0)}/{data.get('total', 0)}")
+        elif "entry" in data and isinstance(data["entry"], dict):
+            out["detail"] = f"plan {data.get('slug')} approved"
+        elif "id" in data and "state" in data:
+            out["detail"] = f"task #{data['id']} → {data['state']}"
+            out["task_id"] = data["id"]
+        elif data.get("repo"):
+            out["detail"] = f"bound {data.get('repo')}"
+        elif not out.get("detail"):
+            out["detail"] = "ok"
+        return out
+
+    def _op_key(prefix: str) -> str:
+        return f"chat-{prefix}-{_secrets.token_hex(6)}"
+
+    def _resolve_knowledge_id(key, request) -> int:
+        row = get_knowledge(str(key), request)
+        kid = row.get("id") if isinstance(row, dict) else None
+        if not isinstance(kid, int):
+            raise HTTPException(404, "knowledge entry not found")
+        return kid
+
+    def _run_plan_approve(match, request):
+        return _op_summary(approve_plan(match.args["slug"], request))
+
+    def _run_plan_execute(match, request):
+        return _op_summary(execute_plan(match.args["slug"], {}, request))
+
+    def _run_plan_start(match, request):
+        restart = match.op == "plan.restart" or bool(match.args.get("restart"))
+        return _op_summary(start_plan_delivery(
+            match.args["slug"], {"restart": restart}, request))
+
+    def _run_task_start(match, request):
+        tid = int(match.args["task_id"])
+        restart = match.op == "task.restart" or bool(match.args.get("restart"))
+        return _op_summary(start_task_delivery(
+            tid, {"restart": restart}, request))
+
+    def _run_task_transition(match, request):
+        tid = int(match.args["task_id"])
+        to = {"task.transition.done": "done",
+              "task.transition.open": "open",
+              "task.transition.claimed": "claimed"}[match.op]
+        note = match.args.get("note")
+        if to == "claimed":
+            add_evidence(tid, {
+                "kind": "review_note",
+                "body": {"feedback": str(note or "request changes")[:2000]},
+            }, request)
+        return _op_summary(transition(
+            tid, {"to": to, "idempotency_key": _op_key(f"tr-{to}")}, request))
+
+    def _run_task_seal(match, request):
+        return _op_summary(seal_task(int(match.args["task_id"]), {}, request))
+
+    def _run_task_patch(match, request):
+        tid = int(match.args["task_id"])
+        body = {"idempotency_key": _op_key("patch")}
+        if match.args.get("title"):
+            body["title"] = match.args["title"]
+        if match.args.get("intent"):
+            body["intent"] = match.args["intent"]
+        return _op_summary(edit_task(tid, body, request))
+
+    def _run_task_evidence(match, request):
+        tid = int(match.args["task_id"])
+        raw = match.args.get("body") or ""
+        body_obj = raw if isinstance(raw, dict) else {"text": str(raw)}
+        return _op_summary(add_evidence(tid, {
+            "kind": match.args.get("kind") or "note",
+            "body": body_obj,
+        }, request))
+
+    def _run_task_retire(match, request):
+        tid = int(match.args["task_id"])
+        return _op_summary(retire_task(tid, {
+            "reason": match.args.get("reason") or "retired via supervisor chat",
+            "idempotency_key": _op_key("retire"),
+        }, request))
+
+    def _run_task_create(match, request):
+        title = match.args.get("title") or "Untitled"
+        intent = match.args.get("intent") or title
+        body = {"title": title, "intent": intent,
+                "project": match.args.get("project") or ""}
+        ac = match.args.get("acceptance_criteria")
+        if isinstance(ac, list) and ac:
+            return _op_summary(create_task_with_contract({
+                "title": title, "intent": intent, "project": body["project"],
+                "contract": {"acceptance_criteria": ac},
+            }, request))
+        return _op_summary(create_task(body, request))
+
+    def _run_project_create(match, request):
+        name = match.args.get("name") or match.args.get("project")
+        body = {"project": name, "title": match.args.get("title") or name}
+        return _op_summary(create_project(body, request))
+
+    def _run_project_patch(match, request):
+        name = match.args["name"]
+        body = {}
+        if match.args.get("title"):
+            body["title"] = match.args["title"]
+        if match.args.get("new_name"):
+            body["name"] = match.args["new_name"]
+        if "archived" in match.args:
+            body["archived"] = bool(match.args["archived"])
+        return _op_summary(edit_project(name, body, request))
+
+    def _run_project_archive(match, request):
+        return _op_summary(edit_project(
+            match.args["name"], {"archived": True}, request))
+
+    def _run_project_restore(match, request):
+        return _op_summary(edit_project(
+            match.args["name"], {"archived": False}, request))
+
+    def _run_project_exec_spec(match, request):
+        return _op_summary(put_exec_spec(
+            match.args["name"],
+            {"repo": match.args["repo"]},
+            request))
+
+    def _run_knowledge_review(match, request):
+        kid = _resolve_knowledge_id(match.args["key"], request)
+        verdict = match.args.get("verdict") or "verified"
+        return _op_summary(review_knowledge(
+            kid, {"verdict": verdict}, request))
+
+    def _run_knowledge_pin(match, request):
+        kid = _resolve_knowledge_id(match.args["key"], request)
+        pinned = match.args.get("pinned", True)
+        return _op_summary(pin_knowledge(
+            kid, {"pinned": bool(pinned)}, request))
+
+    def _run_knowledge_archive(match, request):
+        kid = _resolve_knowledge_id(match.args["key"], request)
+        archived = match.args.get("archived", True)
+        return _op_summary(archive_knowledge(
+            kid, {"archived": bool(archived)}, request))
+
+    def _run_knowledge_version(match, request):
+        kid = _resolve_knowledge_id(match.args["key"], request)
+        existing = get_knowledge(str(match.args["key"]), request)
+        body = {
+            "body": match.args.get("body") or (existing.get("body") if isinstance(existing, dict) else "") or "",
+            "title": match.args.get("title")
+            or (existing.get("title") if isinstance(existing, dict) else "")
+            or "Untitled",
+        }
+        return _op_summary(version_knowledge(kid, body, request))
+
+    _chat_op_runners.update({
+        "plan.approve": _run_plan_approve,
+        "plan.execute": _run_plan_execute,
+        "plan.start": _run_plan_start,
+        "plan.restart": _run_plan_start,
+        "task.start": _run_task_start,
+        "task.restart": _run_task_start,
+        "task.transition.done": _run_task_transition,
+        "task.transition.open": _run_task_transition,
+        "task.transition.claimed": _run_task_transition,
+        "task.seal": _run_task_seal,
+        "task.patch": _run_task_patch,
+        "task.evidence": _run_task_evidence,
+        "task.retire": _run_task_retire,
+        "task.create": _run_task_create,
+        "project.create": _run_project_create,
+        "project.patch": _run_project_patch,
+        "project.archive": _run_project_archive,
+        "project.restore": _run_project_restore,
+        "project.exec_spec": _run_project_exec_spec,
+        "knowledge.review": _run_knowledge_review,
+        "knowledge.pin": _run_knowledge_pin,
+        "knowledge.archive": _run_knowledge_archive,
+        "knowledge.version": _run_knowledge_version,
+    })
 
     # FL-A3: Lite /api/v1 aliases wrap the handlers above (same endpoint
     # objects, no duplicated bodies).

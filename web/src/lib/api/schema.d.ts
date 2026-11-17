@@ -655,6 +655,33 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/plans/{slug}/start": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Start Plan Delivery Lite
+         * @description Start Temporal delivery for every chain task on a materialized plan.
+         *
+         *     Uses plan:convert task_ids (step tasks only — not the slice head).
+         *     Reopens blocked/failed members. Returns per-task results; partial
+         *     success is allowed so one seal/Temporal failure does not abort the rest.
+         *
+         *     Body.restart=true rebuilds every startable task from coder; default
+         *     resumes each task from its durable phase cursor.
+         */
+        post: operations["start_plan_delivery_lite_api_v1_plans__slug__start_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/projects": {
         parameters: {
             query?: never;
@@ -730,6 +757,29 @@ export interface paths {
          */
         put: operations["put_exec_spec_lite_api_v1_projects__project__exec_spec_put"];
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/projects/{project}/git-grant": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Post Project Git Grant Lite
+         * @description Accept a project-default GitHub PAT for push/PR (onboarding).
+         *
+         *     Writes grants/.git-grant-default-{tenant}-{project}.json (0600).
+         *     Task-scoped grants still win when present; never echoes the token.
+         */
+        post: operations["post_project_git_grant_lite_api_v1_projects__project__git_grant_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1013,7 +1063,11 @@ export interface paths {
         put?: never;
         /**
          * Start Task Delivery Lite
-         * @description Start Temporal TaskWorkflow (idempotent). Same path as rouvr_start_task.
+         * @description Start Temporal TaskWorkflow for one task. Prefer POST /v1/plans/{slug}/start
+         *     for plan delivery (starts the whole chain, never the slice head alone).
+         *
+         *     Body.restart=true clears the phase cursor and rebuilds from coder;
+         *     default (false) resumes at the durable checkpoint.
          */
         post: operations["start_task_delivery_lite_api_v1_tasks__tid__start_post"];
         delete?: never;
@@ -1876,6 +1930,33 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/plans/{slug}/start": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Start Plan Delivery
+         * @description Start Temporal delivery for every chain task on a materialized plan.
+         *
+         *     Uses plan:convert task_ids (step tasks only — not the slice head).
+         *     Reopens blocked/failed members. Returns per-task results; partial
+         *     success is allowed so one seal/Temporal failure does not abort the rest.
+         *
+         *     Body.restart=true rebuilds every startable task from coder; default
+         *     resumes each task from its durable phase cursor.
+         */
+        post: operations["start_plan_delivery_v1_plans__slug__start_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/projects": {
         parameters: {
             query?: never;
@@ -1951,6 +2032,29 @@ export interface paths {
          */
         put: operations["put_exec_spec_v1_projects__project__exec_spec_put"];
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/projects/{project}/git-grant": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Post Project Git Grant
+         * @description Accept a project-default GitHub PAT for push/PR (onboarding).
+         *
+         *     Writes grants/.git-grant-default-{tenant}-{project}.json (0600).
+         *     Task-scoped grants still win when present; never echoes the token.
+         */
+        post: operations["post_project_git_grant_v1_projects__project__git_grant_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -2234,7 +2338,11 @@ export interface paths {
         put?: never;
         /**
          * Start Task Delivery
-         * @description Start Temporal TaskWorkflow (idempotent). Same path as rouvr_start_task.
+         * @description Start Temporal TaskWorkflow for one task. Prefer POST /v1/plans/{slug}/start
+         *     for plan delivery (starts the whole chain, never the slice head alone).
+         *
+         *     Body.restart=true clears the phase cursor and rebuilds from coder;
+         *     default (false) resumes at the durable checkpoint.
          */
         post: operations["start_task_delivery_v1_tasks__tid__start_post"];
         delete?: never;
@@ -3510,6 +3618,43 @@ export interface operations {
             };
         };
     };
+    start_plan_delivery_lite_api_v1_plans__slug__start_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                slug: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    [key: string]: unknown;
+                };
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     list_projects_lite_api_v1_projects_get: {
         parameters: {
             query?: {
@@ -3648,6 +3793,43 @@ export interface operations {
         };
     };
     put_exec_spec_lite_api_v1_projects__project__exec_spec_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    [key: string]: unknown;
+                };
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    post_project_git_grant_lite_api_v1_projects__project__git_grant_post: {
         parameters: {
             query?: never;
             header?: never;
@@ -5718,6 +5900,43 @@ export interface operations {
             };
         };
     };
+    start_plan_delivery_v1_plans__slug__start_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                slug: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    [key: string]: unknown;
+                };
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     list_projects_v1_projects_get: {
         parameters: {
             query?: {
@@ -5856,6 +6075,43 @@ export interface operations {
         };
     };
     put_exec_spec_v1_projects__project__exec_spec_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    [key: string]: unknown;
+                };
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    post_project_git_grant_v1_projects__project__git_grant_post: {
         parameters: {
             query?: never;
             header?: never;

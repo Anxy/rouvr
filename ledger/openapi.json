@@ -1628,6 +1628,56 @@
         "summary": "Execute Plan Lite"
       }
     },
+    "/api/v1/plans/{slug}/start": {
+      "post": {
+        "description": "Start Temporal delivery for every chain task on a materialized plan.\n\nUses plan:convert task_ids (step tasks only \u2014 not the slice head).\nReopens blocked/failed members. Returns per-task results; partial\nsuccess is allowed so one seal/Temporal failure does not abort the rest.\n\nBody.restart=true rebuilds every startable task from coder; default\nresumes each task from its durable phase cursor.",
+        "operationId": "start_plan_delivery_lite_api_v1_plans__slug__start_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "slug",
+            "required": true,
+            "schema": {
+              "title": "Slug",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": true,
+                "title": "Body",
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Start Plan Delivery Lite"
+      }
+    },
     "/api/v1/projects": {
       "get": {
         "description": "Projects visible to the caller: its own tenant, or all for stack.\nArchived projects are hidden unless include_archived is set.",
@@ -1870,6 +1920,56 @@
           }
         },
         "summary": "Put Exec Spec Lite"
+      }
+    },
+    "/api/v1/projects/{project}/git-grant": {
+      "post": {
+        "description": "Accept a project-default GitHub PAT for push/PR (onboarding).\n\nWrites grants/.git-grant-default-{tenant}-{project}.json (0600).\nTask-scoped grants still win when present; never echoes the token.",
+        "operationId": "post_project_git_grant_lite_api_v1_projects__project__git_grant_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project",
+            "required": true,
+            "schema": {
+              "title": "Project",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": true,
+                "title": "Body",
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Post Project Git Grant Lite"
       }
     },
     "/api/v1/tasks": {
@@ -2666,7 +2766,7 @@
     },
     "/api/v1/tasks/{tid}/start": {
       "post": {
-        "description": "Start Temporal TaskWorkflow (idempotent). Same path as rouvr_start_task.",
+        "description": "Start Temporal TaskWorkflow for one task. Prefer POST /v1/plans/{slug}/start\nfor plan delivery (starts the whole chain, never the slice head alone).\n\nBody.restart=true clears the phase cursor and rebuilds from coder;\ndefault (false) resumes at the durable checkpoint.",
         "operationId": "start_task_delivery_lite_api_v1_tasks__tid__start_post",
         "parameters": [
           {
@@ -4585,6 +4685,56 @@
         "summary": "Execute Plan"
       }
     },
+    "/v1/plans/{slug}/start": {
+      "post": {
+        "description": "Start Temporal delivery for every chain task on a materialized plan.\n\nUses plan:convert task_ids (step tasks only \u2014 not the slice head).\nReopens blocked/failed members. Returns per-task results; partial\nsuccess is allowed so one seal/Temporal failure does not abort the rest.\n\nBody.restart=true rebuilds every startable task from coder; default\nresumes each task from its durable phase cursor.",
+        "operationId": "start_plan_delivery_v1_plans__slug__start_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "slug",
+            "required": true,
+            "schema": {
+              "title": "Slug",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": true,
+                "title": "Body",
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Start Plan Delivery"
+      }
+    },
     "/v1/projects": {
       "get": {
         "description": "Projects visible to the caller: its own tenant, or all for stack.\nArchived projects are hidden unless include_archived is set.",
@@ -4827,6 +4977,56 @@
           }
         },
         "summary": "Put Exec Spec"
+      }
+    },
+    "/v1/projects/{project}/git-grant": {
+      "post": {
+        "description": "Accept a project-default GitHub PAT for push/PR (onboarding).\n\nWrites grants/.git-grant-default-{tenant}-{project}.json (0600).\nTask-scoped grants still win when present; never echoes the token.",
+        "operationId": "post_project_git_grant_v1_projects__project__git_grant_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project",
+            "required": true,
+            "schema": {
+              "title": "Project",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": true,
+                "title": "Body",
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Post Project Git Grant"
       }
     },
     "/v1/tasks": {
@@ -5623,7 +5823,7 @@
     },
     "/v1/tasks/{tid}/start": {
       "post": {
-        "description": "Start Temporal TaskWorkflow (idempotent). Same path as rouvr_start_task.",
+        "description": "Start Temporal TaskWorkflow for one task. Prefer POST /v1/plans/{slug}/start\nfor plan delivery (starts the whole chain, never the slice head alone).\n\nBody.restart=true clears the phase cursor and rebuilds from coder;\ndefault (false) resumes at the durable checkpoint.",
         "operationId": "start_task_delivery_v1_tasks__tid__start_post",
         "parameters": [
           {

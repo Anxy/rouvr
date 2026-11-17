@@ -365,6 +365,25 @@
       "known_gaps": [
         "Grant scopes stay task-global; legacy unscoped rows refuse startup explicitly."
       ]
+    },
+    {
+      "id": "S024",
+      "title": "Supervisor chat ops (NL + chips)",
+      "goal": "Plan and trigger workspace mutations from supervisor chat via NL intents and action chips; secrets stay in dialogs.",
+      "sprint_file": "docs/tasks/rouvr/S024-supervisor-chat-ops.md",
+      "status": "PASS",
+      "commit": "pending",
+      "confidence": "medium",
+      "tasks": [
+        "24.1 Catalog + SSE protocol",
+        "24.2 Plan/delivery ops",
+        "24.3 Task + escalation ops",
+        "24.4 Projects + knowledge",
+        "24.5 Tests + docs"
+      ],
+      "known_gaps": [
+        "Model does not emit suggested_ops JSON yet — chips come from server context."
+      ]
     }
   ]
 }

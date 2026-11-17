@@ -303,6 +303,9 @@ export interface ProxyPaths {
             autonomy?: string;
             plan_action?: string;
             plan_entry?: number;
+            /** Catalog op id from an action chip (supervisor chat ops). */
+            op?: string;
+            op_args?: Record<string, unknown>;
             surface?: "supervisor" | "planner";
           };
         };

@@ -1,6 +1,6 @@
 # Roadmap
 
-Shipped items are checked (see `docs/system/ROUVR-SPRINT-INDEX.json`, 22/22 PASS); the rest below is planned, not done.
+Shipped items are checked (see `docs/system/ROUVR-SPRINT-INDEX.json`); the rest below is planned, not done.
 
 ## Before hackathon submission (Nov 2026)
 - [x] Run the full stack from a clean checkout and document it — supervisor stack (`scripts/rouvr`) verified 2026-11-01; `make up` remains the compose-only subset
@@ -9,6 +9,7 @@ Shipped items are checked (see `docs/system/ROUVR-SPRINT-INDEX.json`, 22/22 PASS
 
 ## Next
 - [x] Move `demo/morning_report.py` onto Temporal workflows — done via `OpsTaskWorkflow` (S018)
+- [x] Supervisor chat ops: NL intents + chips for plan/delivery/task/project/knowledge (S024)
 - [ ] Real mail delivery with provider message-id readback
 - [x] WorkHub-lite partitions: principals/auth, leases, per-tenant projects (S011/S016/S022)
 - [ ] Core backend WorkHub client speaking the WorkHub-lite API

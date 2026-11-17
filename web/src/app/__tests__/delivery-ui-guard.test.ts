@@ -59,3 +59,21 @@ test("supervisor chat starts delivery on the plan, not per-task cards", () => {
   assert.ok(chat.includes('data-start-delivery="plan"'));
   assert.ok(!chat.includes("data-start-delivery={t.id}"));
 });
+
+test("supervisor chat renders catalog op chips and dialog handoffs", () => {
+  const chat = read("src/components/workspace/ChatSurface.tsx");
+  assert.ok(chat.includes("data-chat-actions"));
+  assert.ok(chat.includes("data-chat-action"));
+  assert.ok(chat.includes("actOp"));
+  assert.ok(chat.includes("op_args") || chat.includes("op_args:"));
+  assert.ok(chat.includes("needs_dialog"));
+  assert.ok(chat.includes("GitGrantPanel"));
+  assert.ok(chat.includes("delivery_start") || chat.includes("plan.start.dialog"));
+  const workspace = read("src/lib/api/workspace.ts");
+  assert.ok(workspace.includes("op?: string"));
+  assert.ok(workspace.includes("op_args?"));
+  const ops = read("../ledger/chat_ops.py");
+  assert.ok(ops.includes('"plan.approve"') || ops.includes("plan.approve"));
+  assert.ok(ops.includes("needs_dialog"));
+  assert.ok(ops.includes("OP_CONFIRM"));
+});

@@ -480,6 +480,8 @@ def build_reviewer_prompt(task: dict, diff: str, tests_summary: str,
     parts += ["", f"Test runs: {tests_summary}", "", "PR diff:", diff[:12000],
               "", 'Write verdict.json in the working directory: {"verdict": "approve|request_changes|reject",',
               '"notes": "<one paragraph>"}. Approve only if every criterion is met by the diff and tests.',
+              "Your notes are posted to the GitHub PR as a review comment; write them for the PR author.",
+              "verdict=approve also submits a GitHub PR approval and completes the reviewer stage.",
               "For feature/build work, request_changes if the PR is docs-only or lacks runnable implementation "
               "(source, APIs, UI, migrations, or tests). Name which criteria the code satisfies.",
               "Check the diff against project knowledge cited in the task as knowledge:<id>@v<n>; in your notes, name the citation ids you checked and whether the diff complies.",

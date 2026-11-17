@@ -211,9 +211,15 @@ async def test_verify_writes_submit_after_reviewer_and_clears_stale_verdict(tmp_
         dest.mkdir(parents=True, exist_ok=True)
         return dest
 
+    async def fake_pr_review(url, verdict, notes, env):
+        order.append(("pr_review", verdict, notes, url))
+        return url
+
     monkeypatch.setattr(act_mod, "pr_facts", fake_facts)
     monkeypatch.setattr(act_mod, "diff_range", fake_diff)
     monkeypatch.setattr(act_mod, "clone_at", fake_clone)
+    monkeypatch.setattr(act_mod, "post_pr_review", fake_pr_review)
+    monkeypatch.setattr(Activities, "_git_grant", lambda self, tid, **kw: "tok")
     host = SimpleNamespace(
         settings=SimpleNamespace(workspace_root=tmp_path),
         personas=SimpleNamespace(role_pair=lambda t: (reviewer, reviewer)),
@@ -230,6 +236,8 @@ async def test_verify_writes_submit_after_reviewer_and_clears_stale_verdict(tmp_
     # submit_attempt records the reviewer's real verdict, not a hardcoded approve
     # (plus the head sha the verdict was computed against)
     assert ("submit_attempt", {"verdict": "request_changes", "head_sha": "sha1"}) in order
+    assert ("pr_review", "request_changes", "fix it", "https://pr/1") in order
+    assert "reviewer" in order  # pipeline dual-write
 
 
 async def test_verify_retry_reuses_submit_fence(tmp_path, monkeypatch):
@@ -274,9 +282,14 @@ async def test_verify_retry_reuses_submit_fence(tmp_path, monkeypatch):
         dest.mkdir(parents=True, exist_ok=True)
         return dest
 
+    async def fake_pr_review(url, verdict, notes, env):
+        return url
+
     monkeypatch.setattr(act_mod, "pr_facts", fake_facts)
     monkeypatch.setattr(act_mod, "diff_range", fake_diff)
     monkeypatch.setattr(act_mod, "clone_at", fake_clone)
+    monkeypatch.setattr(act_mod, "post_pr_review", fake_pr_review)
+    monkeypatch.setattr(Activities, "_git_grant", lambda self, tid, **kw: "tok")
     host = SimpleNamespace(
         settings=SimpleNamespace(workspace_root=tmp_path),
         personas=SimpleNamespace(role_pair=lambda t: (reviewer, reviewer)),
@@ -292,6 +305,7 @@ async def test_verify_retry_reuses_submit_fence(tmp_path, monkeypatch):
     await acts.verify(*args)  # Temporal retry: write already landed before the crash
     submits = [f for (k, f) in stored if k == "submit_attempt"]
     assert submits == ["att1:verify:submit"]  # one row, not submit-1 then submit-2
+    assert ("reviewer", "att1:verify:pipeline") in stored
 
 
 async def _spec():

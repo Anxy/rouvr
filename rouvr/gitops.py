@@ -279,6 +279,43 @@ async def pr_facts(pr_url: str, env: dict[str, str]) -> tuple[str, str]:
     return str(data.get("headRefName", "")), ci_status(data.get("statusCheckRollup") or [])
 
 
+def _pr_review_body(verdict: str, notes: str) -> str:
+    text = (notes or "").strip() or f"Rouvr reviewer: {verdict}"
+    header = {
+        "approve": "**Rouvr reviewer: approve**",
+        "request_changes": "**Rouvr reviewer: request changes**",
+        "reject": "**Rouvr reviewer: reject**",
+    }.get(verdict, f"**Rouvr reviewer: {verdict}**")
+    body = f"{header}\n\n{text}"
+    if len(body) > 60000:
+        body = body[:60000] + "\n…(truncated)"
+    return body
+
+
+async def post_pr_review(pr_url: str, verdict: str, notes: str,
+                         env: dict[str, str]) -> str:
+    """Post Muse reviewer notes as a GitHub PR review (+ conversation comment).
+
+    - ``approve`` → ``gh pr review --approve``
+    - ``request_changes`` / ``reject`` → ``gh pr review --request-changes``
+    Always also leaves ``gh pr comment`` so notes show in the Conversation tab
+    even when the review event is filtered. Returns the PR URL on success.
+    """
+    if not pr_url or not str(pr_url).strip():
+        raise RouvrError(Code.CONTRACT, "post_pr_review requires a PR URL")
+    body = _pr_review_body(verdict, notes)
+    url = str(pr_url).strip()
+    # Conversation-tab comment first (always visible).
+    await _run("gh", "pr", "comment", url, "--body", body, env=env)
+    if verdict == "approve":
+        await _run("gh", "pr", "review", url, "--approve", "--body", body, env=env)
+    elif verdict in ("request_changes", "reject"):
+        await _run("gh", "pr", "review", url, "--request-changes", "--body", body, env=env)
+    else:
+        await _run("gh", "pr", "review", url, "--comment", "--body", body, env=env)
+    return url
+
+
 async def diff_range(ws: Path, base: str, head: str) -> str:
     """Unified diff of base...head for the cheat-scan. Empty string when identical."""
     p = await asyncio.create_subprocess_exec("git", "-C", str(ws), "diff", f"{base}...{head}",

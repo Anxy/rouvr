@@ -23,8 +23,8 @@ from rouvr.contracts import (AssignInput, AssignResult, Binding, CloseResult, De
 from rouvr.errors import Code, RouvrError
 from rouvr.gate import (SUBMIT_ATTEMPT_TYPE, GateEvidence, count_prior_submits, evaluate,
                         read_submission_file)
-from rouvr.gitops import (branch_for, clone_at, diff_range, ensure_pr, pr_facts, prepare_workspace,
-                          workspace_path)
+from rouvr.gitops import (branch_for, clone_at, diff_range, ensure_pr, post_pr_review, pr_facts,
+                          prepare_workspace, workspace_path)
 from rouvr.hiddentests import (assert_coder_clean, criteria_literals, fetch_hidden_suite,
                                hidden_literals, parse_criterion_outcomes)
 from rouvr.host import Host
@@ -395,21 +395,53 @@ class Activities:
             submission["pr_url"] = built.pr_url
         gv = evaluate(submission, facts)
         fence = f"{built.attempt_id}:verify"
+        grant_token = self._git_grant(
+            wf.task_id,
+            tenant=wf.tenant_id,
+            project=str(task.get("project") or ""),
+        )
+
+        async def _publish_pr(verdict: str, notes: str) -> dict:
+            """Post gate/Muse notes to the PR; never raises into the verify path."""
+            out: dict = {"pr_url": built.pr_url, "pr_review_posted": False}
+            if not built.pr_url:
+                return out
+            if not grant_token:
+                out["pr_review_error"] = "no git grant — cannot post PR review"
+                return out
+            try:
+                await post_pr_review(built.pr_url, verdict, notes, {"GH_TOKEN": grant_token})
+                out["pr_review_posted"] = True
+            except Exception as e:  # noqa: BLE001
+                out["pr_review_error"] = f"{type(e).__name__}: {e}"[:300]
+            return out
+
         if gv.verdict in ("blocked", "failed"):
-            ev = await wh.attach_evidence_exact(wf.task_id, "reviewer_report", fence,
-                                                {"verdict": "reject", "gate_detail": gv.verdict,
-                                                 "feedback": gv.feedback})
-            return VerifyResult("reject", gv.feedback or gv.verdict, reviewer.principal, ev)
+            notes = gv.feedback or gv.verdict
+            pr_meta = await _publish_pr("reject", notes)
+            payload = {"verdict": "reject", "gate_detail": gv.verdict,
+                       "feedback": gv.feedback, **pr_meta}
+            ev = await wh.attach_evidence_exact(wf.task_id, "reviewer_report", fence, payload)
+            await wh.attach_evidence_exact(
+                wf.task_id, "reviewer", f"{fence}:pipeline",
+                {"verdict": "reject", "notes": notes, "completed": False})
+            return VerifyResult("reject", notes, reviewer.principal, ev)
         if gv.verdict == "reject":
             # Deterministic per attempt: a Temporal retry re-attaches the same
             # fence and attach_evidence_exact dedups, instead of minting
             # submit-{n+1} and burning another of the 3 submit rounds.
+            notes = gv.feedback or "gate rejected"
             await wh.attach_evidence_exact(wf.task_id, SUBMIT_ATTEMPT_TYPE, f"{fence}:submit",
                                            {"verdict": "request_changes", "feedback": gv.feedback,
                                             "head_sha": built.head_sha})
-            ev = await wh.attach_evidence_exact(wf.task_id, "reviewer_report", fence,
-                                                {"verdict": "request_changes", "feedback": gv.feedback})
-            return VerifyResult("request_changes", gv.feedback or "gate rejected", reviewer.principal, ev)
+            pr_meta = await _publish_pr("request_changes", notes)
+            ev = await wh.attach_evidence_exact(
+                wf.task_id, "reviewer_report", fence,
+                {"verdict": "request_changes", "feedback": gv.feedback, **pr_meta})
+            await wh.attach_evidence_exact(
+                wf.task_id, "reviewer", f"{fence}:pipeline",
+                {"verdict": "request_changes", "notes": notes, "completed": False})
+            return VerifyResult("request_changes", notes, reviewer.principal, ev)
         # Reviewer diff comes from a fresh clone at head_sha, never the coder
         # workspace: mutating the coder ws after submit cannot change review.
         with _ephemeral_dir("rouvr-review-") as rtmp:
@@ -442,8 +474,16 @@ class Activities:
             return VerifyResult("reject", f"reviewer output unusable: {e}", reviewer.principal, ev)
         await wh.attach_evidence_exact(wf.task_id, SUBMIT_ATTEMPT_TYPE, f"{fence}:submit",
                                        {"verdict": verdict, "head_sha": built.head_sha})
-        ev = await wh.attach_evidence_exact(wf.task_id, "reviewer_report", fence,
-                                            {"verdict": verdict, "notes": notes})
+        pr_meta = await _publish_pr(verdict, notes)
+        report = {"verdict": verdict, "notes": notes, **pr_meta}
+        ev = await wh.attach_evidence_exact(wf.task_id, "reviewer_report", fence, report)
+        # Dual-write kind=reviewer so Board pipeline / owner-approve treat the
+        # Muse verdict as a completed review stage (reviewer_report alone was
+        # invisible to _PIPELINE_REVIEW_KINDS).
+        await wh.attach_evidence_exact(
+            wf.task_id, "reviewer", f"{fence}:pipeline",
+            {"verdict": verdict, "notes": notes, "completed": verdict == "approve",
+             "pr_review_posted": bool(pr_meta.get("pr_review_posted"))})
         return VerifyResult(verdict, notes, reviewer.principal, ev)  # verdict in VERDICTS by read_verdict
 
     # Next hop toward done. Stage map: GET /api/v1/tasks/transitions/help; ledger: TRANSITIONS in app.py.
